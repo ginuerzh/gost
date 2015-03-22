@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
-	"log"
+	//"log"
 	"net"
 )
 
@@ -92,7 +93,6 @@ func ReadCmd(r io.Reader) (*Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println("read cmd:", b[:n])
 	if n < 10 {
 		return nil, ErrBadFormat
 	}
@@ -159,12 +159,12 @@ func (cmd *Cmd) Write(w io.Writer) (err error) {
 	binary.BigEndian.PutUint16(b[pos:], cmd.Port)
 	pos += 2
 
-	log.Println("write cmd:", b[:pos])
 	_, err = w.Write(b[:pos])
 
 	return
 }
 
-func (cmd *Cmd) GetError() error {
-	return cmdErrMap[cmd.Cmd]
+func (cmd *Cmd) String() string {
+	return fmt.Sprintf("5 %d 0 %d %s %d",
+		cmd.Cmd, cmd.AddrType, cmd.Addr, cmd.Port)
 }
