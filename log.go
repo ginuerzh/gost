@@ -7,16 +7,24 @@ import (
 	"os"
 )
 
+var (
+	Debug bool
+)
+
 type BufferedLog struct {
 	buffer *bytes.Buffer
 	w      io.WriteCloser
 }
 
-func NewLog() *BufferedLog {
-	return &BufferedLog{
-		buffer: &bytes.Buffer{},
-		w:      os.Stdout,
+func NewLog(buffered bool) *BufferedLog {
+	log := &BufferedLog{
+		w: os.Stdout,
 	}
+	if buffered {
+		log.buffer = &bytes.Buffer{}
+	}
+
+	return log
 }
 
 func NewFileLog(file *os.File) *BufferedLog {
@@ -27,15 +35,33 @@ func NewFileLog(file *os.File) *BufferedLog {
 }
 
 func (log *BufferedLog) Log(a ...interface{}) (int, error) {
-	return fmt.Fprint(log.buffer, a...)
+	if !Debug {
+		return 0, nil
+	}
+	if log.buffer != nil {
+		return fmt.Fprint(log.buffer, a...)
+	}
+	return fmt.Fprint(log.w, a...)
 }
 
 func (log *BufferedLog) Logln(a ...interface{}) (int, error) {
-	return fmt.Fprintln(log.buffer, a...)
+	if !Debug {
+		return 0, nil
+	}
+	if log.buffer != nil {
+		return fmt.Fprintln(log.buffer, a...)
+	}
+	return fmt.Fprintln(log.w, a...)
 }
 
 func (log *BufferedLog) Logf(format string, a ...interface{}) (int, error) {
-	return fmt.Fprintf(log.buffer, format, a...)
+	if !Debug {
+		return 0, nil
+	}
+	if log.buffer != nil {
+		return fmt.Fprintf(log.buffer, format, a...)
+	}
+	return fmt.Fprintf(log.w, format, a...)
 }
 
 func (log *BufferedLog) Flush() error {
@@ -44,6 +70,10 @@ func (log *BufferedLog) Flush() error {
 			log.w.Close()
 		}
 	}()
+
+	if !Debug || log.buffer == nil {
+		return nil
+	}
 
 	_, err := log.buffer.WriteTo(log.w)
 	return err
