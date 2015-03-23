@@ -28,6 +28,7 @@ const (
 type Gost struct {
 	Laddr, Saddr, Proxy string
 	Shadows             bool // shadowsocks compatible
+	Cipher              bool
 }
 
 func (g *Gost) Run() error {
@@ -80,20 +81,39 @@ func (g *Gost) cli(conn net.Conn) {
 		lg.Logln(err)
 		return
 	}
-	defer sconn.Close()
 
+	defer sconn.Close()
 	laddr := sconn.(*net.TCPConn).LocalAddr().String()
 	lg.Logln(laddr)
 
-	if _, err := sconn.Write([]byte{5, 1, 0}); err != nil {
+	b := make([]byte, 8192)
+	b[0] = 5
+	b[1] = 1
+	if gost.Cipher {
+		b[2] = 0x88
+	}
+
+	if _, err := sconn.Write(b[:3]); err != nil {
 		lg.Logln(err)
 		return
 	}
-	lg.Logln(">>>|", []byte{5, 1, 0})
+	lg.Logln(">>>|", b[:3])
+
+	n, err := io.ReadFull(sconn, b[:2])
+	if err != nil {
+		lg.Logln(err)
+		return
+	}
+	lg.Logln("<<<|", b[:n])
+
+	if b[1] == 0x88 {
+		cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "gost")
+		sconn = shadowsocks.NewConn(sconn, cipher)
+	}
 
 	if g.Shadows {
 		lg.Logln("shadowsocks, aes-256-cfb")
-		cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "123456")
+		cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "gost")
 		conn = shadowsocks.NewConn(conn, cipher)
 		addr, port, extra, err := getRequest(conn)
 		if err != nil {
@@ -132,15 +152,6 @@ func (g *Gost) cli(conn net.Conn) {
 
 		return
 	}
-
-	b := make([]byte, 8192)
-
-	n, err := io.ReadFull(sconn, b[:2])
-	if err != nil {
-		lg.Logln(err)
-		return
-	}
-	lg.Logln("<<<|", b[:n])
 
 	n, err = conn.Read(b)
 	if err != nil {
@@ -262,12 +273,17 @@ func (g *Gost) srv(conn net.Conn) {
 
 	if b[0] == 5 { // socks5,NO AUTHENTICATION
 		lg.Logln("|>>>", b[:n])
-		if _, err := conn.Write([]byte{5, 0}); err != nil {
+		method := b[2]
+		if _, err := conn.Write([]byte{5, method}); err != nil {
 			lg.Logln(err)
 			return
 		}
-		lg.Logln("|<<<", []byte{5, 0})
+		lg.Logln("|<<<", []byte{5, method})
 
+		if method == 0x88 {
+			cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "gost")
+			conn = shadowsocks.NewConn(conn, cipher)
+		}
 		cmd, err := ReadCmd(conn)
 		if err != nil {
 			lg.Logln(err)
