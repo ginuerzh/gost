@@ -341,7 +341,7 @@ func (g *Gost) srv(conn net.Conn) {
 func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 	rChan := make(chan error, 1)
 	wChan := make(chan error, 1)
-	var raddr net.Addr
+	var raddr *net.UDPAddr
 
 	go func() {
 		for {
@@ -357,7 +357,7 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 				continue
 			}
 			if rawUdp {
-				if _, err = uconn.WriteTo(up.Data, addr); err != nil {
+				if _, err = uconn.WriteToUDP(up.Data, addr); err != nil {
 					log.Println(err)
 				}
 				log.Println("r", up)
@@ -365,7 +365,8 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 				up.Rsv = 0
 				buf := &bytes.Buffer{}
 				up.Write(buf)
-				if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
+				log.Println(raddr, buf.Bytes())
+				if _, err := uconn.WriteToUDP(buf.Bytes(), raddr); err != nil {
 					log.Println(err)
 				}
 				log.Println("r", up)
@@ -376,10 +377,10 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 	go func() {
 		for {
 			b := make([]byte, 65797)
-			n, addr, err := uconn.ReadFrom(b)
+			n, addr, err := uconn.ReadFromUDP(b)
 			if err != nil {
 				log.Println(err)
-				continue
+				return
 			}
 			raddr = addr
 

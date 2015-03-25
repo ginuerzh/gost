@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	//"log"
-	"bytes"
 	"net"
 )
 
@@ -94,7 +94,9 @@ func NewCmd(cmd uint8, atype uint8, addr string, port uint16) *Cmd {
 func ReadCmd(r io.Reader) (*Cmd, error) {
 	b := make([]byte, 256)
 	n, err := r.Read(b)
+	//log.Println(b[:n])
 	if err != nil {
+		//log.Println(err)
 		return nil, err
 	}
 	if n < 10 {
