@@ -68,7 +68,7 @@ func (g *Gost) handle(conn net.Conn) {
 }
 
 func (g *Gost) cli(conn net.Conn) {
-	lg := NewLog(true)
+	lg := NewLog(false)
 	defer func() {
 		lg.Logln()
 		lg.Flush()
@@ -233,7 +233,7 @@ func (g *Gost) srv(conn net.Conn) {
 			}
 			lg.Logln("|<<<", cmd)
 
-			tunnelUdp(conn, uconn)
+			tunnelUdp(conn, uconn, true)
 			/*
 				up, err := ReadUdpPayload(uconn)
 				if err != nil {
@@ -336,9 +336,10 @@ func (g *Gost) srv(conn net.Conn) {
 	}
 }
 
-func tunnelUdp(conn net.Conn, uconn *net.UDPConn) (err error) {
+func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 	rChan := make(chan error, 1)
 	wChan := make(chan error, 1)
+	var raddr net.Addr
 
 	go func() {
 		for {
@@ -347,35 +348,64 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn) (err error) {
 				rChan <- err
 				return
 			}
+			log.Println("r", up)
 
 			addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(up.Addr, strconv.Itoa(int(up.Port))))
 			if err != nil {
 				rChan <- err
 				return
 			}
-			if _, err = uconn.WriteTo(up.Data, addr); err != nil {
-				rChan <- err
-				return
+			if rawUdp {
+				if _, err = uconn.WriteTo(up.Data, addr); err != nil {
+					rChan <- err
+					return
+				}
+			} else {
+				up.Rsv = 0
+				buf := &bytes.Buffer{}
+				up.Write(buf)
+				if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
+					rChan <- err
+					return
+				}
 			}
 		}
 	}()
 
 	go func() {
-		b := make([]byte, 65535)
-
 		for {
+			b := make([]byte, 65797)
 			n, addr, err := uconn.ReadFrom(b)
 			if err != nil {
 				wChan <- err
 				return
 			}
-			host, port, _ := net.SplitHostPort(addr.String())
-			p, _ := strconv.Atoi(port)
-			up := NewUdpPayload(uint16(n), AddrIPv4, host, uint16(p), b[:n])
+			raddr = addr
+
+			if rawUdp {
+				host, port, _ := net.SplitHostPort(addr.String())
+				p, _ := strconv.Atoi(port)
+				up := NewUdpPayload(uint16(n), AddrIPv4, host, uint16(p), b[:n])
+				if err := up.Write(conn); err != nil {
+					wChan <- err
+					return
+				}
+				log.Println("w", up)
+				continue
+			}
+
+			rbuf := bytes.NewReader(b)
+			up, err := ReadUdpPayload(rbuf)
+			if err != nil {
+				wChan <- err
+				return
+			}
+			up.Rsv = uint16(len(up.Data))
 			if err := up.Write(conn); err != nil {
 				wChan <- err
 				return
 			}
+			log.Println("w", up)
 		}
 	}()
 
@@ -419,7 +449,7 @@ func socks5Transfer(conn, sconn net.Conn, lg *BufferedLog) {
 		lg.Logln("|<<<", cmd)
 
 		if err := Transport(conn, sconn); err != nil {
-			lg.Logln(err)
+			lg.Logln("transport:", err)
 		}
 	case CmdUdp:
 		//raddr := conn.(*net.TCPConn).RemoteAddr()
@@ -445,17 +475,17 @@ func socks5Transfer(conn, sconn net.Conn, lg *BufferedLog) {
 		}
 		lg.Logln("<<<|", cmd)
 
-		host, port, _ := net.SplitHostPort(uconn.LocalAddr().String())
+		_, port, _ := net.SplitHostPort(uconn.LocalAddr().String())
 		p, _ := strconv.Atoi(port)
-		cmd = NewCmd(CmdUdp, AddrIPv4, host, uint16(p))
+		cmd = NewCmd(Succeeded, AddrIPv4, "", uint16(p))
 		if err = cmd.Write(conn); err != nil {
 			lg.Logln(err)
 			return
 		}
 		lg.Logln("|<<<", cmd)
 
-		if err := tunnelUdp(sconn, uconn); err != nil {
-			lg.Logln(err)
+		if err := tunnelUdp(sconn, uconn, false); err != nil {
+			lg.Logln("tunnel UDP:", err)
 		}
 	case CmdBind:
 		if err := cmd.Write(sconn); err != nil {
@@ -463,8 +493,20 @@ func socks5Transfer(conn, sconn net.Conn, lg *BufferedLog) {
 			return
 		}
 
-		if err := Transport(conn, sconn); err != nil {
+		cmd, err := ReadCmd(sconn)
+		if err != nil {
 			lg.Logln(err)
+			return
+		}
+		lg.Logln("<<<|", cmd)
+		if err := cmd.Write(conn); err != nil {
+			lg.Logln(err)
+			return
+		}
+		lg.Logln("|<<<", cmd)
+
+		if err := Transport(conn, sconn); err != nil {
+			lg.Logln("bind:", err)
 		}
 	}
 
