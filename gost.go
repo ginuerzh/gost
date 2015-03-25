@@ -74,15 +74,16 @@ func (g *Gost) cli(conn net.Conn) {
 		lg.Flush()
 	}()
 
-	lg.Logln("accept", conn.(*net.TCPConn).RemoteAddr().String())
+	raddr := conn.(*net.TCPConn).RemoteAddr()
+	lg.Logln("accept", raddr.String())
 
-	sconn, err := g.connect(g.Saddr)
+	sconn, err := Connect(g.Saddr, g.Proxy)
 	if err != nil {
 		lg.Logln(err)
 		return
 	}
-
 	defer sconn.Close()
+
 	laddr := sconn.(*net.TCPConn).LocalAddr().String()
 	lg.Logln(laddr)
 
@@ -114,42 +115,8 @@ func (g *Gost) cli(conn net.Conn) {
 	if g.Shadows {
 		lg.Logln("shadowsocks, aes-256-cfb")
 		cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "gost")
-		conn = shadowsocks.NewConn(conn, cipher)
-		addr, port, extra, err := getRequest(conn)
-		if err != nil {
-			lg.Logln(err)
-			return
-		}
-		lg.Logln(addr, port)
 
-		cmd := NewCmd(CmdConnect, AddrDomain, addr, port)
-		if err = cmd.Write(sconn); err != nil {
-			lg.Logln(err)
-			return
-		}
-		lg.Logln(">>>|", cmd)
-
-		if cmd, err = ReadCmd(sconn); err != nil {
-			lg.Logln(err)
-			return
-		}
-		lg.Logln("<<<|", cmd)
-
-		if cmd.Cmd != Succeeded {
-			conn.Write([]byte("HTTP/1.1 503 Service unavailable\r\n" +
-				"Proxy-Agent: gost/1.0\r\n\r\n"))
-			return
-		}
-
-		if extra != nil {
-			if _, err := sconn.Write(extra); err != nil {
-				log.Println(err)
-				return
-			}
-		}
-
-		g.transport(conn, sconn)
-
+		shadowTransfer(shadowsocks.NewConn(conn, cipher), sconn, lg)
 		return
 	}
 
@@ -168,6 +135,49 @@ func (g *Gost) cli(conn net.Conn) {
 		}
 		lg.Logln("|<<<", []byte{5, 0})
 
+		socks5Transfer(conn, sconn, lg)
+		return
+	}
+
+	//log.Println(string(b[:n]))
+	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
+	if err != nil {
+		lg.Logln(err)
+		return
+	}
+
+	httpTransfer(req, conn, sconn, lg)
+}
+
+func (g *Gost) srv(conn net.Conn) {
+	b := make([]byte, 8192)
+	lg := NewLog(false)
+	defer func() {
+		lg.Logln()
+		lg.Flush()
+	}()
+	raddr := conn.(*net.TCPConn).RemoteAddr()
+	lg.Logln("accept", raddr.String())
+
+	n, err := conn.Read(b)
+	if err != nil {
+		lg.Logln(err)
+		return
+	}
+
+	if b[0] == 5 { // socks5
+		lg.Logln("|>>>", b[:n])
+		method := b[2]
+		if _, err := conn.Write([]byte{5, method}); err != nil {
+			lg.Logln(err)
+			return
+		}
+		lg.Logln("|<<<", []byte{5, method})
+
+		if method == 0x88 {
+			cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "gost")
+			conn = shadowsocks.NewConn(conn, cipher)
+		}
 		cmd, err := ReadCmd(conn)
 		if err != nil {
 			lg.Logln(err)
@@ -175,6 +185,220 @@ func (g *Gost) cli(conn net.Conn) {
 		}
 		lg.Logln("|>>>", cmd)
 
+		switch cmd.Cmd {
+		case CmdConnect:
+			//host := cmd.Addr + ":" + strconv.Itoa(int(cmd.Port))
+			host := net.JoinHostPort(cmd.Addr, strconv.Itoa(int(cmd.Port)))
+			lg.Logln("connect", host)
+
+			tconn, err := Connect(host, g.Proxy)
+			if err != nil {
+				lg.Logln(err)
+				cmd = NewCmd(ConnRefused, 0, "", 0)
+				cmd.Write(conn)
+				lg.Logln("|<<<", cmd)
+				return
+			}
+			defer tconn.Close()
+
+			cmd = NewCmd(Succeeded, AddrIPv4, "", 0)
+			if err = cmd.Write(conn); err != nil {
+				lg.Logln(err)
+				return
+			}
+			lg.Logln("|<<<", cmd)
+
+			if err := Transport(conn, tconn); err != nil {
+				lg.Logln(err)
+			}
+		case CmdUdp:
+			//log.Println("recv udp")
+			//addr := &net.UDPAddr{IP: raddr.(*net.TCPAddr).IP}
+			uconn, err := net.ListenUDP("udp", nil)
+			if err != nil {
+				lg.Logln(err)
+				return
+			}
+			defer uconn.Close()
+
+			uaddr := uconn.LocalAddr()
+			lg.Logln("listen udp", uaddr)
+
+			_, port, _ := net.SplitHostPort(uaddr.String())
+			p, _ := strconv.Atoi(port)
+			cmd = NewCmd(Succeeded, AddrIPv4, "", uint16(p))
+			if err = cmd.Write(conn); err != nil {
+				lg.Logln(err)
+				return
+			}
+			lg.Logln("|<<<", cmd)
+
+			tunnelUdp(conn, uconn)
+			/*
+				up, err := ReadUdpPayload(uconn)
+				if err != nil {
+					lg.Logln(err)
+					return
+				}
+				lg.Logln("[>>>", up)
+			*/
+		case CmdBind:
+			//log.Println("recv bind")
+			l, err := net.ListenTCP("tcp", nil)
+			if err != nil {
+				lg.Logln(err)
+				cmd := NewCmd(Failure, AddrIPv4, "", 0)
+				cmd.Write(conn)
+				lg.Logln("|<<<", cmd)
+				return
+			}
+			defer l.Close()
+
+			addr := ""
+			ifis, _ := net.Interfaces()
+			for _, ifi := range ifis {
+				if strings.HasPrefix(ifi.Name, "eth") {
+					addrs, _ := ifi.Addrs()
+					if len(addrs) > 0 {
+						ip, _, _ := net.ParseCIDR(addrs[0].String())
+						addr = ip.String()
+					}
+					break
+				}
+			}
+			lg.Logln("bind", addr, l.Addr().(*net.TCPAddr).Port)
+			cmd := NewCmd(Succeeded, AddrIPv4, addr, uint16(l.Addr().(*net.TCPAddr).Port))
+			if err := cmd.Write(conn); err != nil {
+				lg.Logln(err)
+				return
+			}
+			lg.Logln("|<<<", cmd)
+
+			for {
+				c, err := l.AcceptTCP()
+				if err != nil {
+					log.Println("accept:", err)
+					return
+				}
+				raddr := c.RemoteAddr().(*net.TCPAddr)
+				cmd := NewCmd(Succeeded, AddrIPv4, raddr.IP.String(), uint16(raddr.Port))
+				if err := cmd.Write(conn); err != nil {
+					log.Println(err)
+					return
+				}
+				defer c.Close()
+
+				Transport(conn, c)
+				return
+			}
+		}
+
+		return
+	}
+
+	//log.Println(string(b[:n]))
+	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
+	if err != nil {
+		lg.Logln(err)
+		return
+	}
+
+	lg.Logln(req.Method, req.RequestURI)
+	host := req.Host
+	if !strings.Contains(host, ":") {
+		host = host + ":80"
+	}
+	tconn, err := Connect(host, g.Proxy)
+	if err != nil {
+		lg.Logln(err)
+		conn.Write([]byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/1.0\r\n\r\n"))
+		return
+	}
+	defer tconn.Close()
+
+	if req.Method == "CONNECT" {
+		if _, err = conn.Write(
+			[]byte("HTTP/1.1 200 Connection established\r\n" +
+				"Proxy-Agent: gost/1.0\r\n\r\n")); err != nil {
+			lg.Logln(err)
+			return
+		}
+	} else {
+		if err := req.Write(tconn); err != nil {
+			lg.Logln(err)
+			return
+		}
+	}
+
+	if err := Transport(conn, tconn); err != nil {
+		lg.Logln(err)
+	}
+}
+
+func tunnelUdp(conn net.Conn, uconn *net.UDPConn) (err error) {
+	rChan := make(chan error, 1)
+	wChan := make(chan error, 1)
+
+	go func() {
+		for {
+			up, err := ReadUdpPayload(conn)
+			if err != nil {
+				rChan <- err
+				return
+			}
+
+			addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(up.Addr, strconv.Itoa(int(up.Port))))
+			if err != nil {
+				rChan <- err
+				return
+			}
+			if _, err = uconn.WriteTo(up.Data, addr); err != nil {
+				rChan <- err
+				return
+			}
+		}
+	}()
+
+	go func() {
+		b := make([]byte, 65535)
+
+		for {
+			n, addr, err := uconn.ReadFrom(b)
+			if err != nil {
+				wChan <- err
+				return
+			}
+			host, port, _ := net.SplitHostPort(addr.String())
+			p, _ := strconv.Atoi(port)
+			up := NewUdpPayload(uint16(n), AddrIPv4, host, uint16(p), b[:n])
+			if err := up.Write(conn); err != nil {
+				wChan <- err
+				return
+			}
+		}
+	}()
+
+	select {
+	case err = <-wChan:
+		//log.Println("w exit", err)
+	case err = <-rChan:
+		//log.Println("r exit", err)
+	}
+
+	return
+}
+
+func socks5Transfer(conn, sconn net.Conn, lg *BufferedLog) {
+	cmd, err := ReadCmd(conn)
+	if err != nil {
+		lg.Logln(err)
+		return
+	}
+	lg.Logln("|>>>", cmd)
+
+	switch cmd.Cmd {
+	case CmdConnect:
 		if err = cmd.Write(sconn); err != nil {
 			lg.Logln(err)
 			return
@@ -194,16 +418,59 @@ func (g *Gost) cli(conn net.Conn) {
 		}
 		lg.Logln("|<<<", cmd)
 
-		g.transport(conn, sconn)
-		return
+		if err := Transport(conn, sconn); err != nil {
+			lg.Logln(err)
+		}
+	case CmdUdp:
+		//raddr := conn.(*net.TCPConn).RemoteAddr()
+		addr := &net.UDPAddr{IP: net.ParseIP(cmd.Addr)}
+		uconn, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			lg.Logln(err)
+			return
+		}
+		uaddr := uconn.LocalAddr()
+		lg.Logln("listen udp", uaddr)
+
+		cmd := NewCmd(CmdUdp, AddrIPv4, "", 0)
+		if err = cmd.Write(sconn); err != nil {
+			lg.Logln(err)
+			return
+		}
+		lg.Logln(">>>|", cmd)
+
+		if cmd, err = ReadCmd(sconn); err != nil {
+			lg.Logln(err)
+			return
+		}
+		lg.Logln("<<<|", cmd)
+
+		host, port, _ := net.SplitHostPort(uconn.LocalAddr().String())
+		p, _ := strconv.Atoi(port)
+		cmd = NewCmd(CmdUdp, AddrIPv4, host, uint16(p))
+		if err = cmd.Write(conn); err != nil {
+			lg.Logln(err)
+			return
+		}
+		lg.Logln("|<<<", cmd)
+
+		if err := tunnelUdp(sconn, uconn); err != nil {
+			lg.Logln(err)
+		}
+	case CmdBind:
+		if err := cmd.Write(sconn); err != nil {
+			lg.Logln(err)
+			return
+		}
+
+		if err := Transport(conn, sconn); err != nil {
+			lg.Logln(err)
+		}
 	}
 
-	//log.Println(string(b[:n]))
-	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
-	if err != nil {
-		lg.Logln(err)
-		return
-	}
+}
+
+func httpTransfer(req *http.Request, conn, sconn net.Conn, lg *BufferedLog) {
 	lg.Logln(req.Method, req.RequestURI)
 
 	var addr string
@@ -221,7 +488,8 @@ func (g *Gost) cli(conn net.Conn) {
 	}
 
 	cmd := NewCmd(CmdConnect, AddrDomain, addr, port)
-	if err = cmd.Write(sconn); err != nil {
+	err := cmd.Write(sconn)
+	if err != nil {
 		lg.Logln(err)
 		return
 	}
@@ -253,114 +521,53 @@ func (g *Gost) cli(conn net.Conn) {
 		}
 	}
 
-	g.transport(conn, sconn)
+	if err := Transport(conn, sconn); err != nil {
+		lg.Logln(err)
+	}
 }
 
-func (g *Gost) srv(conn net.Conn) {
-	b := make([]byte, 8192)
-	lg := NewLog(true)
-	defer func() {
-		lg.Logln()
-		lg.Flush()
-	}()
-	lg.Logln("accept", conn.(*net.TCPConn).RemoteAddr().String())
-
-	n, err := conn.Read(b)
+func shadowTransfer(conn, sconn net.Conn, lg *BufferedLog) {
+	t, addr, port, extra, err := getRequest(conn)
 	if err != nil {
 		lg.Logln(err)
 		return
 	}
+	lg.Logln(addr, port)
 
-	if b[0] == 5 { // socks5,NO AUTHENTICATION
-		lg.Logln("|>>>", b[:n])
-		method := b[2]
-		if _, err := conn.Write([]byte{5, method}); err != nil {
-			lg.Logln(err)
-			return
-		}
-		lg.Logln("|<<<", []byte{5, method})
-
-		if method == 0x88 {
-			cipher, _ := shadowsocks.NewCipher("aes-256-cfb", "gost")
-			conn = shadowsocks.NewConn(conn, cipher)
-		}
-		cmd, err := ReadCmd(conn)
-		if err != nil {
-			lg.Logln(err)
-			return
-		}
-		lg.Logln("|>>>", cmd)
-
-		host := cmd.Addr + ":" + strconv.Itoa(int(cmd.Port))
-		lg.Logln("connect", host)
-
-		tconn, err := g.connect(host)
-		if err != nil {
-			lg.Logln(err)
-			cmd = NewCmd(ConnRefused, 0, "", 0)
-			cmd.Write(conn)
-			lg.Logln("|<<<", cmd)
-			return
-		}
-		defer tconn.Close()
-
-		cmd = NewCmd(Succeeded, AddrIPv4, "0.0.0.0", 0)
-		if err = cmd.Write(conn); err != nil {
-			lg.Logln(err)
-			return
-		}
-		lg.Logln("|<<<", cmd)
-
-		lg.Logln()
-		lg.Flush()
-
-		g.transport(conn, tconn)
-		return
-	}
-
-	//log.Println(string(b[:n]))
-	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
-	if err != nil {
+	cmd := NewCmd(CmdConnect, t, addr, port)
+	if err = cmd.Write(sconn); err != nil {
 		lg.Logln(err)
 		return
 	}
+	lg.Logln(">>>|", cmd)
 
-	lg.Logln(req.Method, req.RequestURI)
-	host := req.Host
-	if !strings.Contains(host, ":") {
-		host = host + ":80"
-	}
-	tconn, err := g.connect(host)
-	if err != nil {
+	if cmd, err = ReadCmd(sconn); err != nil {
 		lg.Logln(err)
+		return
+	}
+	lg.Logln("<<<|", cmd)
+
+	if cmd.Cmd != Succeeded {
 		conn.Write([]byte("HTTP/1.1 503 Service unavailable\r\n" +
 			"Proxy-Agent: gost/1.0\r\n\r\n"))
 		return
 	}
-	defer tconn.Close()
 
-	if req.Method == "CONNECT" {
-		if _, err = conn.Write(
-			[]byte("HTTP/1.1 200 Connection established\r\n" +
-				"Proxy-Agent: gost/1.0\r\n\r\n")); err != nil {
-			lg.Logln(err)
-			return
-		}
-	} else {
-		if err := req.Write(tconn); err != nil {
+	if extra != nil {
+		//lg.Logln("extra:", string(extra))
+		if _, err := sconn.Write(extra); err != nil {
 			lg.Logln(err)
 			return
 		}
 	}
 
-	lg.Logln()
-	lg.Flush()
-
-	g.transport(conn, tconn)
+	if err := Transport(conn, sconn); err != nil {
+		lg.Logln(err)
+	}
 }
 
-func (g *Gost) connect(addr string) (net.Conn, error) {
-	if len(g.Proxy) == 0 {
+func Connect(addr, proxy string) (net.Conn, error) {
+	if len(proxy) == 0 {
 		taddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
 			log.Println(err)
@@ -369,7 +576,7 @@ func (g *Gost) connect(addr string) (net.Conn, error) {
 		return net.DialTCP("tcp", nil, taddr)
 	}
 
-	paddr, err := net.ResolveTCPAddr("tcp", g.Proxy)
+	paddr, err := net.ResolveTCPAddr("tcp", proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -407,17 +614,50 @@ func (g *Gost) connect(addr string) (net.Conn, error) {
 	return pconn, nil
 }
 
-func (g *Gost) pipe(src io.Reader, dst io.Writer, c chan<- error) {
-	_, err := io.Copy(dst, src)
+func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
+	buf := make([]byte, 32*1024)
+	for {
+		nr, er := src.Read(buf)
+		//log.Println("cp r", nr, er)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[:nr])
+			//log.Println("cp w", nw, ew)
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			/*
+				if nr != nw {
+					err = io.ErrShortWrite
+					break
+				}
+			*/
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			err = er
+			break
+		}
+	}
+	return
+}
+
+func Pipe(src io.Reader, dst io.Writer, c chan<- error) {
+	_, err := Copy(dst, src)
 	c <- err
 }
 
-func (g *Gost) transport(conn, conn2 net.Conn) (err error) {
+func Transport(conn, conn2 net.Conn) (err error) {
 	rChan := make(chan error, 1)
 	wChan := make(chan error, 1)
 
-	go g.pipe(conn, conn2, wChan)
-	go g.pipe(conn2, conn, rChan)
+	go Pipe(conn, conn2, wChan)
+	go Pipe(conn2, conn, rChan)
 
 	select {
 	case err = <-wChan:
@@ -429,7 +669,7 @@ func (g *Gost) transport(conn, conn2 net.Conn) (err error) {
 	return
 }
 
-func getRequest(conn net.Conn) (host string, port uint16, extra []byte, err error) {
+func getRequest(conn net.Conn) (addrType uint8, addr string, port uint16, extra []byte, err error) {
 	const (
 		idType  = 0 // address type index
 		idIP0   = 1 // ip addres start index
@@ -451,12 +691,13 @@ func getRequest(conn net.Conn) (host string, port uint16, extra []byte, err erro
 	buf := make([]byte, 260)
 	var n int
 	// read till we get possible domain length field
-	//ss.SetReadTimeout(conn)
+	//shadowsocks.SetReadTimeout(conn)
 	if n, err = io.ReadAtLeast(conn, buf, idDmLen+1); err != nil {
 		log.Println(err)
 		return
 	}
-	log.Println(buf[:n])
+	//log.Println(buf[:n])
+	addrType = buf[idType]
 
 	reqLen := -1
 	switch buf[idType] {
@@ -487,11 +728,11 @@ func getRequest(conn net.Conn) (host string, port uint16, extra []byte, err erro
 	// big problem.
 	switch buf[idType] {
 	case typeIPv4:
-		host = net.IP(buf[idIP0 : idIP0+net.IPv4len]).String()
+		addr = net.IP(buf[idIP0 : idIP0+net.IPv4len]).String()
 	case typeIPv6:
-		host = net.IP(buf[idIP0 : idIP0+net.IPv6len]).String()
+		addr = net.IP(buf[idIP0 : idIP0+net.IPv6len]).String()
 	case typeDm:
-		host = string(buf[idDm0 : idDm0+buf[idDmLen]])
+		addr = string(buf[idDm0 : idDm0+buf[idDmLen]])
 	}
 	// parse port
 	port = binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])
