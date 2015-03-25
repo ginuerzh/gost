@@ -233,7 +233,9 @@ func (g *Gost) srv(conn net.Conn) {
 			}
 			lg.Logln("|<<<", cmd)
 
-			tunnelUdp(conn, uconn, true)
+			if err := tunnelUdp(conn, uconn, true); err != nil {
+				lg.Logln(err)
+			}
 			/*
 				up, err := ReadUdpPayload(uconn)
 				if err != nil {
@@ -348,7 +350,6 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 				rChan <- err
 				return
 			}
-			log.Println("r", up)
 
 			addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(up.Addr, strconv.Itoa(int(up.Port))))
 			if err != nil {
@@ -360,6 +361,7 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 					rChan <- err
 					return
 				}
+				log.Println("r", up)
 			} else {
 				up.Rsv = 0
 				buf := &bytes.Buffer{}
@@ -368,6 +370,7 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 					rChan <- err
 					return
 				}
+				log.Println("r", up)
 			}
 		}
 	}()
@@ -394,7 +397,7 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 				continue
 			}
 
-			rbuf := bytes.NewReader(b)
+			rbuf := bytes.NewReader(b[:n])
 			up, err := ReadUdpPayload(rbuf)
 			if err != nil {
 				wChan <- err
