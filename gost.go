@@ -353,13 +353,12 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 
 			addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(up.Addr, strconv.Itoa(int(up.Port))))
 			if err != nil {
-				rChan <- err
-				return
+				log.Println(err)
+				continue
 			}
 			if rawUdp {
 				if _, err = uconn.WriteTo(up.Data, addr); err != nil {
-					rChan <- err
-					return
+					log.Println(err)
 				}
 				log.Println("r", up)
 			} else {
@@ -367,8 +366,7 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 				buf := &bytes.Buffer{}
 				up.Write(buf)
 				if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
-					rChan <- err
-					return
+					log.Println(err)
 				}
 				log.Println("r", up)
 			}
@@ -380,8 +378,8 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 			b := make([]byte, 65797)
 			n, addr, err := uconn.ReadFrom(b)
 			if err != nil {
-				wChan <- err
-				return
+				log.Println(err)
+				continue
 			}
 			raddr = addr
 
@@ -400,8 +398,8 @@ func tunnelUdp(conn net.Conn, uconn *net.UDPConn, rawUdp bool) (err error) {
 			rbuf := bytes.NewReader(b[:n])
 			up, err := ReadUdpPayload(rbuf)
 			if err != nil {
-				wChan <- err
-				return
+				log.Println(err)
+				continue
 			}
 			up.Rsv = uint16(len(up.Data))
 			if err := up.Write(conn); err != nil {
