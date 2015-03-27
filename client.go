@@ -128,6 +128,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 	if err != nil {
 		return
 	}
+	log.Println(req)
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect, gosocks5.CmdBind:
@@ -162,28 +163,34 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 			return
 		}
 
-		addr.Port = req.Addr.Port
-		raddr, err := net.ResolveUDPAddr("udp", addr.String())
-		if err != nil {
-			return
-		}
-
-		cliTunnelUDP(raddr, uconn, conn)
+		cliTunnelUDP(uconn, conn)
 	}
 }
 
-func cliTunnelUDP(raddr net.Addr, uconn *net.UDPConn, conn net.Conn) {
-	go func() {
-		udp, err := gosocks5.ReadUDPDatagram(uconn)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		udp.Header.Rsv = uint16(len(udp.Data))
+func cliTunnelUDP(uconn *net.UDPConn, conn net.Conn) {
+	var raddr *net.UDPAddr
 
-		if err := udp.Write(conn); err != nil {
-			log.Println(err)
-			return
+	go func() {
+		b := make([]byte, 65797)
+		for {
+			n, addr, err := uconn.ReadFromUDP(b)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			raddr = addr
+			r := bytes.NewBuffer(b[:n])
+			udp, err := gosocks5.ReadUDPDatagram(r)
+			if err != nil {
+				return
+			}
+			udp.Header.Rsv = uint16(len(udp.Data))
+			log.Println("r", raddr.String(), udp.Header)
+
+			if err := udp.Write(conn); err != nil {
+				log.Println(err)
+				return
+			}
 		}
 	}()
 
@@ -193,10 +200,10 @@ func cliTunnelUDP(raddr net.Addr, uconn *net.UDPConn, conn net.Conn) {
 			log.Println(err)
 			return
 		}
+		log.Println("w", udp.Header)
 		udp.Header.Rsv = 0
 		buf := &bytes.Buffer{}
 		udp.Write(buf)
-
 		if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
 			log.Println(err)
 			return

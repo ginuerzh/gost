@@ -115,34 +115,37 @@ func srvHandle(conn net.Conn, method uint8) {
 func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
 	go func() {
 		b := make([]byte, 65535)
-		n, addr, err := uconn.ReadFromUDP(b)
-		if err != nil {
-			log.Println(err)
-			return
-		}
+		for {
+			n, addr, err := uconn.ReadFromUDP(b)
+			if err != nil {
+				log.Println(err)
+				return
+			}
 
-		udp := gosocks5.NewUDPDatagram(
-			gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
-		if err := udp.Write(conn); err != nil {
-			log.Println(err)
-			return
+			udp := gosocks5.NewUDPDatagram(
+				gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
+			log.Println("r", udp.Header)
+			if err := udp.Write(conn); err != nil {
+				log.Println(err)
+				return
+			}
 		}
 	}()
 
 	for {
-		ud, err := gosocks5.ReadUDPDatagram(conn)
+		udp, err := gosocks5.ReadUDPDatagram(conn)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-
-		addr, err := net.ResolveUDPAddr("udp", ud.Header.Addr.String())
+		log.Println("w", udp.Header)
+		addr, err := net.ResolveUDPAddr("udp", udp.Header.Addr.String())
 		if err != nil {
 			log.Println(err)
 			continue // drop silently
 		}
 
-		if _, err := uconn.WriteToUDP(ud.Data, addr); err != nil {
+		if _, err := uconn.WriteToUDP(udp.Data, addr); err != nil {
 			log.Println(err)
 			return
 		}
