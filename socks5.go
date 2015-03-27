@@ -52,17 +52,6 @@ var (
 	ErrBadFormat   = errors.New("Bad format")
 	ErrBadAddrType = errors.New("Bad address type")
 	ErrShortBuffer = errors.New("Short buffer")
-
-	cmdErrMap = map[uint8]error{
-		Failure:         errors.New("General SOCKS server failure"),
-		NotAllowed:      errors.New("Connection not allowed by ruleset"),
-		NetUnreachable:  errors.New("Network unreachable"),
-		HostUnreachable: errors.New("Host unreachable"),
-		ConnRefused:     errors.New("Connection refused"),
-		TTLExpired:      errors.New("TTL expired"),
-		CmdUnsupported:  errors.New("Command not supported"),
-		AddrUnsupported: errors.New("Address type not supported"),
-	}
 )
 
 /*
