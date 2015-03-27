@@ -6,6 +6,7 @@ import (
 	"github.com/ginuerzh/gosocks5"
 	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -128,7 +129,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 	if err != nil {
 		return
 	}
-	log.Println(req)
+	//log.Println(req)
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect, gosocks5.CmdBind:
@@ -155,7 +156,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		log.Println("udp:", addr)
+		//log.Println("udp:", addr)
 
 		rep = gosocks5.NewReply(Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
@@ -163,15 +164,17 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 			return
 		}
 
-		cliTunnelUDP(uconn, conn)
+		go cliTunnelUDP(uconn, sconn)
+
+		ioutil.ReadAll(conn)
 	}
 }
 
-func cliTunnelUDP(uconn *net.UDPConn, conn net.Conn) {
+func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 	var raddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, 65797)
+		b := make([]byte, 65535)
 		for {
 			n, addr, err := uconn.ReadFromUDP(b)
 			if err != nil {
@@ -185,9 +188,9 @@ func cliTunnelUDP(uconn *net.UDPConn, conn net.Conn) {
 				return
 			}
 			udp.Header.Rsv = uint16(len(udp.Data))
-			log.Println("r", raddr.String(), udp.Header)
+			//log.Println("r", raddr.String(), udp.Header)
 
-			if err := udp.Write(conn); err != nil {
+			if err := udp.Write(sconn); err != nil {
 				log.Println(err)
 				return
 			}
@@ -195,12 +198,12 @@ func cliTunnelUDP(uconn *net.UDPConn, conn net.Conn) {
 	}()
 
 	for {
-		udp, err := gosocks5.ReadUDPDatagram(conn)
+		udp, err := gosocks5.ReadUDPDatagram(sconn)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		log.Println("w", udp.Header)
+		//log.Println("w", udp.Header)
 		udp.Header.Rsv = 0
 		buf := &bytes.Buffer{}
 		udp.Write(buf)

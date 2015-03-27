@@ -41,7 +41,7 @@ func srvHandle(conn net.Conn, method uint8) {
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
-		log.Println("connect", req.Addr.String())
+		//log.Println("connect", req.Addr.String())
 		tconn, err := Connect(req.Addr.String(), Proxy)
 		if err != nil {
 			gosocks5.NewReply(gosocks5.HostUnreachable, nil).Write(conn)
@@ -66,7 +66,7 @@ func srvHandle(conn net.Conn, method uint8) {
 
 		addr := ToSocksAddr(l.Addr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		log.Println("bind:", addr)
+		//log.Println("bind:", addr)
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			return
@@ -82,6 +82,7 @@ func srvHandle(conn net.Conn, method uint8) {
 		l.Close()
 
 		addr = ToSocksAddr(tconn.RemoteAddr())
+		log.Println("accept peer:", addr.String())
 		rep = gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			log.Println(err)
@@ -102,7 +103,7 @@ func srvHandle(conn net.Conn, method uint8) {
 
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		log.Println("udp:", addr)
+		//log.Println("udp:", addr)
 		rep := gosocks5.NewReply(Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			log.Println(err)
@@ -124,7 +125,7 @@ func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
 
 			udp := gosocks5.NewUDPDatagram(
 				gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
-			log.Println("r", udp.Header)
+			//log.Println("r", udp.Header)
 			if err := udp.Write(conn); err != nil {
 				log.Println(err)
 				return
@@ -138,7 +139,7 @@ func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
 			log.Println(err)
 			return
 		}
-		log.Println("w", udp.Header)
+		//log.Println("w", udp.Header)
 		addr, err := net.ResolveUDPAddr("udp", udp.Header.Addr.String())
 		if err != nil {
 			log.Println(err)
