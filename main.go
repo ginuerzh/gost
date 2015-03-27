@@ -18,7 +18,7 @@ func init() {
 	flag.StringVar(&Saddr, "S", "", "the server that connecting to")
 	flag.StringVar(&Laddr, "L", ":8080", "listen address")
 	flag.StringVar(&Cipher, "cipher", "rc4-md5", "cipher method")
-	flag.StringVar(&Password, "password", "20150327", "cipher password")
+	flag.StringVar(&Password, "password", "ginuerzh@gmail.com", "cipher password")
 	flag.BoolVar(&Shadows, "ss", false, "shadowsocks compatible")
 	flag.BoolVar(&Debug, "d", false, "debug option")
 	flag.Parse()

@@ -18,7 +18,7 @@ func selectMethod(methods ...uint8) uint8 {
 			return method
 		}
 	}
-	return gosocks5.MethodNoAcceptable
+	return gosocks5.MethodNoAuth
 }
 
 func srvHandle(conn net.Conn, method uint8) {
