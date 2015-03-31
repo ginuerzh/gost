@@ -5,6 +5,7 @@ import (
 	"flag"
 	"github.com/ginuerzh/gosocks5"
 	"log"
+	"time"
 )
 
 var (
@@ -30,6 +31,12 @@ func init() {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
+
+var (
+	spool = NewMemPool(1024, 120*time.Minute, 1024)  // 1k size buffer pool
+	mpool = NewMemPool(16*1024, 60*time.Minute, 512) // 16k size buffer pool
+	lpool = NewMemPool(32*1024, 30*time.Minute, 256) // 32k size buffer pool
+)
 
 func main() {
 	//log.Fatal(gost.Run())

@@ -100,7 +100,9 @@ func Connect(addr, proxy string) (net.Conn, error) {
 
 // based on io.Copy
 func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := make([]byte, 32*1024)
+	buf := lpool.Take()
+	defer lpool.put(buf)
+
 	for {
 		nr, er := src.Read(buf)
 		//log.Println("cp r", nr, er)

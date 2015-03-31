@@ -15,7 +15,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	//"sync/atomic"
 )
+
+var sessionCount int64
 
 func listenAndServe(addr string, handler func(net.Conn)) error {
 	laddr, err := net.ResolveTCPAddr("tcp", addr)
@@ -45,7 +48,10 @@ func handshake(conn net.Conn, methods ...uint8) (method uint8, err error) {
 	if nm == 0 {
 		nm = 1
 	}
-	b := make([]byte, 2+nm)
+	b := spool.Take()
+	defer spool.put(b)
+
+	b = b[:2+nm]
 	b[0] = gosocks5.Ver5
 	b[1] = uint8(nm)
 	copy(b[2:], methods)
@@ -68,6 +74,12 @@ func handshake(conn net.Conn, methods ...uint8) (method uint8, err error) {
 
 func cliHandle(conn net.Conn) {
 	defer conn.Close()
+	/*
+		fmt.Println("new session", atomic.AddInt64(&sessionCount, 1))
+		defer func() {
+			fmt.Println("session end", atomic.AddInt64(&sessionCount, -1))
+		}()
+	*/
 
 	sconn, err := Connect(Saddr, Proxy)
 	if err != nil {
@@ -105,7 +117,9 @@ func cliHandle(conn net.Conn) {
 		return
 	}
 
-	b := make([]byte, 8192)
+	b := mpool.Take()
+	defer mpool.put(b)
+
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
 		log.Println(err)
@@ -197,7 +211,9 @@ func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 	var raddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, 65535)
+		b := lpool.Take()
+		defer lpool.put(b)
+
 		for {
 			n, addr, err := uconn.ReadFromUDP(b)
 			if err != nil {
@@ -221,6 +237,9 @@ func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 	}()
 
 	for {
+		b := lpool.Take()
+		defer lpool.put(b)
+
 		udp, err := gosocks5.ReadUDPDatagram(sconn)
 		if err != nil {
 			log.Println(err)
@@ -228,7 +247,7 @@ func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 		}
 		//log.Println("w", udp.Header)
 		udp.Header.Rsv = 0
-		buf := &bytes.Buffer{}
+		buf := bytes.NewBuffer(b[0:0])
 		udp.Write(buf)
 		if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
 			log.Println(err)
@@ -331,7 +350,9 @@ func getShadowRequest(conn net.Conn) (addr *gosocks5.Addr, extra []byte, err err
 	// buf size should at least have the same size with the largest possible
 	// request size (when addrType is 3, domain name has at most 256 bytes)
 	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
-	buf := make([]byte, 260)
+	buf := spool.Take()
+	defer spool.put(buf)
+
 	var n int
 	// read till we get possible domain length field
 	//shadowsocks.SetReadTimeout(conn)

@@ -124,7 +124,9 @@ func srvHandle(conn net.Conn) {
 
 func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
 	go func() {
-		b := make([]byte, 65535)
+		b := lpool.Take()
+		defer lpool.put(b)
+
 		for {
 			n, addr, err := uconn.ReadFromUDP(b)
 			if err != nil {
