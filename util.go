@@ -13,12 +13,38 @@ import (
 	"strconv"
 )
 
+const (
+	MethodTLS uint8 = 0x80 + iota
+	MethodAES128
+	MethodAES192
+	MethodAES256
+	MethodDES
+	MethodBF
+	MethodCAST5
+	MethodRC4MD5
+	MethodRC4
+	MethodTable
+)
+
+var Methods = map[uint8]string{
+	MethodTLS:    "tls",         // 0x80
+	MethodAES128: "aes-128-cfb", // 0x81
+	MethodAES192: "aes-192-cfb", // 0x82
+	MethodAES256: "aes-256-cfb", // 0x83
+	MethodDES:    "des-cfb",     // 0x84
+	MethodBF:     "bf-cfb",      // 0x85
+	MethodCAST5:  "cast5-cfb",   // 0x86
+	MethodRC4MD5: "rc4-md5",     // 8x87
+	MethodRC4:    "rc4",         // 0x88
+	MethodTable:  "table",       // 0x89
+}
+
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 	host, port, _ := net.SplitHostPort(addr.String())
 	p, _ := strconv.Atoi(port)
 
 	return &gosocks5.Addr{
-		Type: AddrIPv4,
+		Type: gosocks5.AddrIPv4,
 		Host: host,
 		Port: uint16(p),
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"github.com/ginuerzh/gosocks5"
@@ -45,7 +46,7 @@ func handshake(conn net.Conn, methods ...uint8) (method uint8, err error) {
 		nm = 1
 	}
 	b := make([]byte, 2+nm)
-	b[0] = Ver5
+	b[0] = gosocks5.Ver5
 	b[1] = uint8(nm)
 	copy(b[2:], methods)
 
@@ -57,7 +58,7 @@ func handshake(conn net.Conn, methods ...uint8) (method uint8, err error) {
 		return
 	}
 
-	if b[0] != Ver5 {
+	if b[0] != gosocks5.Ver5 {
 		err = gosocks5.ErrBadVersion
 	}
 	method = b[1]
@@ -74,17 +75,31 @@ func cliHandle(conn net.Conn) {
 	}
 	defer sconn.Close()
 
-	method, err := handshake(sconn, MethodAES256, gosocks5.MethodNoAuth)
-	if err != nil || method == gosocks5.MethodNoAcceptable {
+	method := gosocks5.MethodNoAuth
+	for m, v := range Methods {
+		if Method == v {
+			method = m
+		}
+	}
+
+	method, err = handshake(sconn, method)
+	if err != nil {
 		return
 	}
-	if method == MethodAES256 {
-		cipher, _ := shadowsocks.NewCipher(Cipher, Password)
+
+	switch method {
+	case MethodTLS:
+		sconn = tls.Client(sconn, &tls.Config{InsecureSkipVerify: true})
+	case MethodAES128, MethodAES192, MethodAES256,
+		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
+		cipher, _ := shadowsocks.NewCipher(Methods[method], Password)
 		sconn = shadowsocks.NewConn(sconn, cipher)
+	case gosocks5.MethodNoAcceptable:
+		return
 	}
 
 	if Shadows {
-		cipher, _ := shadowsocks.NewCipher(Cipher, Password)
+		cipher, _ := shadowsocks.NewCipher(SMethod, SPassword)
 		conn = shadowsocks.NewConn(conn, cipher)
 		handleShadow(conn, sconn)
 		return
@@ -157,7 +172,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
 			log.Println(err)
-			gosocks5.NewReply(Failure, nil).Write(conn)
+			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 			return
 		}
 		defer uconn.Close()
@@ -166,7 +181,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
 		//log.Println("udp:", addr)
 
-		rep = gosocks5.NewReply(Succeeded, addr)
+		rep = gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			log.Println(err)
 			return

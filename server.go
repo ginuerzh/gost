@@ -5,37 +5,46 @@ import (
 	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"net"
 	//"strconv"
+	"crypto/tls"
 	"log"
-)
-
-const (
-	MethodAES256 uint8 = 0x88
 )
 
 func selectMethod(methods ...uint8) uint8 {
 	for _, method := range methods {
-		if method == MethodAES256 {
+		if _, ok := Methods[method]; ok {
 			return method
 		}
 	}
 	return gosocks5.MethodNoAuth
 }
 
-func srvHandle(conn net.Conn, method uint8) {
-	defer conn.Close()
-
-	if method == gosocks5.MethodNoAcceptable {
-		return
-	}
-
-	if method == MethodAES256 {
-		cipher, _ := shadowsocks.NewCipher(Cipher, Password)
+func methodSelected(method uint8, conn net.Conn) (net.Conn, error) {
+	switch method {
+	case MethodTLS:
+		cert, err := tls.LoadX509KeyPair(CertFile, KeyFile)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{cert}})
+	case MethodAES128, MethodAES192, MethodAES256,
+		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
+		cipher, err := shadowsocks.NewCipher(Methods[method], Password)
+		if err != nil {
+			return nil, err
+		}
 		conn = shadowsocks.NewConn(conn, cipher)
+	case gosocks5.MethodNoAcceptable:
+		return nil, gosocks5.ErrBadMethod
 	}
 
+	return conn, nil
+}
+
+func srvHandle(conn net.Conn) {
 	req, err := gosocks5.ReadRequest(conn)
 	if err != nil {
-		log.Println(err)
+		//log.Println(err)
 		return
 	}
 
@@ -96,7 +105,7 @@ func srvHandle(conn net.Conn, method uint8) {
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
 			log.Println(err)
-			gosocks5.NewReply(Failure, nil).Write(conn)
+			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 			return
 		}
 		defer uconn.Close()
@@ -104,7 +113,7 @@ func srvHandle(conn net.Conn, method uint8) {
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
 		//log.Println("udp:", addr)
-		rep := gosocks5.NewReply(Succeeded, addr)
+		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			log.Println(err)
 			return
