@@ -4,10 +4,11 @@ gost - GO Simple Tunnel
 ###GO语言实现的安全隧道
 
 ####特性
-1. 支持标准socks5协议(rfc1928)。
-2. 多种加密方式(tls, 以及aes-256-cfb, des-cfb， rc4-md5等shadowsocks兼容的加密方式)。
-3. 客户端兼容shadowsocks协议。
-4. 支持设置上层http代理
+1. 客户端可同时用作http(s), socks5代理。
+2. 服务器端使用标准的socks5协议，可直接作为socks5代理。
+3. 多种加密方式(tls, aes-256-cfb, des-cfb， rc4-md5等)。
+4. 客户端兼容shadowsocks协议，可作为shadowsocks服务器。
+5. 支持设置上层http代理。
 
 ####参数说明
 >  -L=":8080": listen address
@@ -20,15 +21,15 @@ gost - GO Simple Tunnel
 
 >  -key="key.pem": key.pem file for tls
 
->  -m="tls": cipher method
+>  -m="tls": tunnel cipher method
 
->  -p="ginuerzh@gmail.com": cipher password
+>  -p="ginuerzh@gmail.com": tunnel cipher password
 
 >  -sm="rc4-md5": shadowsocks cipher method
 
 >  -sp="ginuerzh@gmail.com": shadowsocks cipher password
 
->  -ss=false: shadowsocks compatible
+>  -ss=false: run as shadowsocks server
 
 
 ####使用方法

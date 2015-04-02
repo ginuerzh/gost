@@ -122,7 +122,7 @@ func cliHandle(conn net.Conn) {
 
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
-		log.Println(err)
+		//log.Println(err)
 		return
 	}
 
@@ -297,7 +297,7 @@ func handleHttp(req *http.Request, conn net.Conn, sconn net.Conn) {
 	}
 
 	if err := Transport(conn, sconn); err != nil {
-		log.Println(err)
+		//log.Println(err)
 	}
 }
 
@@ -327,7 +327,7 @@ func handleShadow(conn, sconn net.Conn) {
 	}
 
 	if err := Transport(conn, sconn); err != nil {
-		log.Println(err)
+		//log.Println(err)
 	}
 }
 
