@@ -30,9 +30,9 @@ gost - GO Simple Tunnel
 
 >  -S="": the server that connecting to
 
->  -cert="cert.pem": cert.pem file for tls
+>  -cert="": cert.pem file for tls
 
->  -key="key.pem": key.pem file for tls
+>  -key="": key.pem file for tls
 
 >  -m="tls": tunnel cipher method
 
