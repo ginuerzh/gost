@@ -20,16 +20,20 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 }
 
 func (conn *WSConn) Read(b []byte) (n int, err error) {
-    _, b, err = conn.ReadMessage()
-    n = len(b)
-    
-    return
+    _, r, err := conn.NextReader()
+    if err != nil {
+        return
+    }
+    return r.Read(b)
 }
 
 func (conn *WSConn) Write(b []byte) (n int, err error) {
-    n = len(b)
-    err = conn.WriteMessage(websocket.BinaryMessage, b)
-    return
+    w, err := conn.NextWriter(websocket.BinaryMessage)
+	if err != nil {
+		return
+	}
+	defer w.Close()
+	return w.Write(b)
 }
 
 func (conn *WSConn) SetDeadline(t time.Time) error {
@@ -58,9 +62,12 @@ func (s *WSServer) handle(w http.ResponseWriter, r *http.Request) {
     }
     defer conn.Close()
     
-    c := NewWSConn(conn)
-    
-    socks5Handle(gosocks5.ServerConn(c, serverConfig))
+    c := gosocks5.ServerConn(NewWSConn(conn), serverConfig)
+    if err := c.Handleshake(); err != nil {
+        log.Println(err)
+        return
+    }
+    socks5Handle(c)
 }
 
 func (s *WSServer) ListenAndServe() error {
