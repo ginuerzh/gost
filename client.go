@@ -7,9 +7,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/ginuerzh/gosocks5"
+	"github.com/gorilla/websocket"
 	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"log"
 	"net"
 	"net/http"
@@ -18,7 +20,12 @@ import (
 	//"sync/atomic"
 )
 
-var sessionCount int64
+var (
+	sessionCount int64
+	clientConfig = &gosocks5.Config{
+		MethodSelected: clientMethodSelected,
+	}
+)
 
 func listenAndServe(addr string, handler func(net.Conn)) error {
 	laddr, err := net.ResolveTCPAddr("tcp", addr)
@@ -32,6 +39,12 @@ func listenAndServe(addr string, handler func(net.Conn)) error {
 	}
 	defer ln.Close()
 
+	for m, v := range Methods {
+		if Method == v {
+			clientConfig.Methods = []uint8{m}
+		}
+	}
+
 	for {
 		conn, err := ln.AcceptTCP()
 		if err != nil {
@@ -43,33 +56,21 @@ func listenAndServe(addr string, handler func(net.Conn)) error {
 	}
 }
 
-func handshake(conn net.Conn, methods ...uint8) (method uint8, err error) {
-	nm := len(methods)
-	if nm == 0 {
-		nm = 1
+func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
+	switch method {
+	case MethodTLS:
+		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	case MethodAES128, MethodAES192, MethodAES256,
+		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
+		cipher, _ := shadowsocks.NewCipher(Methods[method], Password)
+		conn = shadowsocks.NewConn(conn, cipher)
+	case gosocks5.MethodNoAcceptable:
+		fallthrough
+	default:
+		return nil, gosocks5.ErrBadMethod
 	}
-	b := spool.Take()
-	defer spool.put(b)
-
-	b = b[:2+nm]
-	b[0] = gosocks5.Ver5
-	b[1] = uint8(nm)
-	copy(b[2:], methods)
-
-	if _, err = conn.Write(b); err != nil {
-		return
-	}
-
-	if _, err = io.ReadFull(conn, b[:2]); err != nil {
-		return
-	}
-
-	if b[0] != gosocks5.Ver5 {
-		err = gosocks5.ErrBadVersion
-	}
-	method = b[1]
-
-	return
+	
+	return conn, nil
 }
 
 func cliHandle(conn net.Conn) {
@@ -80,40 +81,59 @@ func cliHandle(conn net.Conn) {
 			fmt.Println("session end", atomic.AddInt64(&sessionCount, -1))
 		}()
 	*/
-
-	sconn, err := Connect(Saddr, Proxy)
-	if err != nil {
-		return
-	}
-	defer sconn.Close()
-
-	method := gosocks5.MethodNoAuth
-	for m, v := range Methods {
-		if Method == v {
-			method = m
+	addr := Saddr
+	if strings.HasPrefix(addr, "http://") {
+		u, err := url.Parse(addr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		addr = u.Host
+		if !strings.Contains(addr, ":") {
+			addr += ":80"
 		}
 	}
-
-	method, err = handshake(sconn, method)
+	if strings.HasPrefix(addr, "https://") {
+		u, err := url.Parse(addr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		addr = u.Host
+		if !strings.Contains(addr, ":") {
+			addr += ":443"
+		}
+	}
+	log.Println("connect:", addr)
+	c, err := Connect(addr, Proxy)
 	if err != nil {
+		log.Println(err)
 		return
 	}
-
-	switch method {
-	case MethodTLS:
-		sconn = tls.Client(sconn, &tls.Config{InsecureSkipVerify: true})
-	case MethodAES128, MethodAES192, MethodAES256,
-		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
-		cipher, _ := shadowsocks.NewCipher(Methods[method], Password)
-		sconn = shadowsocks.NewConn(sconn, cipher)
-	case gosocks5.MethodNoAcceptable:
-		return
+	defer c.Close()
+	
+	if Websocket {
+		u, err := url.Parse(addr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		ws, resp, err := websocket.NewClient(c, u, nil, 8192, 8192)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		resp.Body.Close()
+		
+		c = NewWSConn(ws)
 	}
+	
+	c = gosocks5.ClientConn(c, clientConfig)
 
 	if Shadows {
 		cipher, _ := shadowsocks.NewCipher(SMethod, SPassword)
 		conn = shadowsocks.NewConn(conn, cipher)
-		handleShadow(conn, sconn)
+		handleShadow(conn, c)
 		return
 	}
 
@@ -138,7 +158,7 @@ func cliHandle(conn net.Conn) {
 			return
 		}
 
-		handleSocks5(conn, sconn)
+		handleSocks5(conn, c)
 		return
 	}
 
@@ -158,7 +178,7 @@ func cliHandle(conn net.Conn) {
 	if err != nil {
 		return
 	}
-	handleHttp(req, conn, sconn)
+	handleHttp(req, conn, c)
 }
 
 func handleSocks5(conn net.Conn, sconn net.Conn) {

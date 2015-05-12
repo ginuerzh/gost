@@ -3,13 +3,14 @@ package main
 
 import (
 	"flag"
-	"github.com/ginuerzh/gosocks5"
+	//"github.com/ginuerzh/gosocks5"
 	"log"
 	"time"
 )
 
 var (
 	Laddr, Saddr, Proxy string
+	Websocket           bool
 	Shadows             bool
 	SMethod, SPassword  string
 	Method, Password    string
@@ -25,6 +26,7 @@ func init() {
 	flag.StringVar(&CertFile, "cert", "", "cert file for tls")
 	flag.StringVar(&KeyFile, "key", "", "key file for tls")
 	flag.BoolVar(&Shadows, "ss", false, "run as shadowsocks server")
+	flag.BoolVar(&Websocket, "ws", false, "use websocket for tunnel")
 	flag.StringVar(&SMethod, "sm", "rc4-md5", "shadowsocks cipher method")
 	flag.StringVar(&SPassword, "sp", "ginuerzh@gmail.com", "shadowsocks cipher password")
 	flag.Parse()
@@ -41,13 +43,13 @@ var (
 func main() {
 	//log.Fatal(gost.Run())
 	if len(Saddr) == 0 {
-		srv := &gosocks5.Server{
-			Addr:           Laddr,
-			SelectMethod:   selectMethod,
-			MethodSelected: methodSelected,
-			Handle:         srvHandle,
+		var server Server
+		if Websocket {
+			server = &WSServer{Addr: Laddr}
+		} else {
+			server = &Socks5Server{Addr: Laddr}
 		}
-		log.Fatal(srv.ListenAndServe())
+		log.Fatal(server.ListenAndServe())
 		return
 	}
 
