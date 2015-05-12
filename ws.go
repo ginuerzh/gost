@@ -24,7 +24,9 @@ func (conn *WSConn) Read(b []byte) (n int, err error) {
 	if err != nil {
 		return
 	}
-	return r.Read(b)
+	n, err = r.Read(b)
+	log.Println("ws r:", n)
+	return
 }
 
 func (conn *WSConn) Write(b []byte) (n int, err error) {
@@ -33,7 +35,10 @@ func (conn *WSConn) Write(b []byte) (n int, err error) {
 		return
 	}
 	defer w.Close()
-	return w.Write(b)
+
+	n, err = w.Write(b)
+	log.Println("ws w:", n)
+	return
 }
 
 func (conn *WSConn) SetDeadline(t time.Time) error {
@@ -62,6 +67,12 @@ func (s *WSServer) handle(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	c := gosocks5.ServerConn(NewWSConn(conn), serverConfig)
+	/*
+		if err := c.Handleshake(); err != nil {
+			log.Println(err)
+			return
+		}
+	*/
 	socks5Handle(c)
 }
 
