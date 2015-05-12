@@ -20,23 +20,16 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 }
 
 func (conn *WSConn) Read(b []byte) (n int, err error) {
-	_, r, err := conn.NextReader()
-	if err != nil {
-		return
-	}
-	n, err = r.Read(b)
+	_, p, err := conn.ReadMessage()
+	copy(b, p)
+	n = len(p)
 	log.Println("ws r:", n)
 	return
 }
 
 func (conn *WSConn) Write(b []byte) (n int, err error) {
-	w, err := conn.NextWriter(websocket.BinaryMessage)
-	if err != nil {
-		return
-	}
-	defer w.Close()
-
-	n, err = w.Write(b)
+	err = conn.WriteMessage(websocket.BinaryMessage, b)
+	n = len(b)
 	log.Println("ws w:", n)
 	return
 }
