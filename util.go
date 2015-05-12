@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -51,6 +52,9 @@ func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 }
 
 func Connect(addr, proxy string) (net.Conn, error) {
+	if !strings.Contains(addr, ":") {
+		addr += ":80"
+	}
 	if len(proxy) == 0 {
 		taddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {

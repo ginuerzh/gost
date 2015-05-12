@@ -11,10 +11,10 @@ import (
 	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
 	"io/ioutil"
-	"net/url"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	//"sync/atomic"
@@ -65,11 +65,9 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 		cipher, _ := shadowsocks.NewCipher(Methods[method], Password)
 		conn = shadowsocks.NewConn(conn, cipher)
 	case gosocks5.MethodNoAcceptable:
-		fallthrough
-	default:
 		return nil, gosocks5.ErrBadMethod
 	}
-	
+
 	return conn, nil
 }
 
@@ -81,54 +79,35 @@ func cliHandle(conn net.Conn) {
 			fmt.Println("session end", atomic.AddInt64(&sessionCount, -1))
 		}()
 	*/
-	addr := Saddr
-	if strings.HasPrefix(addr, "http://") {
-		u, err := url.Parse(addr)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		addr = u.Host
-		if !strings.Contains(addr, ":") {
-			addr += ":80"
-		}
-	}
-	if strings.HasPrefix(addr, "https://") {
-		u, err := url.Parse(addr)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		addr = u.Host
-		if !strings.Contains(addr, ":") {
-			addr += ":443"
-		}
-	}
-	log.Println("connect:", addr)
-	c, err := Connect(addr, Proxy)
+
+	//log.Println("connect:", Saddr)
+	c, err := Connect(Saddr, Proxy)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer c.Close()
-	
+
 	if Websocket {
-		u, err := url.Parse(addr)
-		if err != nil {
-			log.Println(err)
-			return
+		url := &url.URL{
+			Host: Saddr,
 		}
-		ws, resp, err := websocket.NewClient(c, u, nil, 8192, 8192)
+		ws, resp, err := websocket.NewClient(c, url, nil, 8192, 8192)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 		resp.Body.Close()
-		
+
 		c = NewWSConn(ws)
 	}
-	
-	c = gosocks5.ClientConn(c, clientConfig)
+
+	sc := gosocks5.ClientConn(c, clientConfig)
+	if err := sc.Handleshake(); err != nil {
+		log.Println(err)
+		return
+	}
+	c = sc
 
 	if Shadows {
 		cipher, _ := shadowsocks.NewCipher(SMethod, SPassword)
@@ -186,7 +165,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 	if err != nil {
 		return
 	}
-	//log.Println(req)
+	log.Println(req)
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect, gosocks5.CmdBind:
