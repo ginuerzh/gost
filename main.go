@@ -21,7 +21,7 @@ func init() {
 	flag.StringVar(&Proxy, "P", "", "proxy for forward")
 	flag.StringVar(&Saddr, "S", "", "the server that connecting to")
 	flag.StringVar(&Laddr, "L", ":8080", "listen address")
-	flag.StringVar(&Method, "m", "tls", "tunnel cipher method")
+	flag.StringVar(&Method, "m", "", "tunnel cipher method")
 	flag.StringVar(&Password, "p", "ginuerzh@gmail.com", "tunnel cipher password")
 	flag.StringVar(&CertFile, "cert", "", "cert file for tls")
 	flag.StringVar(&KeyFile, "key", "", "key file for tls")

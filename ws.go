@@ -23,14 +23,14 @@ func (conn *WSConn) Read(b []byte) (n int, err error) {
 	_, p, err := conn.ReadMessage()
 	copy(b, p)
 	n = len(p)
-	log.Println("ws r:", n)
+	//log.Println("ws r:", n)
 	return
 }
 
 func (conn *WSConn) Write(b []byte) (n int, err error) {
 	err = conn.WriteMessage(websocket.BinaryMessage, b)
 	n = len(b)
-	log.Println("ws w:", n)
+	//log.Println("ws w:", n)
 	return
 }
 

@@ -60,7 +60,7 @@ nh/BAoGBAMY5z2f1pmMhrvtPDSlEVjgjELbaInxFaxPLR4Pdyzn83gtIIU14+R8X
 
 var (
 	serverConfig = &gosocks5.Config{
-		SelectMethod: serverSelectMethod,
+		SelectMethod:   serverSelectMethod,
 		MethodSelected: serverMethodSelected,
 	}
 )
@@ -68,7 +68,6 @@ var (
 type Socks5Server struct {
 	Addr string // TCP address to listen on
 }
-
 
 func (s *Socks5Server) ListenAndServe() error {
 	addr, err := net.ResolveTCPAddr("tcp", s.Addr)
@@ -89,11 +88,10 @@ func (s *Socks5Server) ListenAndServe() error {
 			continue
 		}
 		//log.Println("accept", conn.RemoteAddr())
-		
+
 		go socks5Handle(gosocks5.ServerConn(conn, serverConfig))
 	}
 }
-
 
 func serverSelectMethod(methods ...uint8) uint8 {
 	for _, method := range methods {
@@ -109,13 +107,13 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	case MethodTLS:
 		var cert tls.Certificate
 		var err error
-		
+
 		if len(CertFile) == 0 || len(KeyFile) == 0 {
 			cert, err = tls.X509KeyPair([]byte(rawCert), []byte(rawKey))
 		} else {
 			cert, err = tls.LoadX509KeyPair(CertFile, KeyFile)
 		}
-		
+
 		if err != nil {
 			log.Println(err)
 			return nil, err
@@ -137,7 +135,7 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 
 func socks5Handle(conn net.Conn) {
 	defer conn.Close()
-	
+
 	req, err := gosocks5.ReadRequest(conn)
 	if err != nil {
 		log.Println(err)
@@ -160,7 +158,7 @@ func socks5Handle(conn net.Conn) {
 		}
 
 		if err := Transport(conn, tconn); err != nil {
-			log.Println(err)
+			//log.Println(err)
 		}
 	case gosocks5.CmdBind:
 		l, err := net.ListenTCP("tcp", nil)
@@ -171,7 +169,7 @@ func socks5Handle(conn net.Conn) {
 
 		addr := ToSocksAddr(l.Addr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		//log.Println("bind:", addr)
+		log.Println("bind:", addr)
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			return
@@ -195,7 +193,7 @@ func socks5Handle(conn net.Conn) {
 		}
 
 		if err := Transport(conn, tconn); err != nil {
-			log.Println(err)
+			//log.Println(err)
 		}
 	case gosocks5.CmdUdp:
 		uconn, err := net.ListenUDP("udp", nil)
@@ -208,7 +206,7 @@ func socks5Handle(conn net.Conn) {
 
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		//log.Println("udp:", addr)
+		log.Println("udp:", addr)
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			log.Println(err)

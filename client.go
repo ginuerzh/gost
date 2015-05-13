@@ -192,7 +192,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		//log.Println("udp:", addr)
+		log.Println("udp:", addr)
 
 		rep = gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
