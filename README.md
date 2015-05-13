@@ -22,6 +22,7 @@ gost - GO Simple Tunnel
 4. Tunnel UDP over TCP, UDP数据包使用TCP通道传输，以解决防火墙的限制。
 5. 多种加密方式(tls,aes-256-cfb,des-cfb,rc4-md5等)。
 6. 客户端兼容shadowsocks协议，可作为shadowsocks服务器。
+7. v1.1支持websocket。
 
 ####参数说明
 >  -L=":8080": listen address
@@ -34,7 +35,7 @@ gost - GO Simple Tunnel
 
 >  -key="": key.pem file for tls
 
->  -m="tls": tunnel cipher method
+>  -m="": tunnel cipher method
 
 >  -p="ginuerzh@gmail.com": tunnel cipher password
 
@@ -43,6 +44,8 @@ gost - GO Simple Tunnel
 >  -sp="ginuerzh@gmail.com": shadowsocks cipher password
 
 >  -ss=false: run as shadowsocks server
+
+>  -ws=false: use websocket for tunnel
 
 
 ####使用方法
