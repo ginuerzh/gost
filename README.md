@@ -3,18 +3,6 @@ gost - GO Simple Tunnel
 
 ###GO语言实现的安全隧道
 
-####目的
-目前这种软件已经很多了，像shadowsocks, goagent等等都很成熟了，那为什么我要再发明一个轮子？
-一般公司的上网都是通过公司代理服务器，而且大部分都会有或多或少的限制，比如只能访问特定的端口(80, 443, 8080),
-只允许http协议等。
-我一开始在网上找了好多类似功能的软件，但都有一个问题：无法设置上层代理，这样就无法通过公司网络。
-最后找了半天也没找到，于是就自己写了一个，主要是在公司使用。
-
-增加shadowsocks服务器模式，是方便我的手机使用，这样我的手机就可以使用shadowsocks客户端连接到本地的shadowsocks服务器，几乎所有软件都可以使用了。
-
-#####注：前提条件是要有一台可访问的具有公网IP的主机。
-
-
 ####特性
 1. 支持设置上层http代理。
 2. 客户端可用作http(s), socks5代理。
@@ -23,6 +11,8 @@ gost - GO Simple Tunnel
 5. 多种加密方式(tls,aes-256-cfb,des-cfb,rc4-md5等)。
 6. 客户端兼容shadowsocks协议，可作为shadowsocks服务器。
 7. v1.1支持websocket。
+
+二进制文件下载：https://bintray.com/ginuerzh/gost/gost
 
 ####参数说明
 >  -L=":8080": listen address
