@@ -18,6 +18,8 @@ var (
 )
 
 func init() {
+	printVersion()
+
 	flag.StringVar(&Proxy, "P", "", "proxy for forward")
 	flag.StringVar(&Saddr, "S", "", "the server that connecting to")
 	flag.StringVar(&Laddr, "L", ":8080", "listen address")
