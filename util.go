@@ -28,16 +28,17 @@ const (
 )
 
 var Methods = map[uint8]string{
-	MethodTLS:    "tls",         // 0x80
-	MethodAES128: "aes-128-cfb", // 0x81
-	MethodAES192: "aes-192-cfb", // 0x82
-	MethodAES256: "aes-256-cfb", // 0x83
-	MethodDES:    "des-cfb",     // 0x84
-	MethodBF:     "bf-cfb",      // 0x85
-	MethodCAST5:  "cast5-cfb",   // 0x86
-	MethodRC4MD5: "rc4-md5",     // 8x87
-	MethodRC4:    "rc4",         // 0x88
-	MethodTable:  "table",       // 0x89
+	gosocks5.MethodNoAuth: "",            // 0x00
+	MethodTLS:             "tls",         // 0x80
+	MethodAES128:          "aes-128-cfb", // 0x81
+	MethodAES192:          "aes-192-cfb", // 0x82
+	MethodAES256:          "aes-256-cfb", // 0x83
+	MethodDES:             "des-cfb",     // 0x84
+	MethodBF:              "bf-cfb",      // 0x85
+	MethodCAST5:           "cast5-cfb",   // 0x86
+	MethodRC4MD5:          "rc4-md5",     // 8x87
+	MethodRC4:             "rc4",         // 0x88
+	MethodTable:           "table",       // 0x89
 }
 
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {

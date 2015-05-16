@@ -94,12 +94,19 @@ func (s *Socks5Server) ListenAndServe() error {
 }
 
 func serverSelectMethod(methods ...uint8) uint8 {
+	m := gosocks5.MethodNoAuth
+
 	for _, method := range methods {
 		if _, ok := Methods[method]; ok {
-			return method
+			m = method
 		}
 	}
-	return gosocks5.MethodNoAuth
+
+	if len(Method) == 0 || Methods[m] == Method {
+		return m
+	}
+
+	return gosocks5.MethodNoAcceptable
 }
 
 func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
@@ -115,7 +122,6 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 		}
 
 		if err != nil {
-			log.Println(err)
 			return nil, err
 		}
 		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{cert}})
@@ -144,7 +150,7 @@ func socks5Handle(conn net.Conn) {
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
-		log.Println("connect", req.Addr.String())
+		//log.Println("connect", req.Addr.String())
 		tconn, err := Connect(req.Addr.String(), Proxy)
 		if err != nil {
 			gosocks5.NewReply(gosocks5.HostUnreachable, nil).Write(conn)

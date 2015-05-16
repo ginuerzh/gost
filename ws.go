@@ -10,20 +10,26 @@ import (
 
 type WSConn struct {
 	*websocket.Conn
+	rb []byte
 }
 
 func NewWSConn(conn *websocket.Conn) *WSConn {
-	c := &WSConn{}
-	c.Conn = conn
+	c := &WSConn{
+		Conn: conn,
+	}
 
 	return c
 }
 
 func (conn *WSConn) Read(b []byte) (n int, err error) {
-	_, p, err := conn.ReadMessage()
-	copy(b, p)
-	n = len(p)
+	if len(conn.rb) == 0 {
+		_, conn.rb, err = conn.ReadMessage()
+	}
+	n = copy(b, conn.rb)
+	conn.rb = conn.rb[n:]
+
 	//log.Println("ws r:", n)
+
 	return
 }
 
@@ -31,6 +37,7 @@ func (conn *WSConn) Write(b []byte) (n int, err error) {
 	err = conn.WriteMessage(websocket.BinaryMessage, b)
 	n = len(b)
 	//log.Println("ws w:", n)
+
 	return
 }
 

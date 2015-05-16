@@ -62,7 +62,11 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 	case MethodAES128, MethodAES192, MethodAES256,
 		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
-		cipher, _ := shadowsocks.NewCipher(Methods[method], Password)
+		cipher, err := shadowsocks.NewCipher(Methods[method], Password)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
 		conn = shadowsocks.NewConn(conn, cipher)
 	case gosocks5.MethodNoAcceptable:
 		return nil, gosocks5.ErrBadMethod
@@ -104,7 +108,6 @@ func cliHandle(conn net.Conn) {
 
 	sc := gosocks5.ClientConn(c, clientConfig)
 	if err := sc.Handleshake(); err != nil {
-		log.Println(err)
 		return
 	}
 	c = sc
@@ -121,7 +124,6 @@ func cliHandle(conn net.Conn) {
 
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
-		//log.Println(err)
 		return
 	}
 
@@ -148,6 +150,7 @@ func cliHandle(conn net.Conn) {
 
 		nn, err := conn.Read(b[n:])
 		if err != nil {
+			log.Println(err)
 			return
 		}
 		n += nn
@@ -155,6 +158,7 @@ func cliHandle(conn net.Conn) {
 
 	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
 	if err != nil {
+		log.Println(err)
 		return
 	}
 	handleHttp(req, conn, c)
@@ -165,7 +169,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 	if err != nil {
 		return
 	}
-	log.Println(req)
+	//log.Println(req)
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect, gosocks5.CmdBind:
@@ -202,6 +206,7 @@ func handleSocks5(conn net.Conn, sconn net.Conn) {
 
 		go cliTunnelUDP(uconn, sconn)
 
+		// block, waiting for client exit
 		ioutil.ReadAll(conn)
 	}
 }
