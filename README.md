@@ -15,11 +15,12 @@ gost - GO Simple Tunnel
 #####v1.1 
 *	支持websocket tunnel。
 
+二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.1/view
+
 #####v1.2 
 *	websocket tunnel增加加密功能。
 
-
-二进制文件下载：https://bintray.com/ginuerzh/gost/gost
+二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.2/view
 
 ####参数说明
 >  -L=":8080": listen address
