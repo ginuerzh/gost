@@ -48,19 +48,43 @@ gost - GO Simple Tunnel
 
 ####使用方法
 #####服务器端:
-`$ gost -L=:443`
+`gost -L=:8080`
 
 #####服务器端有上层http代理:
-`$ gost -L=:443 -P=proxy_ip:port`
+`gost -L=:8080 -P=proxy_ip:port`
 
 #####客户端(默认使用tls加密方法):
-`$ gost -L=:8080 -S=your_server_ip:443`
+`gost -L=:8899 -S=your_server_ip:8080`
 
 #####客户端有上层http代理:
-`$ gost -L=:8080 -S=your_server_ip:443 -P=proxy_ip:port`
+`gost -L=:8899 -S=your_server_ip:8080 -P=proxy_ip:port`
 
-#####作为shadowsocks服务器(默认使用rc4-md5加密，密码:ginuerzh@gmail.com):
-`$ gost -L=:8080 -S=your_server_ip:443 -ss`
+#####使用websocket tunnel
+* 服务器端
+`gost -L=:8080 -ws`
+* 客户端
+`gost -L=:8899 -S=your_server_ip:8080 -ws`
+
+#####作为shadowsocks服务器:
+gost支持作为shadowsocks服务器运行(-ss参数)，这样就可以让android手机通过shadowsocks客户端(影梭)使用代理了。
+
+######相关参数：
+>	-ss 	开启shadowsocks模式
+>	-sm 	设置shadowsocks加密方式(默认为rc4-md5)
+>	-sp    	设置shadowsocks加密密码(默认为ginuerzh@gmail.com)
+
+当无-ss参数时，-sm, -sp参数无效。以上三个参数对服务端无效。
+
+######相关命令：
+* 服务端：
+无需特殊设置，shadowsocks模式只与客户端有关，与服务端无关。
+
+* 客户端：
+`gost -L :8899 -S demo-project-gostwebsocket.c9.io -ws -sm=rc4-md5 -sp=ginuerzh@gmail.com -ss`
+
+在手机的shadowsocks软件中设置好服务器(运行gost电脑的IP)，端口(8899)，加密方法和密码就可以使用了。
+
+注：shadowsocks模式与正常模式是不兼容的，当作为shadowsocks模式使用时(有-ss参数)，浏览器不能使用。
 
 
 ####tunnel加密说明
