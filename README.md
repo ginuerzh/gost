@@ -22,12 +22,20 @@ gost - GO Simple Tunnel
 
 二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.2/view
 
+
+#####v1.3
+*	tls加密方式增加密码认证功能
+*	增加版本查看(-v参数)
+*	-p参数的默认值修改为空
+
+二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.3/view
+
 ####参数说明
 >  -L=":8080": listen address
 
 >  -P="": proxy for forward
 
->  -S="": the server that connecting to
+>  -S="": the server that connect to
 
 >  -cert="": cert file for tls
 
@@ -35,7 +43,7 @@ gost - GO Simple Tunnel
 
 >  -m="": tunnel cipher method
 
->  -p="ginuerzh@gmail.com": tunnel cipher password
+>  -p="": tunnel cipher password
 
 >  -sm="rc4-md5": shadowsocks cipher method
 
@@ -45,25 +53,33 @@ gost - GO Simple Tunnel
 
 >  -ws=false: use websocket for tunnel
 
+>  -v=false: print version
+
 
 ####使用方法
 #####服务器端:
 `gost -L=:8080`
 
-#####服务器端有上层http代理:
-`gost -L=:8080 -P=proxy_ip:port`
+#####服务器端设置加密:
+`gost -L=:8080 -m=aes-256-cfb -p=123456`
 
-#####客户端(默认使用tls加密方法):
+#####服务器端有上层http代理:
+`gost -L=:8080 -m=aes-256-cfb -p=123456 -P=proxy_ip:port`
+
+#####客户端:
 `gost -L=:8899 -S=your_server_ip:8080`
 
+#####客户端设置加密:
+`gost -L=:8899 -S=your_server_ip:8080 -m=aes-256-cfb -p=123456`
+
 #####客户端有上层http代理:
-`gost -L=:8899 -S=your_server_ip:8080 -P=proxy_ip:port`
+`gost -L=:8899 -S=your_server_ip:8080 -m=aes-256-cfb -p=123456 -P=proxy_ip:port`
 
 #####使用websocket tunnel
 * 服务器端
-`gost -L=:8080 -ws`
+`gost -L=:8080 -m=aes-256-cfb -p=123456 -ws`
 * 客户端
-`gost -L=:8899 -S=your_server_ip:8080 -ws`
+`gost -L=:8899 -S=your_server_ip:8080 -m=aes-256-cfb -p=123456 -ws`
 
 #####作为shadowsocks服务器:
 gost支持作为shadowsocks服务器运行(-ss参数)，这样就可以让android手机通过shadowsocks客户端(影梭)使用代理了。
@@ -80,7 +96,7 @@ gost支持作为shadowsocks服务器运行(-ss参数)，这样就可以让androi
 无需特殊设置，shadowsocks模式只与客户端有关，与服务端无关。
 
 * 客户端：
-`gost -L :8899 -S demo-project-gostwebsocket.c9.io -ws -sm=rc4-md5 -sp=ginuerzh@gmail.com -ss`
+`gost -L :8899 -S demo-project-gostwebsocket.c9.io -sm=rc4-md5 -sp=ginuerzh@gmail.com -ss`
 
 在手机的shadowsocks软件中设置好服务器(运行gost电脑的IP)，端口(8899)，加密方法和密码就可以使用了。
 
@@ -97,9 +113,9 @@ Client端通过-m参数设置加密方式，默认为不加密(-m参数为空)�
 
 如果设置的加密方式不被支持，则默认为不加密。
 
-当设置的加密方式为tls时，-p参数无效。
+当设置的加密方式为tls时，可通过-p参数设置验证密码(若服务端支持密码验证功能)。
 
-当设置的加密方式为非tls时，通过-p参数设置加密密码，且不能为空，默认密码为ginuerzh@gmail.com；-p参数必须与Server端的-p参数相同。
+当设置的加密方式为非tls时，通过-p参数设置加密密码，且不能为空；-p参数必须与Server端的-p参数相同。
 
 #####Server
 
@@ -111,6 +127,7 @@ Server端通过-m参数设置加密方式，默认为不加密(-m参数为空)�
 
 如果设置了加密方式(-m参数不为空)，client端必须使用与Server端相同的加密方式。
 
-当设置的加密方式为tls时，-p参数无效；-key参数可手动指定公钥文件，-cert参数可手动指定私钥文件，如果未指定，则使用默认的公钥与私钥。
+当设置的加密方式为tls时，-key参数可手动指定公钥文件，-cert参数可手动指定私钥文件，如果未指定，则使用默认的公钥与私钥。
+可通过-p参数设定验证密码(可选),若设置，则客户端必须通过-p参数设置相同的密码。
 
-当设置的加密方式为非tls时，-key，-cert参数无效；通过-p参数设置加密密码，且不能为空，默认密码为ginuerzh@gmail.com。
+当设置的加密方式为非tls时，-key，-cert参数无效；通过-p参数设置加密密码，且不能为空。

@@ -15,22 +15,22 @@ var (
 	SMethod, SPassword  string
 	Method, Password    string
 	CertFile, KeyFile   string
+	PrintVersion        bool
 )
 
 func init() {
-	printVersion()
-
 	flag.StringVar(&Proxy, "P", "", "proxy for forward")
-	flag.StringVar(&Saddr, "S", "", "the server that connecting to")
+	flag.StringVar(&Saddr, "S", "", "the server that connect to")
 	flag.StringVar(&Laddr, "L", ":8080", "listen address")
 	flag.StringVar(&Method, "m", "", "tunnel cipher method")
-	flag.StringVar(&Password, "p", "ginuerzh@gmail.com", "tunnel cipher password")
+	flag.StringVar(&Password, "p", "", "tunnel cipher password")
 	flag.StringVar(&CertFile, "cert", "", "cert file for tls")
 	flag.StringVar(&KeyFile, "key", "", "key file for tls")
 	flag.BoolVar(&Shadows, "ss", false, "run as shadowsocks server")
 	flag.BoolVar(&Websocket, "ws", false, "use websocket for tunnel")
 	flag.StringVar(&SMethod, "sm", "rc4-md5", "shadowsocks cipher method")
 	flag.StringVar(&SPassword, "sp", "ginuerzh@gmail.com", "shadowsocks cipher password")
+	flag.BoolVar(&PrintVersion, "v", false, "print version")
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -43,7 +43,11 @@ var (
 )
 
 func main() {
-	//log.Fatal(gost.Run())
+	if PrintVersion {
+		printVersion()
+		return
+	}
+
 	if len(Saddr) == 0 {
 		var server Server
 		if Websocket {

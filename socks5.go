@@ -125,6 +125,9 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 			return nil, err
 		}
 		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{cert}})
+		if err := svrTLSAuth(conn); err != nil {
+			return nil, err
+		}
 	case MethodAES128, MethodAES192, MethodAES256,
 		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
 		cipher, err := shadowsocks.NewCipher(Methods[method], Password)
@@ -137,6 +140,28 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func svrTLSAuth(conn net.Conn) error {
+	req, err := gosocks5.ReadUserPassRequest(conn)
+	if err != nil {
+		return err
+	}
+
+	if len(Password) > 0 && req.Password != Password {
+		if err := gosocks5.NewUserPassResponse(
+			gosocks5.UserPassVer, gosocks5.Failure).Write(conn); err != nil {
+			return err
+		}
+		return gosocks5.ErrAuthFailure
+	}
+
+	if err := gosocks5.NewUserPassResponse(
+		gosocks5.UserPassVer, gosocks5.Succeeded).Write(conn); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func socks5Handle(conn net.Conn) {

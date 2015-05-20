@@ -60,6 +60,9 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	switch method {
 	case MethodTLS:
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+		if err := cliTLSAuth(conn); err != nil {
+			return nil, err
+		}
 	case MethodAES128, MethodAES192, MethodAES256,
 		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
 		cipher, err := shadowsocks.NewCipher(Methods[method], Password)
@@ -73,6 +76,22 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func cliTLSAuth(conn net.Conn) error {
+	if err := gosocks5.NewUserPassRequest(
+		gosocks5.UserPassVer, "", Password).Write(conn); err != nil {
+		return err
+	}
+	res, err := gosocks5.ReadUserPassResponse(conn)
+	if err != nil {
+		return err
+	}
+	if res.Status != gosocks5.Succeeded {
+		return gosocks5.ErrAuthFailure
+	}
+
+	return nil
 }
 
 func cliHandle(conn net.Conn) {
@@ -284,14 +303,14 @@ func handleHttp(req *http.Request, conn net.Conn, sconn net.Conn) {
 	rep, err := gosocks5.ReadReply(sconn)
 	if err != nil || rep.Rep != gosocks5.Succeeded {
 		conn.Write([]byte("HTTP/1.1 503 Service unavailable\r\n" +
-			"Proxy-Agent: gost/1.0\r\n\r\n"))
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n"))
 		return
 	}
 
 	if req.Method == "CONNECT" {
 		if _, err = conn.Write(
 			[]byte("HTTP/1.1 200 Connection established\r\n" +
-				"Proxy-Agent: gost/2.0\r\n\r\n")); err != nil {
+				"Proxy-Agent: gost/" + Version + "\r\n\r\n")); err != nil {
 			return
 		}
 	} else {
