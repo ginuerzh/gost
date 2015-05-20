@@ -11,24 +11,19 @@ gost - GO Simple Tunnel
 5. 多种加密方式(tls,aes-256-cfb,des-cfb,rc4-md5等)。
 6. 客户端兼容shadowsocks协议，可作为shadowsocks服务器。
 
-####版本更新
-#####v1.1 
-*	支持websocket tunnel。
+二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.3/view
 
-二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.1/view
+####版本更新
+#####v1.3
+*	tls加密方式增加密码认证功能(与旧版本不兼容)
+*	增加版本查看(-v参数)
+*	-p参数的默认值修改为空
 
 #####v1.2 
 *	websocket tunnel增加加密功能。
 
-二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.2/view
-
-
-#####v1.3
-*	tls加密方式增加密码认证功能
-*	增加版本查看(-v参数)
-*	-p参数的默认值修改为空
-
-二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.3/view
+#####v1.1 
+*	支持websocket tunnel。
 
 ####参数说明
 >  -L=":8080": listen address
@@ -86,17 +81,16 @@ gost支持作为shadowsocks服务器运行(-ss参数)，这样就可以让androi
 
 ######相关参数：
 >	-ss 	开启shadowsocks模式
+
 >	-sm 	设置shadowsocks加密方式(默认为rc4-md5)
+
 >	-sp    	设置shadowsocks加密密码(默认为ginuerzh@gmail.com)
 
 当无-ss参数时，-sm, -sp参数无效。以上三个参数对服务端无效。
 
 ######相关命令：
-* 服务端：
-无需特殊设置，shadowsocks模式只与客户端有关，与服务端无关。
-
-* 客户端：
-`gost -L :8899 -S demo-project-gostwebsocket.c9.io -sm=rc4-md5 -sp=ginuerzh@gmail.com -ss`
+* 服务端：无需特殊设置，shadowsocks模式只与客户端有关，与服务端无关。
+* 客户端：`gost -L :8899 -S demo-project-gostwebsocket.c9.io -sm=rc4-md5 -sp=ginuerzh@gmail.com -ss`
 
 在手机的shadowsocks软件中设置好服务器(运行gost电脑的IP)，端口(8899)，加密方法和密码就可以使用了。
 
