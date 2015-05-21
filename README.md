@@ -13,6 +13,8 @@ gost - GO Simple Tunnel
 
 二进制文件下载：https://bintray.com/ginuerzh/gost/gost/v1.3/view
 
+Google讨论组: https://groups.google.com/forum/#!forum/go-gost
+
 ####版本更新
 #####v1.3
 *	tls加密方式增加密码认证功能(与旧版本不兼容)
