@@ -52,17 +52,21 @@ func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 	}
 }
 
-func Connect(addr, proxy string) (net.Conn, error) {
+func Connect(addr string) (net.Conn, error) {
+	taddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return net.DialTCP("tcp", nil, taddr)
+}
+
+func ConnectProxy(addr, proxy string) (net.Conn, error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
 	if len(proxy) == 0 {
-		taddr, err := net.ResolveTCPAddr("tcp", addr)
-		if err != nil {
-			log.Println(err)
-			return nil, err
-		}
-		return net.DialTCP("tcp", nil, taddr)
+		return Connect(addr)
 	}
 
 	paddr, err := net.ResolveTCPAddr("tcp", proxy)

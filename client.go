@@ -103,8 +103,19 @@ func cliHandle(conn net.Conn) {
 		}()
 	*/
 
-	//log.Println("connect:", Saddr)
-	c, err := Connect(Saddr, Proxy)
+	//log.Println("connect:", Saddr, Proxy)
+	var c net.Conn
+	var err error
+
+	if !UseHttp {
+		c, err = ConnectProxy(Saddr, Proxy)
+	} else {
+		addr := Saddr
+		if len(Proxy) > 0 {
+			addr = Proxy
+		}
+		c, err = Connect(addr)
+	}
 	if err != nil {
 		log.Println(err)
 		return

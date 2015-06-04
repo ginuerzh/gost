@@ -31,18 +31,23 @@ func NewHttpClientConn(conn net.Conn) *HttpClientConn {
 	}
 }
 
-func (conn *HttpClientConn) Handshake() error {
+func (conn *HttpClientConn) Handshake() (err error) {
 	log.Println("remote", conn.c.RemoteAddr().String())
 	req := &http.Request{
 		Method: "Get",
-		Host:   conn.c.RemoteAddr().String(),
+		Host:   Saddr,
 		URL: &url.URL{
 			Host:   "ignored",
 			Scheme: "http",
 			Path:   s2cUri,
 		},
 	}
-	if err := req.Write(conn.c); err != nil {
+	if len(Proxy) == 0 {
+		err = req.Write(conn.c)
+	} else {
+		err = req.WriteProxy(conn.c)
+	}
+	if err != nil {
 		return err
 	}
 
@@ -55,26 +60,35 @@ func (conn *HttpClientConn) Handshake() error {
 	if _, err = io.ReadFull(resp.Body, b); err != nil {
 		return err
 	}
-	log.Println("token", string(b))
+
 	q := url.Values{}
 	q.Set("token", string(b))
 	conn.url = &url.URL{
 		Scheme:   "http",
-		Host:     conn.c.RemoteAddr().String(),
+		Host:     Saddr,
 		Path:     c2sUri,
 		RawQuery: q.Encode(),
 	}
 	conn.r = resp.Body
 
+	log.Println(conn.url.String())
+
 	return nil
 }
 
 func (conn *HttpClientConn) Read(b []byte) (n int, err error) {
-	return conn.r.Read(b)
+	n, err = conn.r.Read(b)
+	log.Println("http r:", n)
+	return
 }
 
 func (conn *HttpClientConn) Write(b []byte) (n int, err error) {
-	c, err := Connect(Saddr, Proxy)
+	var c net.Conn
+	if len(Proxy) == 0 {
+		c, err = Connect(Saddr)
+	} else {
+		c, err = Connect(Proxy)
+	}
 	if err != nil {
 		log.Println(err)
 		return
@@ -85,13 +99,16 @@ func (conn *HttpClientConn) Write(b []byte) (n int, err error) {
 		log.Println(err)
 		return
 	}
-
-	err = request.Write(c)
+	if len(Proxy) == 0 {
+		err = request.Write(c)
+	} else {
+		err = request.WriteProxy(c)
+	}
 	if err != nil {
 		log.Println(err)
 		return
 	}
-
+	log.Println("http w:", len(b))
 	return len(b), nil
 }
 
@@ -142,7 +159,7 @@ func (conn *HttpServerConn) Read(b []byte) (n int, err error) {
 	n = copy(b, conn.rb)
 	conn.rb = conn.rb[n:]
 
-	//log.Println("ws r:", n)
+	log.Println("http r:", n)
 
 	return
 }
@@ -152,6 +169,7 @@ func (conn *HttpServerConn) Write(b []byte) (n int, err error) {
 	if f, ok := conn.w.(http.Flusher); ok {
 		f.Flush()
 	}
+	log.Println("http w:", n)
 	return
 }
 
