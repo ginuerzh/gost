@@ -111,7 +111,7 @@ func cliHandle(conn net.Conn) {
 	}
 	defer c.Close()
 
-	if Websocket {
+	if UseWebsocket {
 		url := &url.URL{
 			Host: Saddr,
 		}
@@ -123,6 +123,14 @@ func cliHandle(conn net.Conn) {
 		resp.Body.Close()
 
 		c = NewWSConn(ws)
+	} else if UseHttp {
+		httpcli := NewHttpClientConn(c)
+		if err := httpcli.Handshake(); err != nil {
+			log.Println(err)
+			return
+		}
+		c = httpcli
+		defer httpcli.Close()
 	}
 
 	sc := gosocks5.ClientConn(c, clientConfig)
