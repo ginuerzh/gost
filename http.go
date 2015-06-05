@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"code.google.com/p/go-uuid/uuid"
+	"errors"
 	"github.com/ginuerzh/gosocks5"
 	"io"
 	"io/ioutil"
@@ -20,9 +21,9 @@ const (
 )
 
 type HttpClientConn struct {
-	c   net.Conn
-	url *url.URL
-	r   io.ReadCloser
+	c     net.Conn
+	token string
+	r     io.ReadCloser
 }
 
 func NewHttpClientConn(conn net.Conn) *HttpClientConn {
@@ -32,12 +33,11 @@ func NewHttpClientConn(conn net.Conn) *HttpClientConn {
 }
 
 func (conn *HttpClientConn) Handshake() (err error) {
-	log.Println("remote", conn.c.RemoteAddr().String())
+	//log.Println("remote", conn.c.RemoteAddr().String())
 	req := &http.Request{
-		Method: "Get",
-		Host:   Saddr,
+		Method: "GET",
 		URL: &url.URL{
-			Host:   "ignored",
+			Host:   Saddr,
 			Scheme: "http",
 			Path:   s2cUri,
 		},
@@ -60,59 +60,52 @@ func (conn *HttpClientConn) Handshake() (err error) {
 	if _, err = io.ReadFull(resp.Body, b); err != nil {
 		return err
 	}
-
-	q := url.Values{}
-	q.Set("token", string(b))
-	conn.url = &url.URL{
-		Scheme:   "http",
-		Host:     Saddr,
-		Path:     c2sUri,
-		RawQuery: q.Encode(),
+	if uuid.Parse(string(b)) == nil {
+		return errors.New("wrong token")
 	}
+	conn.token = string(b)
 	conn.r = resp.Body
-
-	log.Println(conn.url.String())
+	//log.Println(conn.token, "connected")
 
 	return nil
 }
 
 func (conn *HttpClientConn) Read(b []byte) (n int, err error) {
 	n, err = conn.r.Read(b)
-	log.Println("http r:", n)
+	//log.Println("http r:", n)
 	return
 }
 
 func (conn *HttpClientConn) Write(b []byte) (n int, err error) {
-	var c net.Conn
-	if len(Proxy) == 0 {
-		c, err = Connect(Saddr)
-	} else {
-		c, err = Connect(Proxy)
+	q := url.Values{}
+	q.Set("token", conn.token)
+	req := &http.Request{
+		Method:        "POST",
+		Body:          ioutil.NopCloser(bytes.NewReader(b)),
+		ContentLength: int64(len(b)),
+		URL: &url.URL{
+			Host:     Saddr,
+			Scheme:   "http",
+			Path:     c2sUri,
+			RawQuery: q.Encode(),
+		},
 	}
+	resp, err := doRequest(req, Proxy)
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	resp.Body.Close()
 
-	request, err := http.NewRequest("POST", conn.url.String(), bytes.NewReader(b))
-	if err != nil {
-		log.Println(err)
-		return
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.New(resp.Status)
 	}
-	if len(Proxy) == 0 {
-		err = request.Write(c)
-	} else {
-		err = request.WriteProxy(c)
-	}
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	log.Println("http w:", len(b))
+	//log.Println("http w:", len(b))
 	return len(b), nil
 }
 
 func (conn *HttpClientConn) Close() error {
+	conn.Write(nil)
 	return conn.r.Close()
 }
 
@@ -159,7 +152,7 @@ func (conn *HttpServerConn) Read(b []byte) (n int, err error) {
 	n = copy(b, conn.rb)
 	conn.rb = conn.rb[n:]
 
-	log.Println("http r:", n)
+	//log.Println("http r:", n)
 
 	return
 }
@@ -169,7 +162,7 @@ func (conn *HttpServerConn) Write(b []byte) (n int, err error) {
 	if f, ok := conn.w.(http.Flusher); ok {
 		f.Flush()
 	}
-	log.Println("http w:", n)
+	//log.Println("http w:", n)
 	return
 }
 
@@ -235,6 +228,7 @@ func (s *HttpServer) c2s(w http.ResponseWriter, r *http.Request) {
 	if err != nil || len(b) == 0 {
 		close(ch)
 		delete(s.chans, token)
+		//log.Println(token, "disconnected")
 		return
 	}
 	ch <- b
@@ -245,4 +239,30 @@ func (s *HttpServer) ListenAndServe() error {
 	http.HandleFunc(s2cUri, s.s2c)
 	http.HandleFunc(c2sUri, s.c2s)
 	return http.ListenAndServe(s.Addr, nil)
+}
+
+func doRequest(req *http.Request, proxy string) (*http.Response, error) {
+	if len(proxy) > 0 {
+		c, err := Connect(proxy)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		defer c.Close()
+
+		if err := req.WriteProxy(c); err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		/*
+			b, err := ioutil.ReadAll(c)
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+		*/
+		return http.ReadResponse(bufio.NewReader(c), req)
+	}
+
+	return http.DefaultClient.Do(req)
 }

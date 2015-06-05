@@ -107,7 +107,7 @@ func cliHandle(conn net.Conn) {
 	var c net.Conn
 	var err error
 
-	if !UseHttp {
+	if UseWebsocket || !UseHttp {
 		c, err = ConnectProxy(Saddr, Proxy)
 	} else {
 		addr := Saddr
@@ -123,10 +123,7 @@ func cliHandle(conn net.Conn) {
 	defer c.Close()
 
 	if UseWebsocket {
-		url := &url.URL{
-			Host: Saddr,
-		}
-		ws, resp, err := websocket.NewClient(c, url, nil, 8192, 8192)
+		ws, resp, err := websocket.NewClient(c, &url.URL{Host: Saddr}, nil, 8192, 8192)
 		if err != nil {
 			log.Println(err)
 			return
