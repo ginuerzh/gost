@@ -16,6 +16,9 @@ gost - GO Simple Tunnel
 Google讨论组: https://groups.google.com/forum/#!forum/go-gost
 
 ####版本更新
+#####V1.4
+*	支持http tunnel (-http参数)，使用http协议来传输数据(注：效率低，非特殊情况下，不推荐使用)。
+
 #####v1.3
 *	tls加密方式增加密码认证功能(与旧版本不兼容)
 *	增加版本查看(-v参数)
@@ -25,7 +28,7 @@ Google讨论组: https://groups.google.com/forum/#!forum/go-gost
 *	websocket tunnel增加加密功能。
 
 #####v1.1 
-*	支持websocket tunnel。
+*	支持websocket tunnel (-ws参数)，使用websocket协议来传输数据。
 
 ####参数说明
 >  -L=":8080": listen address
@@ -58,25 +61,33 @@ Google讨论组: https://groups.google.com/forum/#!forum/go-gost
 `gost -L=:8080`
 
 #####服务器端设置加密:
-`gost -L=:8080 -m=aes-256-cfb -p=123456`
+`gost -L=:8080 -m=rc4-md5 -p=123456`
 
 #####服务器端有上层http代理:
-`gost -L=:8080 -m=aes-256-cfb -p=123456 -P=proxy_ip:port`
+`gost -L=:8080 -m=rc4-md5 -p=123456 -P=proxy_ip:port`
 
 #####客户端:
 `gost -L=:8899 -S=your_server_ip:8080`
 
 #####客户端设置加密:
-`gost -L=:8899 -S=your_server_ip:8080 -m=aes-256-cfb -p=123456`
+`gost -L=:8899 -S=your_server_ip:8080 -m=rc4-md5 -p=123456`
 
 #####客户端有上层http代理:
-`gost -L=:8899 -S=your_server_ip:8080 -m=aes-256-cfb -p=123456 -P=proxy_ip:port`
+`gost -L=:8899 -S=your_server_ip:8080 -m=rc4-md5 -p=123456 -P=proxy_ip:port`
 
 #####使用websocket tunnel
 * 服务器端
 `gost -L=:8080 -m=aes-256-cfb -p=123456 -ws`
 * 客户端
-`gost -L=:8899 -S=your_server_ip:8080 -m=aes-256-cfb -p=123456 -ws`
+`gost -L=:8899 -S=your_server_ip:8080 -m=rc4-md5 -p=123456 -ws`
+
+#####使用http tunnel
+* 服务器端
+`gost -L=:8080 -m=rc4-md5 -p=123456 -http`
+* 客户端
+`gost -L=:8899 -S=your_server_ip:8080 -m=rc4-md5 -p=123456 -http`
+
+注：websocket方式优先级高于http方式，即当-ws与-http参数同时存在时，-http参数默认无效。
 
 #####作为shadowsocks服务器:
 gost支持作为shadowsocks服务器运行(-ss参数)，这样就可以让android手机通过shadowsocks客户端(影梭)使用代理了。
