@@ -98,6 +98,7 @@ func (conn *HttpClientConn) Write(b []byte) (n int, err error) {
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Println(resp.Status)
 		return 0, errors.New(resp.Status)
 	}
 	//log.Println("http w:", len(b))
@@ -202,7 +203,7 @@ type HttpServer struct {
 
 func (s *HttpServer) s2c(w http.ResponseWriter, r *http.Request) {
 	token := uuid.New()
-	ch := make(chan []byte, 1)
+	ch := make(chan []byte, 8)
 
 	conn := NewHttpServerConn(w, ch)
 	if _, err := conn.Write([]byte(token)); err != nil {
@@ -216,6 +217,12 @@ func (s *HttpServer) s2c(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *HttpServer) c2s(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println(err)
+		}
+	}()
+
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
