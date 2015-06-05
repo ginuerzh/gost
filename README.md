@@ -37,9 +37,9 @@ Google讨论组: https://groups.google.com/forum/#!forum/go-gost
 
 >  -S="": the server that connect to
 
->  -cert="": cert file for tls
+>  -cert="": tls cert file
 
->  -key="": key file for tls
+>  -key="": tls key file
 
 >  -m="": tunnel cipher method
 
@@ -51,7 +51,9 @@ Google讨论组: https://groups.google.com/forum/#!forum/go-gost
 
 >  -ss=false: run as shadowsocks server
 
->  -ws=false: use websocket for tunnel
+>  -ws=false: use websocket tunnel
+
+>  -http=false: use http tunnel
 
 >  -v=false: print version
 
