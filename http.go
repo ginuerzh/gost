@@ -61,7 +61,7 @@ func (conn *HttpClientConn) Handshake() (err error) {
 		return err
 	}
 	if uuid.Parse(string(b)) == nil {
-		return errors.New("wrong token")
+		return errors.New("Handshake: wrong token")
 	}
 	conn.token = string(b)
 	conn.r = resp.Body
@@ -98,7 +98,7 @@ func (conn *HttpClientConn) Write(b []byte) (n int, err error) {
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Println(resp.Status)
+		//log.Println(resp.Status)
 		return 0, errors.New(resp.Status)
 	}
 	//log.Println("http w:", len(b))
