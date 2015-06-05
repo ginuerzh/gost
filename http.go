@@ -130,9 +130,10 @@ func (conn *HttpClientConn) SetWriteDeadline(t time.Time) error {
 }
 
 type HttpServerConn struct {
-	w  http.ResponseWriter
-	c  chan []byte
-	rb []byte
+	w      http.ResponseWriter
+	c      chan []byte
+	closed bool
+	rb     []byte
 }
 
 func NewHttpServerConn(w http.ResponseWriter, c chan []byte) *HttpServerConn {
@@ -167,6 +168,10 @@ func (conn *HttpServerConn) Write(b []byte) (n int, err error) {
 }
 
 func (conn *HttpServerConn) Close() error {
+	if !conn.closed {
+		close(conn.c)
+		conn.closed = true
+	}
 	return nil
 }
 
@@ -192,7 +197,7 @@ func (conn *HttpServerConn) SetWriteDeadline(t time.Time) error {
 
 type HttpServer struct {
 	Addr  string
-	chans map[string]chan []byte
+	conns map[string]*HttpServerConn
 }
 
 func (s *HttpServer) s2c(w http.ResponseWriter, r *http.Request) {
@@ -204,11 +209,10 @@ func (s *HttpServer) s2c(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.chans[token] = ch
-	defer delete(s.chans, token)
+	s.conns[token] = conn
+	defer delete(s.conns, token)
 
-	c := gosocks5.ServerConn(conn, serverConfig)
-	socks5Handle(c)
+	socks5Handle(gosocks5.ServerConn(conn, serverConfig))
 }
 
 func (s *HttpServer) c2s(w http.ResponseWriter, r *http.Request) {
@@ -218,24 +222,23 @@ func (s *HttpServer) c2s(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := r.FormValue("token")
-	ch := s.chans[token]
-	if ch == nil {
+	conn := s.conns[token]
+	if conn == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
-		close(ch)
-		delete(s.chans, token)
+		conn.Close()
+		delete(s.conns, token)
 		//log.Println(token, "disconnected")
 		return
 	}
-	ch <- b
+	conn.c <- b
 }
 
 func (s *HttpServer) ListenAndServe() error {
-	s.chans = make(map[string]chan []byte)
+	s.conns = make(map[string]*HttpServerConn)
 	http.HandleFunc(s2cUri, s.s2c)
 	http.HandleFunc(c2sUri, s.c2s)
 	return http.ListenAndServe(s.Addr, nil)
