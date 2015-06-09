@@ -3,10 +3,11 @@ package main
 import (
 	"bufio"
 	//"bytes"
+	"encoding/base64"
 	"errors"
 	"github.com/ginuerzh/gosocks5"
 	"io"
-	"log"
+	//"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -52,59 +53,145 @@ func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 	}
 }
 
-func Connect(addr string) (net.Conn, error) {
+func dial(addr string) (net.Conn, error) {
 	taddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
-		log.Println(err)
 		return nil, err
 	}
 	return net.DialTCP("tcp", nil, taddr)
 }
 
-func ConnectProxy(addr, proxy string) (net.Conn, error) {
+func connect(addr string) (net.Conn, error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
-	if len(proxy) == 0 {
-		return Connect(addr)
+	if proxyURL == nil {
+		return dial(addr)
 	}
 
-	paddr, err := net.ResolveTCPAddr("tcp", proxy)
-	if err != nil {
-		return nil, err
-	}
-	pconn, err := net.DialTCP("tcp", nil, paddr)
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	switch proxyURL.Scheme {
+	case "socks": // socks5 proxy
+		return connectSocks5Proxy(addr)
+	case "http": // http proxy
+		fallthrough
+	default:
+		return connectHTTPProxy(addr)
 	}
 
-	header := http.Header{}
-	header.Set("Proxy-Connection", "keep-alive")
+}
+
+func connectHTTPProxy(addr string) (conn net.Conn, err error) {
+	conn, err = dial(proxyURL.Host)
+	if err != nil {
+		return
+	}
+
 	req := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Host: addr},
 		Host:   addr,
-		Header: header,
+		Header: make(http.Header),
 	}
-	if err := req.Write(pconn); err != nil {
-		log.Println(err)
-		pconn.Close()
-		return nil, err
+	req.Header.Set("Proxy-Connection", "keep-alive")
+	setBasicAuth(req)
+
+	if err = req.Write(conn); err != nil {
+		conn.Close()
+		return
 	}
 
-	resp, err := http.ReadResponse(bufio.NewReader(pconn), req)
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 	if err != nil {
-		log.Println(err)
-		pconn.Close()
-		return nil, err
+		conn.Close()
+		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		pconn.Close()
+		conn.Close()
+		//log.Println(resp.Status)
 		return nil, errors.New(resp.Status)
 	}
+	return
+}
 
-	return pconn, nil
+func connectSocks5Proxy(addr string) (conn net.Conn, err error) {
+	conn, err = dial(proxyURL.Host)
+	if err != nil {
+		return
+	}
+
+	conf := &gosocks5.Config{
+		Methods:        []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
+		MethodSelected: proxyMethodSelected,
+	}
+
+	c := gosocks5.ClientConn(conn, conf)
+	if err := c.Handleshake(); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn = c
+
+	s := strings.Split(addr, ":")
+	host := s[0]
+	port := 80
+	if len(s) == 2 {
+		n, _ := strconv.ParseUint(s[1], 10, 16)
+		port = int(n)
+	}
+	a := &gosocks5.Addr{
+		Type: gosocks5.AddrDomain,
+		Host: host,
+		Port: uint16(port),
+	}
+	if err := gosocks5.NewRequest(gosocks5.CmdConnect, a).Write(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	rep, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if rep.Rep != gosocks5.Succeeded {
+		conn.Close()
+		return nil, errors.New("Socks Failture")
+	}
+
+	return conn, nil
+}
+
+func proxyMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
+	switch method {
+	case gosocks5.MethodUserPass:
+		if proxyURL == nil || proxyURL.User == nil {
+			return nil, gosocks5.ErrAuthFailure
+		}
+		pwd, _ := proxyURL.User.Password()
+		if err := gosocks5.NewUserPassRequest(gosocks5.UserPassVer,
+			proxyURL.User.Username(), pwd).Write(conn); err != nil {
+			return nil, err
+		}
+		resp, err := gosocks5.ReadUserPassResponse(conn)
+		if err != nil {
+			return nil, err
+		}
+		if resp.Status != gosocks5.Succeeded {
+			return nil, gosocks5.ErrAuthFailure
+		}
+	case gosocks5.MethodNoAcceptable:
+		return nil, gosocks5.ErrBadMethod
+
+		//case gosocks5.MethodNoAuth:
+	}
+
+	return conn, nil
+}
+
+func setBasicAuth(r *http.Request) {
+	if proxyURL != nil && proxyURL.User != nil {
+		r.Header.Set("Proxy-Authorization",
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(proxyURL.User.String())))
+	}
 }
 
 // based on io.Copy

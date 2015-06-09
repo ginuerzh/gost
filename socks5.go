@@ -176,8 +176,9 @@ func socks5Handle(conn net.Conn) {
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
 		//log.Println("connect", req.Addr.String())
-		tconn, err := ConnectProxy(req.Addr.String(), Proxy)
+		tconn, err := connect(req.Addr.String())
 		if err != nil {
+			log.Println(err)
 			gosocks5.NewReply(gosocks5.HostUnreachable, nil).Write(conn)
 			return
 		}

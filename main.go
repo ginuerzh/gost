@@ -5,6 +5,8 @@ import (
 	"flag"
 	//"github.com/ginuerzh/gosocks5"
 	"log"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -16,6 +18,8 @@ var (
 	Method, Password      string
 	CertFile, KeyFile     string
 	PrintVersion          bool
+
+	proxyURL *url.URL
 )
 
 func init() {
@@ -35,6 +39,8 @@ func init() {
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	proxyURL, _ = parseURL(Proxy)
 }
 
 var (
@@ -63,4 +69,12 @@ func main() {
 	}
 
 	log.Fatal(listenAndServe(Laddr, cliHandle))
+}
+
+func parseURL(rawurl string) (*url.URL, error) {
+	if !strings.HasPrefix(rawurl, "http://") &&
+		!strings.HasPrefix(rawurl, "socks://") {
+		rawurl = "http://" + rawurl
+	}
+	return url.Parse(rawurl)
 }

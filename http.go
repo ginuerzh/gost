@@ -41,10 +41,12 @@ func (conn *HttpClientConn) Handshake() (err error) {
 			Scheme: "http",
 			Path:   s2cUri,
 		},
+		Header: make(http.Header),
 	}
-	if len(Proxy) == 0 {
+	if proxyURL == nil {
 		err = req.Write(conn.c)
 	} else {
+		setBasicAuth(req)
 		err = req.WriteProxy(conn.c)
 	}
 	if err != nil {
@@ -54,6 +56,9 @@ func (conn *HttpClientConn) Handshake() (err error) {
 	resp, err := http.ReadResponse(bufio.NewReader(conn.c), req)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(resp.Status)
 	}
 
 	b := make([]byte, 36)
@@ -89,8 +94,9 @@ func (conn *HttpClientConn) Write(b []byte) (n int, err error) {
 			Path:     c2sUri,
 			RawQuery: q.Encode(),
 		},
+		Header: make(http.Header),
 	}
-	resp, err := doRequest(req, Proxy)
+	resp, err := doRequest(req)
 	if err != nil {
 		log.Println(err)
 		return
@@ -251,15 +257,16 @@ func (s *HttpServer) ListenAndServe() error {
 	return http.ListenAndServe(s.Addr, nil)
 }
 
-func doRequest(req *http.Request, proxy string) (*http.Response, error) {
-	if len(proxy) > 0 {
-		c, err := Connect(proxy)
+func doRequest(req *http.Request) (*http.Response, error) {
+	if proxyURL != nil {
+		c, err := dial(proxyURL.Host)
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
 		defer c.Close()
 
+		setBasicAuth(req)
 		if err := req.WriteProxy(c); err != nil {
 			log.Println(err)
 			return nil, err

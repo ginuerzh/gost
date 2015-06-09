@@ -108,13 +108,13 @@ func cliHandle(conn net.Conn) {
 	var err error
 
 	if UseWebsocket || !UseHttp {
-		c, err = ConnectProxy(Saddr, Proxy)
+		c, err = connect(Saddr)
 	} else {
 		addr := Saddr
-		if len(Proxy) > 0 {
-			addr = Proxy
+		if proxyURL != nil {
+			addr = proxyURL.Host
 		}
-		c, err = Connect(addr)
+		c, err = dial(addr)
 	}
 	if err != nil {
 		log.Println(err)
