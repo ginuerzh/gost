@@ -18,8 +18,10 @@ var (
 	Method, Password      string
 	CertFile, KeyFile     string
 	PrintVersion          bool
+	Filter                string
 
 	proxyURL *url.URL
+	filters  []string
 )
 
 func init() {
@@ -35,12 +37,14 @@ func init() {
 	flag.BoolVar(&UseHttp, "http", false, "use http tunnel")
 	flag.StringVar(&SMethod, "sm", "rc4-md5", "shadowsocks cipher method")
 	flag.StringVar(&SPassword, "sp", "ginuerzh@gmail.com", "shadowsocks cipher password")
+	flag.StringVar(&Filter, "f", "", "comma separated host/url wildcard not go through tunnel")
 	flag.BoolVar(&PrintVersion, "v", false, "print version")
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	proxyURL, _ = parseURL(Proxy)
+	filters = parseFilter(Filter)
 }
 
 var (
@@ -72,9 +76,22 @@ func main() {
 }
 
 func parseURL(rawurl string) (*url.URL, error) {
+	if len(rawurl) == 0 {
+		return nil, nil
+	}
 	if !strings.HasPrefix(rawurl, "http://") &&
 		!strings.HasPrefix(rawurl, "socks://") {
 		rawurl = "http://" + rawurl
 	}
 	return url.Parse(rawurl)
+}
+
+func parseFilter(rawfilter string) (filters []string) {
+	for _, s := range strings.Split(rawfilter, ",") {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			filters = append(filters)
+		}
+	}
+	return
 }
