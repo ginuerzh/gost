@@ -58,10 +58,12 @@ func listenAndServe(addr string, handler func(net.Conn)) error {
 
 func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	switch method {
-	case MethodTLS:
+	case MethodTLS, MethodTLSAuth:
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-		if err := cliTLSAuth(conn); err != nil {
-			return nil, err
+		if method == MethodTLSAuth {
+			if err := cliTLSAuth(conn); err != nil {
+				return nil, err
+			}
 		}
 	case MethodAES128, MethodAES192, MethodAES256,
 		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
@@ -79,6 +81,10 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 }
 
 func cliTLSAuth(conn net.Conn) error {
+	if len(Password) == 0 {
+		return ErrEmptyPassword
+	}
+
 	if err := gosocks5.NewUserPassRequest(
 		gosocks5.UserPassVer, "", Password).Write(conn); err != nil {
 		return err
@@ -94,19 +100,7 @@ func cliTLSAuth(conn net.Conn) error {
 	return nil
 }
 
-func cliHandle(conn net.Conn) {
-	defer conn.Close()
-	/*
-		fmt.Println("new session", atomic.AddInt64(&sessionCount, 1))
-		defer func() {
-			fmt.Println("session end", atomic.AddInt64(&sessionCount, -1))
-		}()
-	*/
-
-	//log.Println("connect:", Saddr, Proxy)
-	var c net.Conn
-	var err error
-
+func makeTunnel() (c net.Conn, err error) {
 	if UseWebsocket || !UseHttp {
 		c, err = connect(Saddr)
 	} else {
@@ -117,40 +111,44 @@ func cliHandle(conn net.Conn) {
 		c, err = dial(addr)
 	}
 	if err != nil {
-		log.Println(err)
 		return
 	}
-	defer c.Close()
-
 	if UseWebsocket {
 		ws, resp, err := websocket.NewClient(c, &url.URL{Host: Saddr}, nil, 8192, 8192)
 		if err != nil {
-			log.Println(err)
-			return
+			c.Close()
+			return nil, err
 		}
 		resp.Body.Close()
 
 		c = NewWSConn(ws)
 	} else if UseHttp {
 		httpcli := NewHttpClientConn(c)
-		if err := httpcli.Handshake(); err != nil {
-			log.Println(err)
-			return
+		if err = httpcli.Handshake(); err != nil {
+			c.Close()
+			return nil, err
 		}
 		c = httpcli
-		defer httpcli.Close()
+		//defer httpcli.Close()
 	}
 
 	sc := gosocks5.ClientConn(c, clientConfig)
-	if err := sc.Handleshake(); err != nil {
-		return
+	if err = sc.Handleshake(); err != nil {
+		c.Close()
+		return nil, err
 	}
 	c = sc
+
+	return
+}
+
+func cliHandle(conn net.Conn) {
+	defer conn.Close()
 
 	if Shadows {
 		cipher, _ := shadowsocks.NewCipher(SMethod, SPassword)
 		conn = shadowsocks.NewConn(conn, cipher)
-		handleShadow(conn, c)
+		handleShadow(conn)
 		return
 	}
 
@@ -174,7 +172,7 @@ func cliHandle(conn net.Conn) {
 			return
 		}
 
-		handleSocks5(conn, c)
+		handleSocks5(conn)
 		return
 	}
 
@@ -196,15 +194,22 @@ func cliHandle(conn net.Conn) {
 		log.Println(err)
 		return
 	}
-	handleHttp(req, conn, c)
+	handleHttp(req, conn)
 }
 
-func handleSocks5(conn net.Conn, sconn net.Conn) {
+func handleSocks5(conn net.Conn) {
 	req, err := gosocks5.ReadRequest(conn)
 	if err != nil {
 		return
 	}
+
 	//log.Println(req)
+	sconn, err := makeTunnel()
+	if err != nil {
+		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
+		log.Println(err)
+		return
+	}
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect, gosocks5.CmdBind:
@@ -295,7 +300,7 @@ func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 	}
 }
 
-func handleHttp(req *http.Request, conn net.Conn, sconn net.Conn) {
+func handleHttp(req *http.Request, conn net.Conn) {
 	var host string
 	var port uint16
 
@@ -313,6 +318,15 @@ func handleHttp(req *http.Request, conn net.Conn, sconn net.Conn) {
 		Port: port,
 	}
 	r := gosocks5.NewRequest(gosocks5.CmdConnect, addr)
+
+	sconn, err := makeTunnel()
+	if err != nil {
+		conn.Write([]byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n"))
+		log.Println(err)
+		return
+	}
+
 	if err := r.Write(sconn); err != nil {
 		return
 	}
@@ -340,8 +354,14 @@ func handleHttp(req *http.Request, conn net.Conn, sconn net.Conn) {
 	}
 }
 
-func handleShadow(conn, sconn net.Conn) {
+func handleShadow(conn net.Conn) {
 	addr, extra, err := getShadowRequest(conn)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	sconn, err := makeTunnel()
 	if err != nil {
 		log.Println(err)
 		return

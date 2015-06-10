@@ -16,6 +16,12 @@ gost - GO Simple Tunnel
 Google讨论组: https://groups.google.com/d/forum/go-gost
 
 #### 版本更新
+##### v1.6
+* 增加tls-auth加密方式，此方式必须设置认证密码(-p参数)，原tls加密方式与v1.3版以前兼容
+
+###### Bug fix:
+* 修正当不设置上层代理时，连接出错问题
+
 ##### v1.5
 * 支持设置上层socks5代理(注: http tunnel不支持)
 * 支持上层代理用户名密码验证
@@ -110,7 +116,7 @@ gost支持作为shadowsocks服务器运行(-ss参数)，这样就可以让androi
 
 #### tunnel加密说明
 ##### 目前支持的加密方法
-tls, aes-128-cfb, aes-192-cfb, aes-256-cfb, des-cfb, bf-cfb, cast5-cfb, rc4-md5, rc4, table
+tls, tls-auth, aes-128-cfb, aes-192-cfb, aes-256-cfb, des-cfb, bf-cfb, cast5-cfb, rc4-md5, rc4, table
 
 ##### Client
 
@@ -118,7 +124,7 @@ Client端通过-m参数设置加密方式，默认为不加密(-m参数为空)�
 
 如果设置的加密方式不被支持，则默认为不加密。
 
-当设置的加密方式为tls时，可通过-p参数设置验证密码(若服务端支持密码验证功能)。
+当设置的加密方式为tls时，-p参数无效。
 
 当设置的加密方式为非tls时，通过-p参数设置加密密码，且不能为空；-p参数必须与Server端的-p参数相同。
 
@@ -132,7 +138,10 @@ Server端通过-m参数设置加密方式，默认为不加密(-m参数为空)�
 
 如果设置了加密方式(-m参数不为空)，client端必须使用与Server端相同的加密方式。
 
-当设置的加密方式为tls时，-key参数可手动指定公钥文件，-cert参数可手动指定私钥文件，如果未指定，则使用默认的公钥与私钥。
-可通过-p参数设定验证密码(可选),若设置，则客户端必须通过-p参数设置相同的密码。
+当设置的加密方式为tls，tls-auth时，-key参数可手动指定公钥文件，-cert参数可手动指定私钥文件，如果未指定，则使用默认的公钥与私钥。
 
-当设置的加密方式为非tls时，-key，-cert参数无效；通过-p参数设置加密密码，且不能为空。
+当设置的加密方式为tls时，-p参数无效；为tls-auth时，通过-p参数设置认证密码，且不能为空。
+
+当设置的加密方式为非tls，tls-auth时，-key，-cert参数无效；通过-p参数设置加密密码，且不能为空。
+
+

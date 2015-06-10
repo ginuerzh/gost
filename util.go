@@ -26,7 +26,10 @@ const (
 	MethodRC4MD5
 	MethodRC4
 	MethodTable
+	MethodTLSAuth
 )
+
+var ErrEmptyPassword = errors.New("empty key")
 
 var Methods = map[uint8]string{
 	gosocks5.MethodNoAuth: "",            // 0x00
@@ -40,6 +43,18 @@ var Methods = map[uint8]string{
 	MethodRC4MD5:          "rc4-md5",     // 8x87
 	MethodRC4:             "rc4",         // 0x88
 	MethodTable:           "table",       // 0x89
+	MethodTLSAuth:         "tls-auth",    // 0x90
+}
+
+func parseURL(rawurl string) (*url.URL, error) {
+	if len(rawurl) == 0 {
+		return nil, nil
+	}
+	if !strings.HasPrefix(rawurl, "http://") &&
+		!strings.HasPrefix(rawurl, "socks://") {
+		rawurl = "http://" + rawurl
+	}
+	return url.Parse(rawurl)
 }
 
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {

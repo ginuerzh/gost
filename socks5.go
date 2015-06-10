@@ -89,7 +89,7 @@ func (s *Socks5Server) ListenAndServe() error {
 		}
 		//log.Println("accept", conn.RemoteAddr())
 
-		go socks5Handle(gosocks5.ServerConn(conn, serverConfig))
+		go serveSocks5(gosocks5.ServerConn(conn, serverConfig))
 	}
 }
 
@@ -111,7 +111,7 @@ func serverSelectMethod(methods ...uint8) uint8 {
 
 func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	switch method {
-	case MethodTLS:
+	case MethodTLS, MethodTLSAuth:
 		var cert tls.Certificate
 		var err error
 
@@ -125,8 +125,10 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 			return nil, err
 		}
 		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{cert}})
-		if err := svrTLSAuth(conn); err != nil {
-			return nil, err
+		if method == MethodTLSAuth {
+			if err := svrTLSAuth(conn); err != nil {
+				return nil, err
+			}
 		}
 	case MethodAES128, MethodAES192, MethodAES256,
 		MethodDES, MethodBF, MethodCAST5, MethodRC4MD5, MethodRC4, MethodTable:
@@ -143,12 +145,16 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 }
 
 func svrTLSAuth(conn net.Conn) error {
+	if len(Password) == 0 {
+		return ErrEmptyPassword
+	}
+
 	req, err := gosocks5.ReadUserPassRequest(conn)
 	if err != nil {
 		return err
 	}
 
-	if len(Password) > 0 && req.Password != Password {
+	if req.Password != Password {
 		if err := gosocks5.NewUserPassResponse(
 			gosocks5.UserPassVer, gosocks5.Failure).Write(conn); err != nil {
 			return err
@@ -164,7 +170,7 @@ func svrTLSAuth(conn net.Conn) error {
 	return nil
 }
 
-func socks5Handle(conn net.Conn) {
+func serveSocks5(conn net.Conn) {
 	defer conn.Close()
 
 	req, err := gosocks5.ReadRequest(conn)

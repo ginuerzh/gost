@@ -219,7 +219,7 @@ func (s *HttpServer) s2c(w http.ResponseWriter, r *http.Request) {
 	s.conns[token] = conn
 	defer delete(s.conns, token)
 
-	socks5Handle(gosocks5.ServerConn(conn, serverConfig))
+	serveSocks5(gosocks5.ServerConn(conn, serverConfig))
 }
 
 func (s *HttpServer) c2s(w http.ResponseWriter, r *http.Request) {

@@ -73,7 +73,7 @@ func (s *WSServer) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	*/
-	socks5Handle(c)
+	serveSocks5(c)
 }
 
 func (s *WSServer) ListenAndServe() error {
