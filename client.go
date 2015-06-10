@@ -210,6 +210,7 @@ func handleSocks5(conn net.Conn) {
 		log.Println(err)
 		return
 	}
+	defer sconn.Close()
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect, gosocks5.CmdBind:
@@ -326,6 +327,7 @@ func handleHttp(req *http.Request, conn net.Conn) {
 		log.Println(err)
 		return
 	}
+	defer sconn.Close()
 
 	if err := r.Write(sconn); err != nil {
 		return
@@ -366,6 +368,7 @@ func handleShadow(conn net.Conn) {
 		log.Println(err)
 		return
 	}
+	defer sconn.Close()
 
 	req := gosocks5.NewRequest(gosocks5.CmdConnect, addr)
 	if err := req.Write(sconn); err != nil {
