@@ -29,21 +29,22 @@ const (
 	MethodTLSAuth
 )
 
-var ErrEmptyPassword = errors.New("empty key")
+var ErrEmptyAuth = errors.New("empty auth")
 
 var Methods = map[uint8]string{
-	gosocks5.MethodNoAuth: "",            // 0x00
-	MethodTLS:             "tls",         // 0x80
-	MethodAES128:          "aes-128-cfb", // 0x81
-	MethodAES192:          "aes-192-cfb", // 0x82
-	MethodAES256:          "aes-256-cfb", // 0x83
-	MethodDES:             "des-cfb",     // 0x84
-	MethodBF:              "bf-cfb",      // 0x85
-	MethodCAST5:           "cast5-cfb",   // 0x86
-	MethodRC4MD5:          "rc4-md5",     // 8x87
-	MethodRC4:             "rc4",         // 0x88
-	MethodTable:           "table",       // 0x89
-	MethodTLSAuth:         "tls-auth",    // 0x90
+	//gosocks5.MethodNoAuth:   "",            // 0x00
+	gosocks5.MethodUserPass: "userpass",    // 0x02
+	MethodTLS:               "tls",         // 0x80
+	MethodAES128:            "aes-128-cfb", // 0x81
+	MethodAES192:            "aes-192-cfb", // 0x82
+	MethodAES256:            "aes-256-cfb", // 0x83
+	MethodDES:               "des-cfb",     // 0x84
+	MethodBF:                "bf-cfb",      // 0x85
+	MethodCAST5:             "cast5-cfb",   // 0x86
+	MethodRC4MD5:            "rc4-md5",     // 8x87
+	MethodRC4:               "rc4",         // 0x88
+	MethodTable:             "table",       // 0x89
+	MethodTLSAuth:           "tls-auth",    // 0x90
 }
 
 func parseURL(rawurl string) (*url.URL, error) {
@@ -55,6 +56,15 @@ func parseURL(rawurl string) (*url.URL, error) {
 		rawurl = "http://" + rawurl
 	}
 	return url.Parse(rawurl)
+}
+
+func parseUserPass(key string) (username string, password string) {
+	sep := ":"
+	i := strings.Index(key, sep)
+	if i < 0 {
+		return key, ""
+	}
+	return key[0:i], key[i+len(sep):]
 }
 
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
@@ -135,8 +145,11 @@ func connectSocks5Proxy(addr string) (conn net.Conn, err error) {
 	}
 
 	conf := &gosocks5.Config{
-		Methods:        []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
+		// Methods:        []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
 		MethodSelected: proxyMethodSelected,
+	}
+	if proxyURL.User != nil {
+		conf.Methods = []uint8{gosocks5.MethodUserPass}
 	}
 
 	c := gosocks5.ClientConn(conn, conf)
@@ -178,28 +191,59 @@ func connectSocks5Proxy(addr string) (conn net.Conn, err error) {
 func proxyMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	switch method {
 	case gosocks5.MethodUserPass:
-		if proxyURL == nil || proxyURL.User == nil {
-			return nil, gosocks5.ErrAuthFailure
+		var user, pass string
+
+		if proxyURL != nil && proxyURL.User != nil {
+			user = proxyURL.User.Username()
+			pass, _ = proxyURL.User.Password()
 		}
-		pwd, _ := proxyURL.User.Password()
-		if err := gosocks5.NewUserPassRequest(gosocks5.UserPassVer,
-			proxyURL.User.Username(), pwd).Write(conn); err != nil {
+		if err := clientSocksAuth(conn, user, pass); err != nil {
 			return nil, err
-		}
-		resp, err := gosocks5.ReadUserPassResponse(conn)
-		if err != nil {
-			return nil, err
-		}
-		if resp.Status != gosocks5.Succeeded {
-			return nil, gosocks5.ErrAuthFailure
 		}
 	case gosocks5.MethodNoAcceptable:
 		return nil, gosocks5.ErrBadMethod
-
-		//case gosocks5.MethodNoAuth:
 	}
 
 	return conn, nil
+}
+
+func clientSocksAuth(conn net.Conn, username, password string) error {
+	if err := gosocks5.NewUserPassRequest(
+		gosocks5.UserPassVer, username, password).Write(conn); err != nil {
+		return err
+	}
+	res, err := gosocks5.ReadUserPassResponse(conn)
+	if err != nil {
+		return err
+	}
+	if res.Status != gosocks5.Succeeded {
+		return gosocks5.ErrAuthFailure
+	}
+
+	return nil
+}
+
+func serverSocksAuth(conn net.Conn, username, password string) error {
+	req, err := gosocks5.ReadUserPassRequest(conn)
+	if err != nil {
+		return err
+	}
+
+	if (len(username) > 0 && req.Username != username) ||
+		(len(password) > 0 && req.Password != password) {
+		if err := gosocks5.NewUserPassResponse(
+			gosocks5.UserPassVer, gosocks5.Failure).Write(conn); err != nil {
+			return err
+		}
+		return gosocks5.ErrAuthFailure
+	}
+
+	if err := gosocks5.NewUserPassResponse(
+		gosocks5.UserPassVer, gosocks5.Succeeded).Write(conn); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func setBasicAuth(r *http.Request) {

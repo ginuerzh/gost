@@ -3,7 +3,6 @@ package main
 
 import (
 	"flag"
-	//"github.com/ginuerzh/gosocks5"
 	"log"
 	"net/url"
 	"time"
@@ -18,7 +17,8 @@ var (
 	CertFile, KeyFile     string
 	PrintVersion          bool
 
-	proxyURL *url.URL
+	proxyURL  *url.URL
+	listenUrl *url.URL
 )
 
 func init() {
@@ -40,6 +40,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	proxyURL, _ = parseURL(Proxy)
+	listenUrl, _ = parseURL(Laddr)
 }
 
 var (
@@ -54,18 +55,20 @@ func main() {
 		return
 	}
 
+	laddr := listenUrl.Host
+
 	if len(Saddr) == 0 {
 		var server Server
 		if UseWebsocket {
-			server = &WSServer{Addr: Laddr}
+			server = &WSServer{Addr: laddr}
 		} else if UseHttp {
-			server = &HttpServer{Addr: Laddr}
+			server = &HttpServer{Addr: laddr}
 		} else {
-			server = &Socks5Server{Addr: Laddr}
+			server = &Socks5Server{Addr: laddr}
 		}
 		log.Fatal(server.ListenAndServe())
 		return
 	}
 
-	log.Fatal(listenAndServe(Laddr, cliHandle))
+	log.Fatal(listenAndServe(laddr, cliHandle))
 }

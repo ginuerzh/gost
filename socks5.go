@@ -94,12 +94,18 @@ func (s *Socks5Server) ListenAndServe() error {
 }
 
 func serverSelectMethod(methods ...uint8) uint8 {
+	log.Println(methods)
 	m := gosocks5.MethodNoAuth
 
 	for _, method := range methods {
 		if _, ok := Methods[method]; ok {
 			m = method
 		}
+	}
+
+	// when user/pass is set for proxy auth, the NoAuth method is disabled
+	if len(Method) == 0 && m == gosocks5.MethodNoAuth && listenUrl.User != nil {
+		return gosocks5.MethodNoAcceptable
 	}
 
 	if len(Method) == 0 || Methods[m] == Method {
@@ -110,7 +116,19 @@ func serverSelectMethod(methods ...uint8) uint8 {
 }
 
 func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
+	log.Println(method)
 	switch method {
+	case gosocks5.MethodUserPass:
+		var username, password string
+
+		if listenUrl != nil && listenUrl.User != nil {
+			username = listenUrl.User.Username()
+			password, _ = listenUrl.User.Password()
+		}
+
+		if err := serverSocksAuth(conn, username, password); err != nil {
+			return nil, err
+		}
 	case MethodTLS, MethodTLSAuth:
 		var cert tls.Certificate
 		var err error
@@ -126,7 +144,11 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 		}
 		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{cert}})
 		if method == MethodTLSAuth {
-			if err := svrTLSAuth(conn); err != nil {
+			// password is mandatory
+			if len(Password) == 0 {
+				return nil, ErrEmptyAuth
+			}
+			if err := serverSocksAuth(conn, "", Password); err != nil {
 				return nil, err
 			}
 		}
@@ -142,32 +164,6 @@ func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	}
 
 	return conn, nil
-}
-
-func svrTLSAuth(conn net.Conn) error {
-	if len(Password) == 0 {
-		return ErrEmptyPassword
-	}
-
-	req, err := gosocks5.ReadUserPassRequest(conn)
-	if err != nil {
-		return err
-	}
-
-	if req.Password != Password {
-		if err := gosocks5.NewUserPassResponse(
-			gosocks5.UserPassVer, gosocks5.Failure).Write(conn); err != nil {
-			return err
-		}
-		return gosocks5.ErrAuthFailure
-	}
-
-	if err := gosocks5.NewUserPassResponse(
-		gosocks5.UserPassVer, gosocks5.Succeeded).Write(conn); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func serveSocks5(conn net.Conn) {

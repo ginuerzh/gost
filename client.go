@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/gorilla/websocket"
@@ -58,10 +59,18 @@ func listenAndServe(addr string, handler func(net.Conn)) error {
 
 func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	switch method {
+	case gosocks5.MethodUserPass:
+		user, pass := parseUserPass(Password)
+		if err := clientSocksAuth(conn, user, pass); err != nil {
+			return nil, err
+		}
 	case MethodTLS, MethodTLSAuth:
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 		if method == MethodTLSAuth {
-			if err := cliTLSAuth(conn); err != nil {
+			if len(Password) == 0 {
+				return nil, ErrEmptyAuth
+			}
+			if err := clientSocksAuth(conn, "", Password); err != nil {
 				return nil, err
 			}
 		}
@@ -78,26 +87,6 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	}
 
 	return conn, nil
-}
-
-func cliTLSAuth(conn net.Conn) error {
-	if len(Password) == 0 {
-		return ErrEmptyPassword
-	}
-
-	if err := gosocks5.NewUserPassRequest(
-		gosocks5.UserPassVer, "", Password).Write(conn); err != nil {
-		return err
-	}
-	res, err := gosocks5.ReadUserPassResponse(conn)
-	if err != nil {
-		return err
-	}
-	if res.Status != gosocks5.Succeeded {
-		return gosocks5.ErrAuthFailure
-	}
-
-	return nil
 }
 
 func makeTunnel() (c net.Conn, err error) {
@@ -161,21 +150,19 @@ func cliHandle(conn net.Conn) {
 	}
 
 	if b[0] == gosocks5.Ver5 {
-		length := 2 + int(b[1])
+		mn := int(b[1]) // methods count
+		length := 2 + mn
 		if n < length {
 			if _, err := io.ReadFull(conn, b[n:length]); err != nil {
 				return
 			}
 		}
 
-		if err := gosocks5.WriteMethod(gosocks5.MethodNoAuth, conn); err != nil {
-			return
-		}
-
-		handleSocks5(conn)
+		methods := b[2 : 2+mn]
+		handleSocks5(conn, methods)
 		return
 	}
-
+	log.Println(string(b[:n]))
 	for {
 		if bytes.HasSuffix(b[:n], []byte("\r\n\r\n")) {
 			break
@@ -197,7 +184,51 @@ func cliHandle(conn net.Conn) {
 	handleHttp(req, conn)
 }
 
-func handleSocks5(conn net.Conn) {
+func selectMethod(conn net.Conn, methods ...uint8) error {
+	m := gosocks5.MethodNoAuth
+
+	if listenUrl.User != nil {
+		for _, method := range methods {
+			if method == gosocks5.MethodUserPass {
+				m = method
+				break
+			}
+		}
+		if m != gosocks5.MethodUserPass {
+			m = gosocks5.MethodNoAcceptable
+		}
+	}
+	if err := gosocks5.WriteMethod(m, conn); err != nil {
+		return err
+	}
+
+	log.Println(m)
+
+	switch m {
+	case gosocks5.MethodUserPass:
+		var username, password string
+
+		if listenUrl != nil && listenUrl.User != nil {
+			username = listenUrl.User.Username()
+			password, _ = listenUrl.User.Password()
+		}
+
+		if err := serverSocksAuth(conn, username, password); err != nil {
+			return err
+		}
+	case gosocks5.MethodNoAcceptable:
+		return gosocks5.ErrBadMethod
+	}
+
+	return nil
+}
+
+func handleSocks5(conn net.Conn, methods []uint8) {
+	if err := selectMethod(conn, methods...); err != nil {
+		log.Println(err)
+		return
+	}
+
 	req, err := gosocks5.ReadRequest(conn)
 	if err != nil {
 		return
@@ -301,9 +332,34 @@ func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 	}
 }
 
+func clientHttpAuth(req *http.Request, conn net.Conn, username, password string) error {
+	u, p, ok := req.BasicAuth()
+	if !ok ||
+		(len(username) > 0 && u != username) ||
+		(len(password) > 0 && p != password) {
+		conn.Write([]byte("HTTP/1.1 401 Not Authorized\r\n" +
+			"WWW-Authenticate: Basic realm=\"Authorization Required\"\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n"))
+
+		return errors.New("Not Authorized")
+	}
+
+	return nil
+}
+
 func handleHttp(req *http.Request, conn net.Conn) {
 	var host string
 	var port uint16
+
+	if listenUrl != nil && listenUrl.User != nil {
+		username := listenUrl.User.Username()
+		password, _ := listenUrl.User.Password()
+
+		if err := clientHttpAuth(req, conn, username, password); err != nil {
+			log.Println(err)
+			return
+		}
+	}
 
 	s := strings.Split(req.Host, ":")
 	host = s[0]
