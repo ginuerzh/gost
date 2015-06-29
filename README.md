@@ -18,11 +18,13 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 #### 版本更新
 ##### v1.7
 * 支持认证功能，当作为http(s)代理时使用Basic Auth认证方式，当作为标准socks5代理时使用Username/Password认证方式
+
 ###### Bug fix:
 * 修正当作为http代理时，POST请求出错问题
 
 ##### v1.6
 * 增加tls-auth加密方式，此方式必须设置认证密码(-p参数)，原tls加密方式与v1.3版以前兼容
+
 ###### Bug fix:
 * 修正当不设置上层代理时，连接出错问题
 
