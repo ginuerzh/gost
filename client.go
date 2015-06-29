@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -162,21 +163,8 @@ func cliHandle(conn net.Conn) {
 		handleSocks5(conn, methods)
 		return
 	}
-	log.Println(string(b[:n]))
-	for {
-		if bytes.HasSuffix(b[:n], []byte("\r\n\r\n")) {
-			break
-		}
 
-		nn, err := conn.Read(b[n:])
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		n += nn
-	}
-
-	req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b[:n])))
+	req, err := http.ReadRequest(bufio.NewReader(newReqReader(b[:n], conn)))
 	if err != nil {
 		log.Println(err)
 		return
@@ -202,7 +190,7 @@ func selectMethod(conn net.Conn, methods ...uint8) error {
 		return err
 	}
 
-	log.Println(m)
+	//log.Println(m)
 
 	switch m {
 	case gosocks5.MethodUserPass:
@@ -333,18 +321,40 @@ func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 }
 
 func clientHttpAuth(req *http.Request, conn net.Conn, username, password string) error {
-	u, p, ok := req.BasicAuth()
+	u, p, ok := proxyBasicAuth(req.Header.Get("Proxy-Authorization"))
+	req.Header.Del("Proxy-Authorization")
 	if !ok ||
 		(len(username) > 0 && u != username) ||
 		(len(password) > 0 && p != password) {
-		conn.Write([]byte("HTTP/1.1 401 Not Authorized\r\n" +
-			"WWW-Authenticate: Basic realm=\"Authorization Required\"\r\n" +
+		conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n" +
+			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n"))
 
-		return errors.New("Not Authorized")
+		return errors.New("Proxy Authentication Required")
 	}
 
 	return nil
+}
+
+func proxyBasicAuth(auth string) (username, password string, ok bool) {
+	if auth == "" {
+		return
+	}
+
+	if !strings.HasPrefix(auth, "Basic ") {
+		return
+	}
+	c, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic "))
+	if err != nil {
+		return
+	}
+	cs := string(c)
+	s := strings.IndexByte(cs, ':')
+	if s < 0 {
+		return
+	}
+
+	return cs[:s], cs[s+1:], true
 }
 
 func handleHttp(req *http.Request, conn net.Conn) {
@@ -520,6 +530,28 @@ func getShadowRequest(conn net.Conn) (addr *gosocks5.Addr, extra []byte, err err
 	}
 	// parse port
 	addr.Port = binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])
+
+	return
+}
+
+type reqReader struct {
+	b []byte
+	r io.Reader
+}
+
+func newReqReader(b []byte, r io.Reader) *reqReader {
+	return &reqReader{
+		b: b,
+		r: r,
+	}
+}
+
+func (r *reqReader) Read(p []byte) (n int, err error) {
+	if len(r.b) == 0 {
+		return r.r.Read(p)
+	}
+	n = copy(p, r.b)
+	r.b = r.b[n:]
 
 	return
 }

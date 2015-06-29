@@ -94,7 +94,7 @@ func (s *Socks5Server) ListenAndServe() error {
 }
 
 func serverSelectMethod(methods ...uint8) uint8 {
-	log.Println(methods)
+	//log.Println(methods)
 	m := gosocks5.MethodNoAuth
 
 	for _, method := range methods {
@@ -116,7 +116,7 @@ func serverSelectMethod(methods ...uint8) uint8 {
 }
 
 func serverMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
-	log.Println(method)
+	//log.Println(method)
 	switch method {
 	case gosocks5.MethodUserPass:
 		var username, password string
