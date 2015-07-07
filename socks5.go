@@ -206,17 +206,18 @@ func serveSocks5(conn net.Conn) {
 		log.Println("bind:", addr)
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
+			log.Println(err)
 			return
 		}
 
 		tconn, err := l.AcceptTCP()
+		l.Close() // only accept one peer
 		if err != nil {
 			log.Println("accept:", err)
 			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 			return
 		}
 		defer tconn.Close()
-		l.Close()
 
 		addr = ToSocksAddr(tconn.RemoteAddr())
 		log.Println("accept peer:", addr.String())
