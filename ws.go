@@ -64,7 +64,7 @@ func (s *WSServer) handle(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	defer conn.Close()
+	//defer conn.Close()
 
 	c := gosocks5.ServerConn(NewWSConn(conn), serverConfig)
 	/*

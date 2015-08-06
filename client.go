@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	//"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ginuerzh/gosocks5"
@@ -103,7 +104,11 @@ func makeTunnel() (c net.Conn, err error) {
 	if err != nil {
 		return
 	}
-	if UseWebsocket {
+
+	if UseTLS {
+		config := &tls.Config{InsecureSkipVerify: true}
+		c = tls.Client(c, config)
+	} else if UseWebsocket {
 		ws, resp, err := websocket.NewClient(c, &url.URL{Host: Saddr}, nil, 8192, 8192)
 		if err != nil {
 			c.Close()
@@ -166,6 +171,7 @@ func cliHandle(conn net.Conn) {
 
 	req, err := http.ReadRequest(bufio.NewReader(newReqReader(b[:n], conn)))
 	if err != nil {
+		//log.Println(hex.Dump(b[:n]))
 		log.Println(err)
 		return
 	}

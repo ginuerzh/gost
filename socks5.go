@@ -180,7 +180,7 @@ func serveSocks5(conn net.Conn) {
 		//log.Println("connect", req.Addr.String())
 		tconn, err := connect(req.Addr.String())
 		if err != nil {
-			log.Println(err)
+			log.Println("connect", req.Addr.String(), err)
 			gosocks5.NewReply(gosocks5.HostUnreachable, nil).Write(conn)
 			return
 		}
@@ -198,6 +198,7 @@ func serveSocks5(conn net.Conn) {
 		l, err := net.ListenTCP("tcp", nil)
 		if err != nil {
 			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
+			log.Println("bind listen", err)
 			return
 		}
 
@@ -207,6 +208,7 @@ func serveSocks5(conn net.Conn) {
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
 			log.Println(err)
+			l.Close()
 			return
 		}
 
@@ -233,7 +235,7 @@ func serveSocks5(conn net.Conn) {
 	case gosocks5.CmdUdp:
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
-			log.Println(err)
+			log.Println("udp listen", err)
 			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 			return
 		}

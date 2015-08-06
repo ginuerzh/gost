@@ -11,7 +11,7 @@ gost - GO Simple Tunnel
 5. 多种加密方式(tls,aes-256-cfb,des-cfb,rc4-md5等)。
 6. 客户端兼容shadowsocks协议，可作为shadowsocks服务器。
 
-二进制文件下载：https://bintray.com/ginuerzh/gost/gost/view
+二进制文件下载：https://github.com/ginuerzh/gost/releases
 
 Google讨论组: https://groups.google.com/d/forum/go-gost
 

@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	Laddr, Saddr, Proxy   string
-	UseWebsocket, UseHttp bool
-	Shadows               bool
-	SMethod, SPassword    string
-	Method, Password      string
-	CertFile, KeyFile     string
-	PrintVersion          bool
+	Laddr, Saddr, Proxy           string
+	UseWebsocket, UseHttp, UseTLS bool
+	Shadows                       bool
+	SMethod, SPassword            string
+	Method, Password              string
+	CertFile, KeyFile             string
+	PrintVersion                  bool
 
 	proxyURL  *url.URL
 	listenUrl *url.URL
@@ -30,6 +30,7 @@ func init() {
 	flag.StringVar(&CertFile, "cert", "", "tls cert file")
 	flag.StringVar(&KeyFile, "key", "", "tls key file")
 	flag.BoolVar(&Shadows, "ss", false, "run as shadowsocks server")
+	flag.BoolVar(&UseTLS, "tls", false, "use ssl/tls tunnel")
 	flag.BoolVar(&UseWebsocket, "ws", false, "use websocket tunnel")
 	flag.BoolVar(&UseHttp, "http", false, "use http tunnel")
 	flag.StringVar(&SMethod, "sm", "rc4-md5", "shadowsocks cipher method")
@@ -59,7 +60,9 @@ func main() {
 
 	if len(Saddr) == 0 {
 		var server Server
-		if UseWebsocket {
+		if UseTLS {
+			server = &TlsServer{Addr: laddr, CertFile: CertFile, KeyFile: KeyFile}
+		} else if UseWebsocket {
 			server = &WSServer{Addr: laddr}
 		} else if UseHttp {
 			server = &HttpServer{Addr: laddr}
