@@ -16,6 +16,10 @@ gost - GO Simple Tunnel
 Google讨论组: https://groups.google.com/d/forum/go-gost
 
 #### 版本更新
+
+##### v1.8
+* 支持tls tunnel(-tls参数)，直接使用tls进行加密传输
+
 ##### v1.7
 * 支持认证功能，当作为http(s)代理时使用Basic Auth认证方式，当作为标准socks5代理时使用Username/Password认证方式
 
@@ -67,6 +71,8 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 
 >  -ss=false: run as shadowsocks server
 
+>  -tls=false: use ssl/tls tunnel
+
 >  -ws=false: use websocket tunnel
 
 >  -http=false: use http tunnel
@@ -95,6 +101,12 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 * http代理(需认证): `gost -L=:8899 -P=http://admin:123456@127.0.0.1:8080`
 * socks5代理: `gost -L=:8899 -P=socks://127.0.0.1:1080`
 * socks5代理(需认证): `gost -L=:8899 -P=socks://admin:123456@127.0.0.1:1080`
+
+##### 使用tls tunnel (推荐)
+* 客户端: `gost -L=:8899 -S=server_ip:8080 -tls`
+* 服务器: `gost -L=:8080 -tls`
+
+注: 可通过-key, -cert参数手动指定自己的公钥与私钥文件。
 
 ##### 使用websocket tunnel
 * 客户端: `gost -L=:8899 -S=server_ip:8080 -ws`

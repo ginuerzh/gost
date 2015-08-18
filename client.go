@@ -92,7 +92,7 @@ func clientMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
 }
 
 func makeTunnel() (c net.Conn, err error) {
-	if UseWebsocket || !UseHttp {
+	if UseTLS || UseWebsocket || !UseHttp {
 		c, err = connect(Saddr)
 	} else {
 		addr := Saddr
