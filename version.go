@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	Version = "1.8"
+	Version = "2.0"
 )
 
 func printVersion() {

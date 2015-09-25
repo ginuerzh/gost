@@ -3,75 +3,57 @@ package main
 
 import (
 	"flag"
-	"log"
-	"net/url"
-	"time"
+	"github.com/golang/glog"
+	"sync"
+)
+
+const (
+	LFATAL = iota
+	LERROR
+	LWARNING
+	LINFO
+	LDEBUG
 )
 
 var (
-	Laddr, Saddr, Proxy           string
-	UseWebsocket, UseHttp, UseTLS bool
-	Shadows                       bool
-	SMethod, SPassword            string
-	Method, Password              string
-	CertFile, KeyFile             string
-	PrintVersion                  bool
+	listenUrl, proxyUrl, forwardUrl string
 
-	proxyURL  *url.URL
-	listenUrl *url.URL
+	listenArgs  []Args
+	proxyArgs   []Args
+	forwardArgs []Args
 )
 
 func init() {
-	flag.StringVar(&Proxy, "P", "", "proxy for forward")
-	flag.StringVar(&Saddr, "S", "", "the server that connect to")
-	flag.StringVar(&Laddr, "L", ":8080", "listen address")
-	flag.StringVar(&Method, "m", "", "tunnel cipher method")
-	flag.StringVar(&Password, "p", "", "tunnel cipher password")
-	flag.StringVar(&CertFile, "cert", "", "tls cert file")
-	flag.StringVar(&KeyFile, "key", "", "tls key file")
-	flag.BoolVar(&Shadows, "ss", false, "run as shadowsocks server")
-	flag.BoolVar(&UseTLS, "tls", false, "use ssl/tls tunnel")
-	flag.BoolVar(&UseWebsocket, "ws", false, "use websocket tunnel")
-	flag.BoolVar(&UseHttp, "http", false, "use http tunnel")
-	flag.StringVar(&SMethod, "sm", "rc4-md5", "shadowsocks cipher method")
-	flag.StringVar(&SPassword, "sp", "ginuerzh@gmail.com", "shadowsocks cipher password")
-	flag.BoolVar(&PrintVersion, "v", false, "print version")
+	flag.StringVar(&listenUrl, "L", ":http", "local address")
+	flag.StringVar(&forwardUrl, "S", "", "remote address")
+	flag.StringVar(&proxyUrl, "P", "", "proxy address")
+
 	flag.Parse()
 
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	proxyURL, _ = parseURL(Proxy)
-	listenUrl, _ = parseURL(Laddr)
+	listenArgs = parseArgs(listenUrl)
+	proxyArgs = parseArgs(proxyUrl)
+	forwardArgs = parseArgs(forwardUrl)
 }
 
-var (
-	spool = NewMemPool(1024, 120*time.Minute, 1024)  // 1k size buffer pool
-	mpool = NewMemPool(16*1024, 60*time.Minute, 512) // 16k size buffer pool
-	lpool = NewMemPool(32*1024, 30*time.Minute, 256) // 32k size buffer pool
-)
-
 func main() {
-	if PrintVersion {
-		printVersion()
-		return
+	defer glog.Flush()
+
+	if len(listenArgs) == 0 {
+		glog.Fatalln("no listen addr")
 	}
 
-	laddr := listenUrl.Host
+	var wg sync.WaitGroup
 
-	if len(Saddr) == 0 {
-		var server Server
-		if UseTLS {
-			server = &TlsServer{Addr: laddr, CertFile: CertFile, KeyFile: KeyFile}
-		} else if UseWebsocket {
-			server = &WSServer{Addr: laddr}
-		} else if UseHttp {
-			server = &HttpServer{Addr: laddr}
-		} else {
-			server = &Socks5Server{Addr: laddr}
-		}
-		log.Fatal(server.ListenAndServe())
-		return
+	for _, arg := range listenArgs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := listenAndServe(arg); err != nil {
+				if glog.V(LFATAL) {
+					glog.Errorln(err)
+				}
+			}
+		}()
 	}
-
-	log.Fatal(listenAndServe(laddr, cliHandle))
+	wg.Wait()
 }

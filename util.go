@@ -1,262 +1,123 @@
 package main
 
 import (
-	"bufio"
-	//"bytes"
-	"encoding/base64"
+	"crypto/tls"
 	"errors"
-	"github.com/ginuerzh/gosocks5"
+	"fmt"
+	"github.com/golang/glog"
 	"io"
-	//"log"
 	"net"
-	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 )
 
-const (
-	MethodTLS uint8 = 0x80 + iota
-	MethodAES128
-	MethodAES192
-	MethodAES256
-	MethodDES
-	MethodBF
-	MethodCAST5
-	MethodRC4MD5
-	MethodRC4
-	MethodTable
-	MethodTLSAuth
-)
-
-var ErrEmptyAuth = errors.New("empty auth")
-
-var Methods = map[uint8]string{
-	//gosocks5.MethodNoAuth:   "",            // 0x00
-	gosocks5.MethodUserPass: "userpass",    // 0x02
-	MethodTLS:               "tls",         // 0x80
-	MethodAES128:            "aes-128-cfb", // 0x81
-	MethodAES192:            "aes-192-cfb", // 0x82
-	MethodAES256:            "aes-256-cfb", // 0x83
-	MethodDES:               "des-cfb",     // 0x84
-	MethodBF:                "bf-cfb",      // 0x85
-	MethodCAST5:             "cast5-cfb",   // 0x86
-	MethodRC4MD5:            "rc4-md5",     // 8x87
-	MethodRC4:               "rc4",         // 0x88
-	MethodTable:             "table",       // 0x89
-	MethodTLSAuth:           "tls-auth",    // 0x90
+// socks://admin:123456@localhost:8080
+type Args struct {
+	Addr      string // host:port
+	Protocol  string // protocol: hs/http/socks/socks5/ss, default is hs(http+socks5)
+	Transport string // transport: tcp/ws/tls, default is tcp(raw tcp)
+	User      *url.Userinfo
+	EncMeth   string          // data encryption method
+	EncPass   string          // data encryption password
+	Cert      tls.Certificate // tls certificate
 }
 
-func parseURL(rawurl string) (*url.URL, error) {
-	if len(rawurl) == 0 {
-		return nil, nil
+func (args Args) String() string {
+	var authUser, authPass string
+	if args.User != nil {
+		authUser = args.User.Username()
+		authPass, _ = args.User.Password()
 	}
-	if !strings.HasPrefix(rawurl, "http://") &&
-		!strings.HasPrefix(rawurl, "socks://") {
-		rawurl = "http://" + rawurl
-	}
-	return url.Parse(rawurl)
+	return fmt.Sprintf("host: %s, proto: %s, trans: %s, auth: %s:%s, enc: %s:%s",
+		args.Addr, args.Protocol, args.Transport, authUser, authPass,
+		args.EncMeth, args.EncPass)
 }
 
-func parseUserPass(key string) (username string, password string) {
-	sep := ":"
-	i := strings.Index(key, sep)
-	if i < 0 {
-		return key, ""
+func parseArgs(rawurl string) (args []Args) {
+	ss := strings.Split(rawurl, ",")
+	if rawurl == "" || len(ss) == 0 {
+		return nil
 	}
-	return key[0:i], key[i+len(sep):]
-}
 
-func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
-	host, port, _ := net.SplitHostPort(addr.String())
-	p, _ := strconv.Atoi(port)
+	for _, s := range ss {
+		if !strings.Contains(s, "://") {
+			s = "hs://" + s
+		}
+		u, err := url.Parse(s)
+		if err != nil {
+			if glog.V(LWARNING) {
+				glog.Warningln(err)
+			}
+			continue
+		}
 
-	return &gosocks5.Addr{
-		Type: gosocks5.AddrIPv4,
-		Host: host,
-		Port: uint16(p),
+		arg := Args{
+			Addr: u.Host,
+			User: u.User,
+		}
+
+		schemes := strings.Split(u.Scheme, "+")
+		if len(schemes) == 1 {
+			switch schemes[0] {
+			case "http", "socks", "socks5", "ss":
+				arg.Protocol = schemes[0]
+			case "ws", "tls", "tcp":
+				arg.Transport = schemes[0]
+			}
+		}
+		if len(schemes) == 2 {
+			arg.Protocol = schemes[0]
+			arg.Transport = schemes[1]
+		}
+
+		arg.Cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem")
+		if err != nil {
+			if glog.V(LFATAL) {
+				glog.Errorln(err, ", tls will not be supported")
+			}
+		}
+
+		mp := strings.Split(strings.Trim(u.Path, "/"), ":")
+		if len(mp) == 1 {
+			arg.EncMeth = mp[0]
+		}
+		if len(mp) == 2 {
+			arg.EncMeth = mp[0]
+			arg.EncPass = mp[1]
+		}
+		if glog.V(LINFO) {
+			glog.Infoln(arg)
+		}
+		args = append(args, arg)
 	}
-}
 
-func dial(addr string) (net.Conn, error) {
-	taddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return net.DialTCP("tcp", nil, taddr)
+	return
 }
 
 func connect(addr string) (net.Conn, error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
-	if proxyURL == nil {
-		return dial(addr)
-	}
-
-	switch proxyURL.Scheme {
-	case "socks": // socks5 proxy
-		return connectSocks5Proxy(addr)
-	case "http": // http proxy
-		fallthrough
-	default:
-		return connectHTTPProxy(addr)
-	}
-
-}
-
-func connectHTTPProxy(addr string) (conn net.Conn, err error) {
-	conn, err = dial(proxyURL.Host)
-	if err != nil {
-		return
-	}
-
-	req := &http.Request{
-		Method: "CONNECT",
-		URL:    &url.URL{Host: addr},
-		Host:   addr,
-		Header: make(http.Header),
-	}
-	req.Header.Set("Proxy-Connection", "keep-alive")
-	setBasicAuth(req)
-
-	if err = req.Write(conn); err != nil {
-		conn.Close()
-		return
-	}
-
-	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-	if err != nil {
-		conn.Close()
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
-		conn.Close()
-		//log.Println(resp.Status)
-		return nil, errors.New(resp.Status)
-	}
-	return
-}
-
-func connectSocks5Proxy(addr string) (conn net.Conn, err error) {
-	conn, err = dial(proxyURL.Host)
-	if err != nil {
-		return
-	}
-
-	conf := &gosocks5.Config{
-		// Methods:        []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
-		MethodSelected: proxyMethodSelected,
-	}
-	if proxyURL.User != nil {
-		conf.Methods = []uint8{gosocks5.MethodUserPass}
-	}
-
-	c := gosocks5.ClientConn(conn, conf)
-	if err := c.Handleshake(); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn = c
-
-	s := strings.Split(addr, ":")
-	host := s[0]
-	port := 80
-	if len(s) == 2 {
-		n, _ := strconv.ParseUint(s[1], 10, 16)
-		port = int(n)
-	}
-	a := &gosocks5.Addr{
-		Type: gosocks5.AddrDomain,
-		Host: host,
-		Port: uint16(port),
-	}
-	if err := gosocks5.NewRequest(gosocks5.CmdConnect, a).Write(conn); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	rep, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if rep.Rep != gosocks5.Succeeded {
-		conn.Close()
-		return nil, errors.New("Socks Failture")
-	}
-
-	return conn, nil
-}
-
-func proxyMethodSelected(method uint8, conn net.Conn) (net.Conn, error) {
-	switch method {
-	case gosocks5.MethodUserPass:
-		var user, pass string
-
-		if proxyURL != nil && proxyURL.User != nil {
-			user = proxyURL.User.Username()
-			pass, _ = proxyURL.User.Password()
+	/*
+		if proxyURL == nil {
+			return dial(addr)
 		}
-		if err := clientSocksAuth(conn, user, pass); err != nil {
-			return nil, err
+
+		switch proxyURL.Scheme {
+		case "socks": // socks5 proxy
+			return connectSocks5Proxy(addr)
+		case "http": // http proxy
+			fallthrough
+		default:
+			return connectHTTPProxy(addr)
 		}
-	case gosocks5.MethodNoAcceptable:
-		return nil, gosocks5.ErrBadMethod
-	}
-
-	return conn, nil
-}
-
-func clientSocksAuth(conn net.Conn, username, password string) error {
-	if err := gosocks5.NewUserPassRequest(
-		gosocks5.UserPassVer, username, password).Write(conn); err != nil {
-		return err
-	}
-	res, err := gosocks5.ReadUserPassResponse(conn)
-	if err != nil {
-		return err
-	}
-	if res.Status != gosocks5.Succeeded {
-		return gosocks5.ErrAuthFailure
-	}
-
-	return nil
-}
-
-func serverSocksAuth(conn net.Conn, username, password string) error {
-	req, err := gosocks5.ReadUserPassRequest(conn)
-	if err != nil {
-		return err
-	}
-
-	if (len(username) > 0 && req.Username != username) ||
-		(len(password) > 0 && req.Password != password) {
-		if err := gosocks5.NewUserPassResponse(
-			gosocks5.UserPassVer, gosocks5.Failure).Write(conn); err != nil {
-			return err
-		}
-		return gosocks5.ErrAuthFailure
-	}
-
-	if err := gosocks5.NewUserPassResponse(
-		gosocks5.UserPassVer, gosocks5.Succeeded).Write(conn); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func setBasicAuth(r *http.Request) {
-	if proxyURL != nil && proxyURL.User != nil {
-		r.Header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(proxyURL.User.String())))
-	}
+	*/
+	return nil, errors.New("not implemented")
 }
 
 // based on io.Copy
 func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := lpool.Take()
-	defer lpool.put(buf)
+	buf := make([]byte, 32*1024)
 
 	for {
 		nr, er := src.Read(buf)
