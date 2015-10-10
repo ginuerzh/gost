@@ -17,6 +17,7 @@ const (
 
 var (
 	listenUrl, proxyUrl, forwardUrl string
+	pv                              bool // print version
 
 	listenArgs  []Args
 	proxyArgs   []Args
@@ -27,6 +28,7 @@ func init() {
 	flag.StringVar(&listenUrl, "L", ":http", "local address")
 	flag.StringVar(&forwardUrl, "S", "", "remote address")
 	flag.StringVar(&proxyUrl, "P", "", "proxy address")
+	flag.BoolVar(&pv, "V", false, "print version")
 
 	flag.Parse()
 
@@ -38,22 +40,22 @@ func init() {
 func main() {
 	defer glog.Flush()
 
+	if pv {
+		printVersion()
+		return
+	}
+
 	if len(listenArgs) == 0 {
 		glog.Fatalln("no listen addr")
 	}
 
 	var wg sync.WaitGroup
-
-	for _, arg := range listenArgs {
+	for _, args := range listenArgs {
 		wg.Add(1)
-		go func() {
+		go func(arg Args) {
 			defer wg.Done()
-			if err := listenAndServe(arg); err != nil {
-				if glog.V(LFATAL) {
-					glog.Errorln(err)
-				}
-			}
-		}()
+			listenAndServe(arg)
+		}(args)
 	}
 	wg.Wait()
 }

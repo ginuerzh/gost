@@ -19,13 +19,18 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		}
 	}
 
+	connType := ConnHttp
+	if req.Method == "CONNECT" {
+		connType = ConnHttpConnect
+	}
+
 	var username, password string
 	if arg.User != nil {
 		username = arg.User.Username()
 		password, _ = arg.User.Password()
 	}
 
-	u, p, _ := proxyBasicAuth(req.Header.Get("Proxy-Authorization"))
+	u, p, _ := basicAuth(req.Header.Get("Proxy-Authorization"))
 	req.Header.Del("Proxy-Authorization")
 
 	if (username != "" && u != username) || (password != "" && p != password) {
@@ -46,9 +51,52 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		}
 		return
 	}
+
+	c, err := connect(connType, req.Host)
+	if err != nil {
+		if glog.V(LWARNING) {
+			glog.Warningln(err)
+		}
+		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		if glog.V(LDEBUG) {
+			glog.Infoln(string(b))
+		}
+		conn.Write(b)
+		return
+	}
+	defer c.Close()
+
+	if connType == ConnHttpConnect {
+		b := []byte("HTTP/1.1 200 Connection established\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		if glog.V(LDEBUG) {
+			glog.Infoln(string(b))
+		}
+		if _, err := conn.Write(b); err != nil {
+			if glog.V(LWARNING) {
+				glog.Warningln(err)
+			}
+			return
+		}
+	} else {
+		if len(proxyArgs) > 0 {
+			err = req.WriteProxy(c)
+		} else {
+			err = req.Write(c)
+		}
+		if err != nil {
+			if glog.V(LWARNING) {
+				glog.Warningln(err)
+			}
+			return
+		}
+	}
+
+	Transport(conn, c)
 }
 
-func proxyBasicAuth(authInfo string) (username, password string, ok bool) {
+func basicAuth(authInfo string) (username, password string, ok bool) {
 	if authInfo == "" {
 		return
 	}

@@ -2,17 +2,46 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
+	"encoding/base64"
+	"errors"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+const (
+	ConnHttp        = "http"
+	ConnHttpConnect = "http-connect"
+	ConnSocks5      = "socks5"
 )
 
 func listenAndServe(arg Args) error {
 	var ln net.Listener
 	var err error
+
+	if glog.V(3) {
+		b := bytes.Buffer{}
+		b.WriteString("listen on %s, use %s tunnel and %s protocol for data transport. ")
+		if arg.EncMeth == "tls" {
+			b.WriteString("for socks5, tls encrypt method is supported.")
+		} else {
+			b.WriteString("for socks5, tls encrypt method is NOT supported.")
+		}
+		protocol := arg.Protocol
+		if protocol == "" {
+			protocol = "http/socks5"
+		}
+		glog.Infof(b.String(), arg.Addr, arg.Transport, protocol)
+
+	}
 
 	switch arg.Transport {
 	case "ws": // websocket connection
@@ -26,6 +55,8 @@ func listenAndServe(arg Args) error {
 	case "tls": // tls connection
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
+	case "tcp":
+		fallthrough
 	default:
 		ln, err = net.Listen("tcp", arg.Addr)
 	}
@@ -36,6 +67,7 @@ func listenAndServe(arg Args) error {
 		}
 		return err
 	}
+
 	defer ln.Close()
 
 	for {
@@ -61,9 +93,12 @@ func handleConn(conn net.Conn, arg Args) {
 	selector := &serverSelector{
 		methods: []uint8{
 			gosocks5.MethodNoAuth, gosocks5.MethodUserPass,
-			MethodTLS, MethodTLSAuth,
 		},
 		arg: arg,
+	}
+
+	if arg.EncMeth == "tls" {
+		selector.methods = append(selector.methods, MethodTLS, MethodTLSAuth)
 	}
 
 	switch arg.Protocol {
@@ -173,4 +208,146 @@ func (r *reqReader) Read(p []byte) (n int, err error) {
 	r.b = r.b[n:]
 
 	return
+}
+
+func connect(connType, addr string) (conn net.Conn, err error) {
+	if !strings.Contains(addr, ":") {
+		addr += ":80"
+	}
+
+	if len(forwardArgs) > 0 {
+		// TODO: multi-foward
+		forward := forwardArgs[0]
+		return connectForward(addr, forward)
+	}
+
+	if len(proxyArgs) > 0 {
+		proxy := proxyArgs[0]
+		return connectProxy(connType, addr, proxy)
+	}
+
+	return net.Dial("tcp", addr)
+}
+
+func connectProxy(connType, addr string, proxy Args) (conn net.Conn, err error) {
+	if glog.V(LINFO) {
+		glog.Infoln("connect proxy:", proxy.Addr)
+	}
+	conn, err = net.Dial("tcp", proxy.Addr)
+	if err != nil {
+		return
+	}
+
+	switch proxy.Transport {
+	case "ws": // websocket connection
+		c, err := wsClient(conn, proxy.Addr)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		conn = c
+	case "tls": // tls connection
+		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	case "tcp":
+		fallthrough
+	default:
+	}
+
+	switch proxy.Protocol {
+	case "ss": // shadowsocks
+		conn.Close()
+		return nil, errors.New("Not implemented")
+	case "socks", "socks5":
+		selector := &clientSelector{
+			methods: []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
+			arg:     proxy,
+		}
+		if proxy.EncMeth == "tls" {
+			selector.methods = []uint8{MethodTLS, MethodTLSAuth}
+		}
+		c := gosocks5.ClientConn(conn, selector)
+		if err := c.Handleshake(); err != nil {
+			c.Close()
+			return nil, err
+		}
+		conn = c
+
+		if connType == ConnHttp || connType == ConnHttpConnect {
+			host, port, _ := net.SplitHostPort(addr)
+			p, _ := strconv.ParseUint(port, 10, 16)
+			r := gosocks5.NewRequest(gosocks5.CmdConnect, &gosocks5.Addr{
+				Type: gosocks5.AddrDomain,
+				Host: host,
+				Port: uint16(p),
+			})
+			if glog.V(LDEBUG) {
+				glog.Infoln(r.String())
+			}
+			if err := r.Write(conn); err != nil {
+				conn.Close()
+				return nil, err
+			}
+
+			rep, err := gosocks5.ReadReply(conn)
+			if err != nil {
+				conn.Close()
+				return nil, err
+			}
+			if glog.V(LDEBUG) {
+				glog.Infoln(rep.String())
+			}
+
+			if rep.Rep != gosocks5.Succeeded {
+				conn.Close()
+				return nil, errors.New("Service unavailable")
+			}
+		}
+	case "http":
+		fallthrough
+	default:
+		if connType == ConnHttpConnect {
+			req := &http.Request{
+				Method:     "CONNECT",
+				URL:        &url.URL{Host: addr},
+				Host:       addr,
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header:     make(http.Header),
+			}
+			req.Header.Set("Proxy-Connection", "keep-alive")
+			if proxy.User != nil {
+				req.Header.Set("Proxy-Authorization",
+					"Basic "+base64.StdEncoding.EncodeToString([]byte(proxy.User.String())))
+			}
+			if err = req.Write(conn); err != nil {
+				conn.Close()
+				return nil, err
+			}
+			if glog.V(LDEBUG) {
+				dump, _ := httputil.DumpRequest(req, false)
+				glog.Infoln(string(dump))
+			}
+
+			resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+			if err != nil {
+				conn.Close()
+				return nil, err
+			}
+			if glog.V(LDEBUG) {
+				dump, _ := httputil.DumpResponse(resp, false)
+				glog.Infoln(string(dump))
+			}
+			if resp.StatusCode != http.StatusOK {
+				conn.Close()
+				//log.Println(resp.Status)
+				return nil, errors.New(resp.Status)
+			}
+		}
+	}
+
+	return
+}
+
+func connectForward(addr string, forward Args) (net.Conn, error) {
+	return nil, errors.New("Not implemented")
 }

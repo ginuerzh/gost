@@ -14,11 +14,12 @@ const (
 )
 
 type clientSelector struct {
-	arg Args
+	methods []uint8
+	arg     Args
 }
 
 func (selector *clientSelector) Methods() []uint8 {
-	return nil
+	return selector.methods
 }
 
 func (selector *clientSelector) Select(methods ...uint8) (method uint8) {
@@ -187,7 +188,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 		if glog.V(LINFO) {
 			glog.Infoln("socks5 connect:", req.Addr.String())
 		}
-		tconn, err := connect(req.Addr.String())
+		tconn, err := connect(ConnSocks5, req.Addr.String())
 		if err != nil {
 			if glog.V(LWARNING) {
 				glog.Warningln("socks5 connect:", err)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"github.com/golang/glog"
 	"io"
@@ -11,10 +10,10 @@ import (
 	"strings"
 )
 
-// socks://admin:123456@localhost:8080
+// socks://admin:123456@localhost:8080/tls
 type Args struct {
 	Addr      string // host:port
-	Protocol  string // protocol: hs/http/socks/socks5/ss, default is hs(http+socks5)
+	Protocol  string // protocol: http&socks5/http/socks/socks5/ss, default is http&socks5
 	Transport string // transport: tcp/ws/tls, default is tcp(raw tcp)
 	User      *url.Userinfo
 	EncMeth   string          // data encryption method
@@ -41,7 +40,7 @@ func parseArgs(rawurl string) (args []Args) {
 
 	for _, s := range ss {
 		if !strings.Contains(s, "://") {
-			s = "hs://" + s
+			s = "tcp://" + s
 		}
 		u, err := url.Parse(s)
 		if err != nil {
@@ -58,23 +57,23 @@ func parseArgs(rawurl string) (args []Args) {
 
 		schemes := strings.Split(u.Scheme, "+")
 		if len(schemes) == 1 {
-			switch schemes[0] {
-			case "http", "socks", "socks5", "ss":
-				arg.Protocol = schemes[0]
-			case "ws", "tls", "tcp":
-				arg.Transport = schemes[0]
-			}
+			arg.Protocol = schemes[0]
+			arg.Transport = schemes[0]
 		}
 		if len(schemes) == 2 {
 			arg.Protocol = schemes[0]
 			arg.Transport = schemes[1]
 		}
 
-		arg.Cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem")
-		if err != nil {
-			if glog.V(LFATAL) {
-				glog.Errorln(err, ", tls will not be supported")
-			}
+		switch arg.Protocol {
+		case "http", "socks", "socks5", "ss":
+		default:
+			arg.Protocol = ""
+		}
+		switch arg.Transport {
+		case "ws", "tls", "tcp":
+		default:
+			arg.Transport = "tcp"
 		}
 
 		mp := strings.Split(strings.Trim(u.Path, "/"), ":")
@@ -85,34 +84,20 @@ func parseArgs(rawurl string) (args []Args) {
 			arg.EncMeth = mp[0]
 			arg.EncPass = mp[1]
 		}
-		if glog.V(LINFO) {
-			glog.Infoln(arg)
+
+		if arg.Transport == "tls" || arg.EncMeth == "tls" {
+			arg.Cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem")
+			if err != nil {
+				if glog.V(LFATAL) {
+					glog.Errorln(err)
+				}
+				continue
+			}
 		}
 		args = append(args, arg)
 	}
 
 	return
-}
-
-func connect(addr string) (net.Conn, error) {
-	if !strings.Contains(addr, ":") {
-		addr += ":80"
-	}
-	/*
-		if proxyURL == nil {
-			return dial(addr)
-		}
-
-		switch proxyURL.Scheme {
-		case "socks": // socks5 proxy
-			return connectSocks5Proxy(addr)
-		case "http": // http proxy
-			fallthrough
-		default:
-			return connectHTTPProxy(addr)
-		}
-	*/
-	return nil, errors.New("not implemented")
 }
 
 // based on io.Copy
