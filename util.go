@@ -91,7 +91,6 @@ func parseArgs(rawurl string) (args []Args) {
 				if glog.V(LFATAL) {
 					glog.Errorln(err)
 				}
-				continue
 			}
 		}
 		args = append(args, arg)
