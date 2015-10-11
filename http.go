@@ -80,7 +80,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			return
 		}
 	} else {
-		if len(proxyArgs) > 0 {
+		if len(proxyArgs) > 0 || len(forwardArgs) > 0 {
 			err = req.WriteProxy(c)
 		} else {
 			err = req.Write(c)
@@ -92,7 +92,6 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			return
 		}
 	}
-
 	Transport(conn, c)
 }
 

@@ -85,7 +85,7 @@ func (selector *serverSelector) Methods() []uint8 {
 
 func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 	if glog.V(LDEBUG) {
-		glog.Infof("%x %x % x", gosocks5.Ver5, len(methods), methods)
+		glog.Infof("%d %d % d", gosocks5.Ver5, len(methods), methods)
 	}
 
 	method = gosocks5.MethodNoAcceptable
@@ -94,11 +94,12 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 		for _, mm := range selector.methods {
 			if m == mm {
 				method = m
-				break
+				goto out
 			}
 		}
 	}
 
+out:
 	if method == gosocks5.MethodNoAcceptable {
 		return
 	}
@@ -117,7 +118,7 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 
 func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	if glog.V(LDEBUG) {
-		glog.Infof("%x %x", gosocks5.Ver5, method)
+		glog.Infof("%d %d", gosocks5.Ver5, method)
 	}
 
 	switch method {
@@ -178,6 +179,23 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 	return conn, nil
 }
 
+func requestSocks5(conn net.Conn, req *gosocks5.Request) (*gosocks5.Reply, error) {
+	if err := req.Write(conn); err != nil {
+		return nil, err
+	}
+	if glog.V(LDEBUG) {
+		glog.Infoln(req.String())
+	}
+	rep, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		return nil, err
+	}
+	if glog.V(LDEBUG) {
+		glog.Infoln(rep.String())
+	}
+	return rep, nil
+}
+
 func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 	if glog.V(LDEBUG) {
 		glog.Infoln(req)
@@ -218,10 +236,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 				glog.Infoln(rep)
 			}
 		}
-
-		if err := Transport(conn, tconn); err != nil {
-			//log.Println(err)
-		}
+		Transport(conn, tconn)
 	case gosocks5.CmdBind:
 		l, err := net.ListenTCP("tcp", nil)
 		if err != nil {

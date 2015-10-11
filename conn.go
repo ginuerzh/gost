@@ -92,7 +92,8 @@ func handleConn(conn net.Conn, arg Args) {
 
 	selector := &serverSelector{
 		methods: []uint8{
-			gosocks5.MethodNoAuth, gosocks5.MethodUserPass,
+			gosocks5.MethodNoAuth,
+			gosocks5.MethodUserPass,
 		},
 		arg: arg,
 	}
@@ -215,32 +216,40 @@ func connect(connType, addr string) (conn net.Conn, err error) {
 		addr += ":80"
 	}
 
+	if len(proxyArgs) > 0 && len(forwardArgs) > 0 {
+		return connectProxyForward(connType, addr, proxyArgs[0], forwardArgs[0])
+	}
+
 	if len(forwardArgs) > 0 {
 		// TODO: multi-foward
 		forward := forwardArgs[0]
-		return connectForward(addr, forward)
+		return connectForward(connType, addr, forward)
 	}
 
 	if len(proxyArgs) > 0 {
 		proxy := proxyArgs[0]
-		return connectProxy(connType, addr, proxy)
+		return connectForward(connType, addr, proxy)
 	}
 
 	return net.Dial("tcp", addr)
 }
 
-func connectProxy(connType, addr string, proxy Args) (conn net.Conn, err error) {
+func connectProxyForward(connType, addr string, proxy, forward Args) (conn net.Conn, err error) {
+	return nil, errors.New("Not implemented")
+}
+
+func connectForward(connType, addr string, forward Args) (conn net.Conn, err error) {
 	if glog.V(LINFO) {
-		glog.Infoln("connect proxy:", proxy.Addr)
+		glog.Infoln(forward.Protocol, "forward:", forward.Addr)
 	}
-	conn, err = net.Dial("tcp", proxy.Addr)
+	conn, err = net.Dial("tcp", forward.Addr)
 	if err != nil {
 		return
 	}
 
-	switch proxy.Transport {
+	switch forward.Transport {
 	case "ws": // websocket connection
-		c, err := wsClient(conn, proxy.Addr)
+		c, err := wsClient(conn, forward.Addr)
 		if err != nil {
 			conn.Close()
 			return nil, err
@@ -253,16 +262,16 @@ func connectProxy(connType, addr string, proxy Args) (conn net.Conn, err error) 
 	default:
 	}
 
-	switch proxy.Protocol {
+	switch forward.Protocol {
 	case "ss": // shadowsocks
 		conn.Close()
 		return nil, errors.New("Not implemented")
 	case "socks", "socks5":
 		selector := &clientSelector{
 			methods: []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
-			arg:     proxy,
+			arg:     forward,
 		}
-		if proxy.EncMeth == "tls" {
+		if forward.EncMeth == "tls" {
 			selector.methods = []uint8{MethodTLS, MethodTLSAuth}
 		}
 		c := gosocks5.ClientConn(conn, selector)
@@ -272,40 +281,26 @@ func connectProxy(connType, addr string, proxy Args) (conn net.Conn, err error) 
 		}
 		conn = c
 
-		if connType == ConnHttp || connType == ConnHttpConnect {
-			host, port, _ := net.SplitHostPort(addr)
-			p, _ := strconv.ParseUint(port, 10, 16)
-			r := gosocks5.NewRequest(gosocks5.CmdConnect, &gosocks5.Addr{
-				Type: gosocks5.AddrDomain,
-				Host: host,
-				Port: uint16(p),
-			})
-			if glog.V(LDEBUG) {
-				glog.Infoln(r.String())
-			}
-			if err := r.Write(conn); err != nil {
-				conn.Close()
-				return nil, err
-			}
-
-			rep, err := gosocks5.ReadReply(conn)
-			if err != nil {
-				conn.Close()
-				return nil, err
-			}
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep.String())
-			}
-
-			if rep.Rep != gosocks5.Succeeded {
-				conn.Close()
-				return nil, errors.New("Service unavailable")
-			}
+		host, port, _ := net.SplitHostPort(addr)
+		p, _ := strconv.ParseUint(port, 10, 16)
+		r := gosocks5.NewRequest(gosocks5.CmdConnect, &gosocks5.Addr{
+			Type: gosocks5.AddrDomain,
+			Host: host,
+			Port: uint16(p),
+		})
+		rep, err := requestSocks5(conn, r)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if rep.Rep != gosocks5.Succeeded {
+			conn.Close()
+			return nil, errors.New("Service unavailable")
 		}
 	case "http":
 		fallthrough
 	default:
-		if connType == ConnHttpConnect {
+		if connType == ConnHttpConnect || connType == ConnSocks5 {
 			req := &http.Request{
 				Method:     "CONNECT",
 				URL:        &url.URL{Host: addr},
@@ -315,9 +310,9 @@ func connectProxy(connType, addr string, proxy Args) (conn net.Conn, err error) 
 				Header:     make(http.Header),
 			}
 			req.Header.Set("Proxy-Connection", "keep-alive")
-			if proxy.User != nil {
+			if forward.User != nil {
 				req.Header.Set("Proxy-Authorization",
-					"Basic "+base64.StdEncoding.EncodeToString([]byte(proxy.User.String())))
+					"Basic "+base64.StdEncoding.EncodeToString([]byte(forward.User.String())))
 			}
 			if err = req.Write(conn); err != nil {
 				conn.Close()
@@ -346,8 +341,4 @@ func connectProxy(connType, addr string, proxy Args) (conn net.Conn, err error) 
 	}
 
 	return
-}
-
-func connectForward(addr string, forward Args) (net.Conn, error) {
-	return nil, errors.New("Not implemented")
 }
