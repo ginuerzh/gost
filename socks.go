@@ -138,7 +138,7 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 			return nil, err
 		}
 		if glog.V(LDEBUG) {
-			glog.Infoln(req)
+			glog.Infoln(req.String())
 		}
 
 		var username, password string
@@ -206,7 +206,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 		if glog.V(LINFO) {
 			glog.Infoln("socks5 connect:", req.Addr.String())
 		}
-		tconn, err := connect(ConnSocks5, req.Addr.String())
+		tconn, err := connect(req.Addr.String())
 		if err != nil {
 			if glog.V(LWARNING) {
 				glog.Warningln("socks5 connect:", err)

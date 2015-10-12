@@ -19,11 +19,6 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		}
 	}
 
-	connType := ConnHttp
-	if req.Method == "CONNECT" {
-		connType = ConnHttpConnect
-	}
-
 	var username, password string
 	if arg.User != nil {
 		username = arg.User.Username()
@@ -52,7 +47,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		return
 	}
 
-	c, err := connect(connType, req.Host)
+	c, err := connect(req.Host)
 	if err != nil {
 		if glog.V(LWARNING) {
 			glog.Warningln(err)
@@ -67,7 +62,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 	}
 	defer c.Close()
 
-	if connType == ConnHttpConnect {
+	if req.Method == "CONNECT" {
 		b := []byte("HTTP/1.1 200 Connection established\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
 		if glog.V(LDEBUG) {
@@ -80,7 +75,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			return
 		}
 	} else {
-		if len(proxyArgs) > 0 || len(forwardArgs) > 0 {
+		if len(forwardArgs) > 0 {
 			err = req.WriteProxy(c)
 		} else {
 			err = req.Write(c)

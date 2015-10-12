@@ -10,6 +10,16 @@ import (
 	"strings"
 )
 
+type strSlice []string
+
+func (ss *strSlice) String() string {
+	return fmt.Sprintf("%s", *ss)
+}
+func (ss *strSlice) Set(value string) error {
+	*ss = append(*ss, value)
+	return nil
+}
+
 // socks://admin:123456@localhost:8080/tls
 type Args struct {
 	Addr      string // host:port
@@ -32,12 +42,7 @@ func (args Args) String() string {
 		args.EncMeth, args.EncPass)
 }
 
-func parseArgs(rawurl string) (args []Args) {
-	ss := strings.Split(rawurl, ",")
-	if rawurl == "" || len(ss) == 0 {
-		return nil
-	}
-
+func parseArgs(ss []string) (args []Args) {
 	for _, s := range ss {
 		if !strings.Contains(s, "://") {
 			s = "tcp://" + s

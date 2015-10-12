@@ -16,30 +16,30 @@ const (
 )
 
 var (
-	listenUrl, proxyUrl, forwardUrl string
-	pv                              bool // print version
+	listenAddr, forwardAddr strSlice
+	pv                      bool // print version
 
 	listenArgs  []Args
-	proxyArgs   []Args
 	forwardArgs []Args
 )
 
 func init() {
-	flag.StringVar(&listenUrl, "L", ":http", "local address")
-	flag.StringVar(&forwardUrl, "S", "", "remote address")
-	flag.StringVar(&proxyUrl, "P", "", "proxy address")
+	flag.Var(&listenAddr, "L", "listen address")
+	flag.Var(&forwardAddr, "F", "forward address, can make a forward chain")
 	flag.BoolVar(&pv, "V", false, "print version")
-
 	flag.Parse()
 
-	listenArgs = parseArgs(listenUrl)
-	proxyArgs = parseArgs(proxyUrl)
-	forwardArgs = parseArgs(forwardUrl)
+	listenArgs = parseArgs(listenAddr)
+	forwardArgs = parseArgs(forwardAddr)
 }
 
 func main() {
 	defer glog.Flush()
 
+	if flag.NFlag() == 0 {
+		flag.PrintDefaults()
+		return
+	}
 	if pv {
 		printVersion()
 		return
