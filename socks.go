@@ -45,7 +45,7 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		req := gosocks5.NewUserPassRequest(gosocks5.UserPassVer, username, password)
 		if err := req.Write(conn); err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln(err)
+				glog.Warningln("socks5 auth:", err)
 			}
 			return nil, err
 		}
@@ -56,7 +56,7 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		res, err := gosocks5.ReadUserPassResponse(conn)
 		if err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln(err)
+				glog.Warningln("socks5 auth:", err)
 			}
 			return nil, err
 		}
@@ -88,21 +88,14 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 		glog.Infof("%d %d % d", gosocks5.Ver5, len(methods), methods)
 	}
 
-	method = gosocks5.MethodNoAcceptable
-
+	method = gosocks5.MethodNoAuth
 	for _, m := range methods {
-		for _, mm := range selector.methods {
-			if m == mm {
-				method = m
-				goto out
-			}
+		if m == MethodTLS {
+			method = m
+			break
 		}
 	}
 
-out:
-	if method == gosocks5.MethodNoAcceptable {
-		return
-	}
 	// when user/pass is set, auth is mandatory
 	if selector.arg.User != nil {
 		if method == gosocks5.MethodNoAuth {
@@ -133,7 +126,7 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		req, err := gosocks5.ReadUserPassRequest(conn)
 		if err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln(err)
+				glog.Warningln("socks5 auth:", err)
 			}
 			return nil, err
 		}
@@ -151,12 +144,15 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
 				if glog.V(LWARNING) {
-					glog.Warningln(err)
+					glog.Warningln("socks5 auth:", err)
 				}
 				return nil, err
 			}
 			if glog.V(LDEBUG) {
 				glog.Infoln(resp)
+			}
+			if glog.V(LWARNING) {
+				glog.Warningln("socks5: proxy authentication required")
 			}
 			return nil, gosocks5.ErrAuthFailure
 		}
@@ -164,7 +160,7 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Succeeded)
 		if err := resp.Write(conn); err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln(err)
+				glog.Warningln("socks5 auth:", err)
 			}
 			return nil, err
 		}
@@ -231,11 +227,11 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 				glog.Warningln("socks5 connect:", err)
 			}
 			return
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
 		}
+		if glog.V(LDEBUG) {
+			glog.Infoln(rep)
+		}
+
 		Transport(conn, tconn)
 	case gosocks5.CmdBind:
 		l, err := net.ListenTCP("tcp", nil)
@@ -268,10 +264,9 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 			}
 			l.Close()
 			return
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
+		}
+		if glog.V(LDEBUG) {
+			glog.Infoln(rep)
 		}
 
 		tconn, err := l.AcceptTCP()
@@ -304,10 +299,9 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn, arg Args) {
 				glog.Warningln("socks5 bind accept:", err)
 			}
 			return
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
+		}
+		if glog.V(LDEBUG) {
+			glog.Infoln(rep)
 		}
 
 		if err := Transport(conn, tconn); err != nil {

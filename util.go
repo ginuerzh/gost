@@ -73,7 +73,7 @@ func parseArgs(ss []string) (args []Args) {
 		switch arg.Protocol {
 		case "http", "socks", "socks5", "ss":
 		default:
-			arg.Protocol = ""
+			arg.Protocol = "default"
 		}
 		switch arg.Transport {
 		case "ws", "tls", "tcp":
@@ -90,12 +90,9 @@ func parseArgs(ss []string) (args []Args) {
 			arg.EncPass = mp[1]
 		}
 
-		if arg.Transport == "tls" || arg.EncMeth == "tls" {
-			arg.Cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem")
-			if err != nil {
-				if glog.V(LFATAL) {
-					glog.Errorln(err)
-				}
+		if arg.Cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem"); err != nil {
+			if glog.V(LFATAL) {
+				glog.Fatalln(err)
 			}
 		}
 		args = append(args, arg)

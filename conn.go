@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -15,41 +14,22 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
-const (
-	ConnHttp        = "http"
-	ConnHttpConnect = "http-connect"
-	ConnSocks5      = "socks5"
+var (
+	connCounter int32
 )
 
 func listenAndServe(arg Args) error {
 	var ln net.Listener
 	var err error
 
-	if glog.V(3) {
-		b := bytes.Buffer{}
-		b.WriteString("listen on %s, use %s tunnel and %s protocol for data transport. ")
-		if arg.EncMeth == "tls" {
-			b.WriteString("for socks5, tls encrypt method is supported.")
-		} else {
-			b.WriteString("for socks5, tls encrypt method is NOT supported.")
-		}
-		protocol := arg.Protocol
-		if protocol == "" {
-			protocol = "http/socks5"
-		}
-		glog.Infof(b.String(), arg.Addr, arg.Transport, protocol)
-
-	}
-
 	switch arg.Transport {
 	case "ws": // websocket connection
 		err = NewWs(arg).ListenAndServe()
-		if err != nil {
-			if glog.V(LFATAL) {
-				glog.Errorln(err)
-			}
+		if err != nil && glog.V(LFATAL) {
+			glog.Errorln(err)
 		}
 		return err
 	case "tls": // tls connection
@@ -78,9 +58,6 @@ func listenAndServe(arg Args) error {
 			}
 			continue
 		}
-		if glog.V(LINFO) {
-			glog.Infoln("accept", conn.RemoteAddr())
-		}
 		go handleConn(conn, arg)
 	}
 
@@ -88,18 +65,28 @@ func listenAndServe(arg Args) error {
 }
 
 func handleConn(conn net.Conn, arg Args) {
+	atomic.AddInt32(&connCounter, 1)
+	if glog.V(LINFO) {
+		glog.Infof("%s connected, connections: %d",
+			conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
+	}
+	if glog.V(LINFO) {
+		defer func() {
+			glog.Infof("%s disconnected, connections: %d",
+				conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
+		}()
+	}
+	defer atomic.AddInt32(&connCounter, -1)
 	defer conn.Close()
 
 	selector := &serverSelector{
 		methods: []uint8{
 			gosocks5.MethodNoAuth,
 			gosocks5.MethodUserPass,
+			MethodTLS,
+			MethodTLSAuth,
 		},
 		arg: arg,
-	}
-
-	if arg.EncMeth == "tls" {
-		selector.methods = append(selector.methods, MethodTLS, MethodTLSAuth)
 	}
 
 	switch arg.Protocol {
@@ -109,7 +96,7 @@ func handleConn(conn net.Conn, arg Args) {
 		req, err := http.ReadRequest(bufio.NewReader(conn))
 		if err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln(err)
+				glog.Warningln("http:", err)
 			}
 			return
 		}
@@ -135,7 +122,7 @@ func handleConn(conn net.Conn, arg Args) {
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
 		if glog.V(LWARNING) {
-			glog.Warningln(err)
+			glog.Warningln("client:", err)
 		}
 		return
 	}
@@ -182,7 +169,7 @@ func handleConn(conn net.Conn, arg Args) {
 	req, err := http.ReadRequest(bufio.NewReader(newReqReader(b[:n], conn)))
 	if err != nil {
 		if glog.V(LWARNING) {
-			glog.Warningln(err)
+			glog.Warningln("http:", err)
 		}
 		return
 	}
@@ -292,11 +279,12 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 		return nil, errors.New("Not implemented")
 	case "socks", "socks5":
 		selector := &clientSelector{
-			methods: []uint8{gosocks5.MethodNoAuth, gosocks5.MethodUserPass},
-			arg:     arg,
-		}
-		if arg.EncMeth == "tls" {
-			selector.methods = []uint8{MethodTLS, MethodTLSAuth}
+			methods: []uint8{
+				gosocks5.MethodNoAuth,
+				gosocks5.MethodUserPass,
+				MethodTLS,
+			},
+			arg: arg,
 		}
 		c := gosocks5.ClientConn(conn, selector)
 		if err := c.Handleshake(); err != nil {
