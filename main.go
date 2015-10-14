@@ -28,9 +28,6 @@ func init() {
 	flag.Var(&forwardAddr, "F", "forward address, can make a forward chain")
 	flag.BoolVar(&pv, "V", false, "print version")
 	flag.Parse()
-
-	listenArgs = parseArgs(listenAddr)
-	forwardArgs = parseArgs(forwardAddr)
 }
 
 func main() {
@@ -44,6 +41,9 @@ func main() {
 		printVersion()
 		return
 	}
+
+	listenArgs = parseArgs(listenAddr)
+	forwardArgs = parseArgs(forwardAddr)
 
 	if len(listenArgs) == 0 {
 		glog.Fatalln("no listen addr")
