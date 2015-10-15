@@ -111,7 +111,7 @@ func handleConn(conn net.Conn, arg Args) {
 			}
 			return
 		}
-		handleSocks5Request(req, conn, arg)
+		handleSocks5Request(req, conn)
 		return
 	}
 
@@ -162,7 +162,7 @@ func handleConn(conn net.Conn, arg Args) {
 			}
 			return
 		}
-		handleSocks5Request(req, conn, arg)
+		handleSocks5Request(req, conn)
 		return
 	}
 
@@ -198,41 +198,43 @@ func (r *reqReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func connect(addr string) (conn net.Conn, err error) {
+func Connect(addr string) (conn net.Conn, err error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
 	if len(forwardArgs) == 0 {
 		return net.Dial("tcp", addr)
 	}
-	return forwardChain(addr, forwardArgs[0], forwardArgs[1:]...)
-}
 
-func forwardChain(addr string, level1 Args, chain ...Args) (conn net.Conn, err error) {
-	if glog.V(LINFO) {
-		glog.Infof("forward: %s/%s %s", level1.Protocol, level1.Transport, level1.Addr)
-	}
-	if conn, err = net.Dial("tcp", level1.Addr); err != nil {
-		return
-	}
-	c, err := forward(conn, level1)
+	var end Args
+	conn, end, err = forwardChain(forwardArgs...)
 	if err != nil {
+		if conn != nil {
+			conn.Close()
+		}
+		return nil, err
+	}
+	if err := establish(conn, addr, end); err != nil {
 		conn.Close()
 		return nil, err
 	}
-	conn = c
+	return conn, nil
+}
 
-	if len(chain) == 0 {
-		if err := establish(conn, addr, level1); err != nil {
-			conn.Close()
-			return nil, err
-		}
+func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
+	end = chain[0]
+	if conn, err = net.Dial("tcp", end.Addr); err != nil {
 		return
 	}
+	c, err := forward(conn, end)
+	if err != nil {
+		return
+	}
+	conn = c
 
-	cur := level1
+	chain = chain[1:]
 	for _, arg := range chain {
-		if err = establish(conn, arg.Addr, cur); err != nil {
+		if err = establish(conn, arg.Addr, end); err != nil {
 			goto exit
 		}
 
@@ -241,26 +243,18 @@ func forwardChain(addr string, level1 Args, chain ...Args) (conn net.Conn, err e
 			goto exit
 		}
 		conn = c
-		cur = arg
+		end = arg
 	}
 
 exit:
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	if err := establish(conn, addr, cur); err != nil {
-		conn.Close()
-		return nil, err
-	}
-
 	return
 }
 
 func forward(conn net.Conn, arg Args) (net.Conn, error) {
 	var err error
-
+	if glog.V(LINFO) {
+		glog.Infof("forward: %s/%s %s", arg.Protocol, arg.Transport, arg.Addr)
+	}
 	switch arg.Transport {
 	case "ws": // websocket connection
 		conn, err = wsClient(conn, arg.Addr)
@@ -312,9 +306,18 @@ func establish(conn net.Conn, addr string, arg Args) error {
 			Host: host,
 			Port: uint16(p),
 		})
-		rep, err := requestSocks5(conn, req)
+		if err := req.Write(conn); err != nil {
+			return err
+		}
+		if glog.V(LDEBUG) {
+			glog.Infoln(req)
+		}
+		rep, err := gosocks5.ReadReply(conn)
 		if err != nil {
 			return err
+		}
+		if glog.V(LDEBUG) {
+			glog.Infoln(rep)
 		}
 		if rep.Rep != gosocks5.Succeeded {
 			return errors.New("Service unavailable")

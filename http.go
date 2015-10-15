@@ -47,7 +47,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		return
 	}
 
-	c, err := connect(req.Host)
+	c, err := Connect(req.Host)
 	if err != nil {
 		if glog.V(LWARNING) {
 			glog.Warningln(err)
