@@ -5,6 +5,8 @@ import (
 	"errors"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
+	"io"
+	"io/ioutil"
 	"net"
 	"strconv"
 )
@@ -218,12 +220,18 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 
 		Transport(conn, tconn)
 	case gosocks5.CmdBind:
+		if glog.V(LINFO) {
+			glog.Infoln("socks5 bind:", req.Addr)
+		}
 		if len(forwardArgs) > 0 {
 			forwardBind(req, conn)
 		} else {
 			serveBind(conn)
 		}
 	case gosocks5.CmdUdp:
+		if glog.V(LINFO) {
+			glog.Infoln("socks5 udp associate:", req.Addr)
+		}
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
 			if glog.V(LWARNING) {
@@ -246,7 +254,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
 		if glog.V(LINFO) {
-			glog.Infoln("socks5 udp:", addr)
+			glog.Infoln("socks5 udp listen:", addr)
 		}
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
@@ -259,8 +267,64 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 				glog.Infoln(rep)
 			}
 		}
+
 		srvTunnelUDP(conn, uconn)
 	}
+}
+
+func serveUDP(conn *net.UDPConn) {
+	if len(forwardArgs) > 0 {
+		fconn, _, err = forwardChain(forwardArgs...)
+		if err != nil {
+			if glog.V(LWARNING) {
+				glog.Warningln("socks5 udp forward:", err)
+			}
+			if fconn != nil {
+				fconn.Close()
+			}
+			return
+		}
+
+	}
+}
+
+func forwardUDP(req *gosocks5.Request) (conn net.Conn, err error) {
+
+	if err != nil {
+		if conn != nil {
+			conn.Close()
+		}
+		rep := gosocks5.NewReply(gosocks5.Failure, nil)
+		if err := rep.Write(conn); err != nil {
+			if glog.V(LWARNING) {
+				glog.Warningln("socks5 udp forward:", err)
+			}
+		} else {
+			if glog.V(LDEBUG) {
+				glog.Infoln(rep)
+			}
+		}
+		return
+	}
+
+	if err = req.Write(fconn); err != nil {
+		if glog.V(LWARNING) {
+			glog.Warningln("socks5 udp forward:", err)
+		}
+		return
+	}
+
+	if err = peekReply(conn, fconn); err != nil {
+		if glog.V(LWARNING) {
+			glog.Warningln("socks5 udp forward:", err)
+		}
+		return
+	}
+
+}
+
+func transportUDP() {
+
 }
 
 func serveBind(conn net.Conn) error {
@@ -339,15 +403,15 @@ func serveBind(conn net.Conn) error {
 }
 
 func forwardBind(req *gosocks5.Request, conn net.Conn) error {
-	fc, _, err := forwardChain(forwardArgs...)
+	fconn, _, err := forwardChain(forwardArgs...)
 	if err != nil {
-		if fc != nil {
-			fc.Close()
+		if fconn != nil {
+			fconn.Close()
 		}
 		rep := gosocks5.NewReply(gosocks5.Failure, nil)
 		if err := rep.Write(conn); err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln("socks5 bind:", err)
+				glog.Warningln("socks5 bind forward:", err)
 			}
 		} else {
 			if glog.V(LDEBUG) {
@@ -356,11 +420,11 @@ func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 		}
 		return err
 	}
-	defer fc.Close()
+	defer fconn.Close()
 
-	if err := req.Write(fc); err != nil {
+	if err := req.Write(fconn); err != nil {
 		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind:", err)
+			glog.Warningln("socks5 bind forward:", err)
 		}
 		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 		return err
@@ -370,64 +434,91 @@ func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 	}
 
 	// first reply
-	if err := peekBindReply(conn, fc); err != nil {
+	if err := peekReply(conn, fconn); err != nil {
+		if glog.V(LWARNING) {
+			glog.Warningln("socks5 bind forward:", err)
+		}
 		return err
 	}
 	// second reply
-	if err := peekBindReply(conn, fc); err != nil {
+	if err := peekReply(conn, fconn); err != nil {
+		if glog.V(LWARNING) {
+			glog.Warningln("socks5 bind forward:", err)
+		}
 		return err
 	}
 
-	return Transport(conn, fc)
+	return Transport(conn, fconn)
 }
 
-func peekBindReply(conn, fc net.Conn) error {
-	rep, err := gosocks5.ReadReply(fc)
+func peekReply(dst io.Writer, src io.Reader) error {
+	rep, err := gosocks5.ReadReply(src)
 	if err != nil {
 		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind:", err)
+			glog.Warningln(err)
 		}
 		rep = gosocks5.NewReply(gosocks5.Failure, nil)
 	}
-	if err := rep.Write(conn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind:", err)
-		}
+	if err := rep.Write(dst); err != nil {
 		return err
 	}
 	if glog.V(LDEBUG) {
 		glog.Infoln(rep)
 	}
 	if rep.Rep != gosocks5.Succeeded {
-		return errors.New("Bind failure")
+		return errors.New("Failure")
 	}
 
 	return nil
 }
 
-/*
-func forwardUDP() error {
-	fc, _, err := forwardChain(forwardArgs...)
-	if err != nil {
-		if fc != nil {
-			fc.Close()
-		}
-		rep := gosocks5.NewReply(gosocks5.Failure, nil)
-		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 bind:", err)
-			}
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
-		}
-		return err
-	}
-	defer fc.Close()
+func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
+	var raddr *net.UDPAddr
 
+	go func() {
+		b := make([]byte, 16*1024)
+		for {
+			n, addr, err := uconn.ReadFromUDP(b)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			raddr = addr
+			r := bytes.NewBuffer(b[:n])
+			udp, err := gosocks5.ReadUDPDatagram(r)
+			if err != nil {
+				return
+			}
+			udp.Header.Rsv = uint16(len(udp.Data))
+			//log.Println("r", raddr.String(), udp.Header)
+
+			if err := udp.Write(sconn); err != nil {
+				log.Println(err)
+				return
+			}
+		}
+	}()
+
+	for {
+		b := lpool.Take()
+		defer lpool.put(b)
+
+		udp, err := gosocks5.ReadUDPDatagram(sconn)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		//log.Println("w", udp.Header)
+		udp.Header.Rsv = 0
+		buf := bytes.NewBuffer(b[0:0])
+		udp.Write(buf)
+		if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
+			log.Println(err)
+			return
+		}
+	}
 }
-*/
+
 func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
 	go func() {
 		b := make([]byte, 16*1024)

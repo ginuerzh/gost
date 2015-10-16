@@ -3,6 +3,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/golang/glog"
 	"sync"
 )
@@ -15,6 +16,10 @@ const (
 	LDEBUG
 )
 
+const (
+	Version = "2.0"
+)
+
 var (
 	listenAddr, forwardAddr strSlice
 	pv                      bool // print version
@@ -24,7 +29,7 @@ var (
 )
 
 func init() {
-	flag.Var(&listenAddr, "L", "listen address")
+	flag.Var(&listenAddr, "L", "listen address, can listen on multiple ports")
 	flag.Var(&forwardAddr, "F", "forward address, can make a forward chain")
 	flag.BoolVar(&pv, "V", false, "print version")
 	flag.Parse()
@@ -38,7 +43,7 @@ func main() {
 		return
 	}
 	if pv {
-		printVersion()
+		fmt.Println("gost", Version)
 		return
 	}
 
