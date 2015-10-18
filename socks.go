@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"github.com/ginuerzh/gosocks5"
@@ -268,24 +269,90 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			}
 		}
 
-		srvTunnelUDP(conn, uconn)
-	}
-}
+		clientConn, dgram, err := createClientConn(conn, uconn)
+		if err != nil {
+			if glog.V(LWARNING) {
+				glog.Warningln("socks5 udp:", err)
+			}
+			return
+		}
+		if glog.V(LDEBUG) {
+			glog.Infof("[udp] length %d, to %s", len(dgram.Data), dgram.Header.Addr)
+		}
 
-func serveUDP(conn *net.UDPConn) {
-	if len(forwardArgs) > 0 {
-		fconn, _, err = forwardChain(forwardArgs...)
+		serverConn, err := createServerConn(uconn)
 		if err != nil {
 			if glog.V(LWARNING) {
 				glog.Warningln("socks5 udp forward:", err)
 			}
-			if fconn != nil {
-				fconn.Close()
-			}
+		}
+	default:
+		if glog.V(LWARNING) {
+			glog.Warningln("Unrecognized request: ", req)
+		}
+	}
+}
+
+func createClientConn(conn net.Conn, uconn *net.UDPConn) (c *UDPConn, dgram *gosocks5.UDPDatagram, err error) {
+	var raddr *net.UDPAddr
+	dgramChan := make(chan *gosocks5.UDPDatagram, 1)
+	errChan := make(chan error, 1)
+	go func() {
+		b := make([]byte, 64*1024+262)
+
+		n, addr, err := uconn.ReadFromUDP(b)
+		if err != nil {
+			errChan <- err
 			return
 		}
+		raddr = addr
 
+		dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
+		if err != nil {
+			errChan <- err
+			return
+		}
+		dgramChan <- dgram
+	}()
+
+	go func() {
+		dgram, err := gosocks5.ReadUDPDatagram(conn)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		dgramChan <- dgram
+	}()
+
+	select {
+	case dgram = <-dgramChan:
+		if raddr != nil {
+			c = Client(uconn, raddr)
+		} else {
+			c = Client(conn, nil)
+		}
+	case err = <-errChan:
 	}
+
+	return
+}
+
+func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
+	if len(forwardArgs) == 0 {
+		c = Server(uconn)
+		return
+	}
+
+	fconn, _, err := forwardChain(forwardArgs...)
+	if err != nil {
+		if fconn != nil {
+			fconn.Close()
+		}
+		return
+	}
+
+	c = Server(fconn)
+	return
 }
 
 func forwardUDP(req *gosocks5.Request) (conn net.Conn, err error) {
