@@ -51,7 +51,7 @@ func main() {
 	forwardArgs = parseArgs(forwardAddr)
 
 	if len(listenArgs) == 0 {
-		glog.Fatalln("no listen addr")
+		glog.Exitln("no listen addr")
 	}
 
 	var wg sync.WaitGroup

@@ -7,7 +7,6 @@ import (
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"io"
-	"io/ioutil"
 	"net"
 	"strconv"
 )
@@ -269,7 +268,8 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			}
 		}
 
-		clientConn, dgram, err := createClientConn(conn, uconn)
+		//clientConn, dgram, err := createClientConn(conn, uconn)
+		_, dgram, err := createClientConn(conn, uconn)
 		if err != nil {
 			if glog.V(LWARNING) {
 				glog.Warningln("socks5 udp:", err)
@@ -280,7 +280,8 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			glog.Infof("[udp] length %d, to %s", len(dgram.Data), dgram.Header.Addr)
 		}
 
-		serverConn, err := createServerConn(uconn)
+		//serverConn, err := createServerConn(uconn)
+		_, err = createServerConn(uconn)
 		if err != nil {
 			if glog.V(LWARNING) {
 				glog.Warningln("socks5 udp forward:", err)
@@ -355,6 +356,7 @@ func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
 	return
 }
 
+/*
 func forwardUDP(req *gosocks5.Request) (conn net.Conn, err error) {
 
 	if err != nil {
@@ -389,11 +391,7 @@ func forwardUDP(req *gosocks5.Request) (conn net.Conn, err error) {
 	}
 
 }
-
-func transportUDP() {
-
-}
-
+*/
 func serveBind(conn net.Conn) error {
 	l, err := net.ListenTCP("tcp", nil)
 	if err != nil {
@@ -539,6 +537,7 @@ func peekReply(dst io.Writer, src io.Reader) error {
 	return nil
 }
 
+/*
 func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
 	var raddr *net.UDPAddr
 
@@ -636,7 +635,7 @@ func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
 		}
 	}
 }
-
+*/
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 	host, port, _ := net.SplitHostPort(addr.String())
 	p, _ := strconv.Atoi(port)
