@@ -91,6 +91,7 @@ func handleConn(conn net.Conn, arg Args) {
 
 	switch arg.Protocol {
 	case "ss": // shadowsocks
+		handleShadow(conn, arg)
 		return
 	case "http":
 		req, err := http.ReadRequest(bufio.NewReader(conn))
@@ -253,7 +254,11 @@ exit:
 func forward(conn net.Conn, arg Args) (net.Conn, error) {
 	var err error
 	if glog.V(LINFO) {
-		glog.Infof("forward: %s/%s %s", arg.Protocol, arg.Transport, arg.Addr)
+		proto := arg.Protocol
+		if proto == "default" {
+			proto = "http" // default is http
+		}
+		glog.Infof("forward: %s/%s %s", proto, arg.Transport, arg.Addr)
 	}
 	switch arg.Transport {
 	case "ws": // websocket connection

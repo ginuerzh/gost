@@ -92,8 +92,6 @@ type Args struct {
 	Protocol  string // protocol: http&socks5/http/socks/socks5/ss, default is http&socks5
 	Transport string // transport: tcp/ws/tls, default is tcp(raw tcp)
 	User      *url.Userinfo
-	EncMeth   string          // data encryption method, shadowsocks only
-	EncPass   string          // data encryption password, shadowsocks only
 	Cert      tls.Certificate // tls certificate
 }
 
@@ -103,9 +101,8 @@ func (args Args) String() string {
 		authUser = args.User.Username()
 		authPass, _ = args.User.Password()
 	}
-	return fmt.Sprintf("host: %s, proto: %s, trans: %s, auth: %s:%s, enc: %s:%s",
-		args.Addr, args.Protocol, args.Transport, authUser, authPass,
-		args.EncMeth, args.EncPass)
+	return fmt.Sprintf("host: %s, protocol: %s, transport: %s, auth: %s:%s",
+		args.Addr, args.Protocol, args.Transport, authUser, authPass)
 }
 
 func parseArgs(ss []string) (args []Args) {
@@ -146,15 +143,6 @@ func parseArgs(ss []string) (args []Args) {
 		case "ws", "tls", "tcp":
 		default:
 			arg.Transport = "tcp"
-		}
-
-		mp := strings.Split(strings.Trim(u.Path, "/"), ":")
-		if len(mp) == 1 {
-			arg.EncMeth = mp[0]
-		}
-		if len(mp) == 2 {
-			arg.EncMeth = mp[0]
-			arg.EncPass = mp[1]
 		}
 
 		args = append(args, arg)
