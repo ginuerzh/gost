@@ -47,27 +47,19 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 
 		req := gosocks5.NewUserPassRequest(gosocks5.UserPassVer, username, password)
 		if err := req.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 auth:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 auth:", err)
 			return nil, err
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(req)
-		}
+		glog.V(LDEBUG).Infoln(req)
 
-		res, err := gosocks5.ReadUserPassResponse(conn)
+		resp, err := gosocks5.ReadUserPassResponse(conn)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 auth:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 auth:", err)
 			return nil, err
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(res)
-		}
+		glog.V(LDEBUG).Infoln(resp)
 
-		if res.Status != gosocks5.Succeeded {
+		if resp.Status != gosocks5.Succeeded {
 			return nil, gosocks5.ErrAuthFailure
 		}
 	case gosocks5.MethodNoAcceptable:
@@ -87,9 +79,7 @@ func (selector *serverSelector) Methods() []uint8 {
 }
 
 func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
-	if glog.V(LDEBUG) {
-		glog.Infof("%d %d % d", gosocks5.Ver5, len(methods), methods)
-	}
+	glog.V(LDEBUG).Infof("%d %d % d", gosocks5.Ver5, len(methods), methods)
 
 	method = gosocks5.MethodNoAuth
 	for _, m := range methods {
@@ -113,9 +103,7 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 }
 
 func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
-	if glog.V(LDEBUG) {
-		glog.Infof("%d %d", gosocks5.Ver5, method)
-	}
+	glog.V(LDEBUG).Infof("%d %d", gosocks5.Ver5, method)
 
 	switch method {
 	case MethodTLS:
@@ -128,14 +116,10 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 
 		req, err := gosocks5.ReadUserPassRequest(conn)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 auth:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 auth:", err)
 			return nil, err
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(req.String())
-		}
+		glog.V(LDEBUG).Infoln(req.String())
 
 		var username, password string
 		if selector.arg.User != nil {
@@ -146,30 +130,21 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		if (username != "" && req.Username != username) || (password != "" && req.Password != password) {
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
-				if glog.V(LWARNING) {
-					glog.Warningln("socks5 auth:", err)
-				}
+				glog.V(LWARNING).Infoln("socks5 auth:", err)
 				return nil, err
 			}
-			if glog.V(LDEBUG) {
-				glog.Infoln(resp)
-			}
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5: proxy authentication required")
-			}
+			glog.V(LDEBUG).Infoln(resp)
+			glog.V(LWARNING).Infoln("socks5: proxy authentication required")
+
 			return nil, gosocks5.ErrAuthFailure
 		}
 
 		resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Succeeded)
 		if err := resp.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 auth:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 auth:", err)
 			return nil, err
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(resp)
-		}
+		glog.V(LDEBUG).Infoln(resp)
 
 	case gosocks5.MethodNoAcceptable:
 		return nil, gosocks5.ErrBadMethod
@@ -179,29 +154,20 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 }
 
 func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
-	if glog.V(LDEBUG) {
-		glog.Infoln(req)
-	}
+	glog.V(LDEBUG).Infoln(req)
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
-		if glog.V(LINFO) {
-			glog.Infoln("socks5 connect:", req.Addr.String())
-		}
+		glog.V(LINFO).Infoln(">>> socks5 connect:", req.Addr.String())
+
 		tconn, err := Connect(req.Addr.String())
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 connect:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 connect:", err)
 			rep := gosocks5.NewReply(gosocks5.HostUnreachable, nil)
 			if err := rep.Write(conn); err != nil {
-				if glog.V(LWARNING) {
-					glog.Warningln("socks5 connect:", err)
-				}
+				glog.V(LWARNING).Infoln("socks5 connect:", err)
 			} else {
-				if glog.V(LDEBUG) {
-					glog.Infoln(rep)
-				}
+				glog.V(LDEBUG).Infoln(rep)
 			}
 			return
 		}
@@ -209,43 +175,31 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 
 		rep := gosocks5.NewReply(gosocks5.Succeeded, nil)
 		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 connect:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 connect:", err)
 			return
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(rep)
-		}
+		glog.V(LDEBUG).Infoln(rep)
 
 		Transport(conn, tconn)
 	case gosocks5.CmdBind:
-		if glog.V(LINFO) {
-			glog.Infoln("socks5 bind:", req.Addr)
-		}
+		glog.V(LINFO).Infoln(">>> socks5 bind:", req.Addr)
+
 		if len(forwardArgs) > 0 {
 			forwardBind(req, conn)
 		} else {
 			serveBind(conn)
 		}
 	case gosocks5.CmdUdp:
-		if glog.V(LINFO) {
-			glog.Infoln("socks5 udp associate:", req.Addr)
-		}
+		glog.V(LINFO).Infoln(">>> socks5 udp associate:", req.Addr)
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 udp listen:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 udp listen:", err)
+
 			rep := gosocks5.NewReply(gosocks5.Failure, nil)
 			if err := rep.Write(conn); err != nil {
-				if glog.V(LWARNING) {
-					glog.Warningln("socks5 udp listen:", err)
-				}
+				glog.V(LWARNING).Infoln("socks5 udp listen:", err)
 			} else {
-				if glog.V(LDEBUG) {
-					glog.Infoln(rep)
-				}
+				glog.V(LDEBUG).Infoln(rep)
 			}
 			return
 		}
@@ -253,45 +207,164 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		if glog.V(LINFO) {
-			glog.Infoln("socks5 udp listen:", addr)
-		}
+		glog.V(LINFO).Infoln("socks5 udp listen:", addr)
+
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 udp:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
+			glog.V(LDEBUG).Infoln(rep)
 		}
 
-		//clientConn, dgram, err := createClientConn(conn, uconn)
-		_, dgram, err := createClientConn(conn, uconn)
+		cc, dgram, err := createClientConn(conn, uconn)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 udp:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		if glog.V(LDEBUG) {
-			glog.Infof("[udp] length %d, to %s", len(dgram.Data), dgram.Header.Addr)
+		glog.V(LDEBUG).Infof("[udp] to %s, length %d", dgram.Header.Addr, len(dgram.Data))
+
+		raddr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+		if err != nil {
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			return
+		}
+		sc, err := createServerConn(uconn, raddr)
+		if err != nil {
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			return
 		}
 
-		//serverConn, err := createServerConn(uconn)
-		_, err = createServerConn(uconn)
+		if err = sc.WriteUDP(dgram); err != nil {
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			return
+		}
+		dgram, err = sc.ReadUDP()
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 udp forward:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			return
 		}
+		glog.V(LDEBUG).Infof("[udp] from %s, length %d", dgram.Header.Addr, len(dgram.Data))
+
+		if err = cc.WriteUDP(dgram); err != nil {
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			return
+		}
+
+		TransportUDP(cc, sc)
 	default:
-		if glog.V(LWARNING) {
-			glog.Warningln("Unrecognized request: ", req)
-		}
+		glog.V(LWARNING).Infoln("Unrecognized request: ", req)
 	}
+}
+
+func serveBind(conn net.Conn) error {
+	l, err := net.ListenTCP("tcp", nil)
+	if err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind listen:", err)
+
+		rep := gosocks5.NewReply(gosocks5.Failure, nil)
+		if err := rep.Write(conn); err != nil {
+			glog.V(LWARNING).Infoln("socks5 bind listen:", err)
+		} else {
+			glog.V(LDEBUG).Infoln(rep)
+		}
+		return err
+	}
+
+	addr := ToSocksAddr(l.Addr())
+	// Issue: may not reachable when host has two interfaces
+	addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
+	glog.V(LINFO).Infoln("socks5 bind:", addr)
+
+	rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
+	if err := rep.Write(conn); err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind:", err)
+		l.Close()
+		return err
+	}
+	glog.V(LDEBUG).Infoln(rep)
+
+	tconn, err := l.AcceptTCP()
+	l.Close() // only accept one peer
+	if err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind accept:", err)
+
+		rep = gosocks5.NewReply(gosocks5.Failure, nil)
+		if err := rep.Write(conn); err != nil {
+			glog.V(LWARNING).Infoln("socks5 bind accept:", err)
+		} else {
+			glog.V(LDEBUG).Infoln(rep)
+		}
+		return err
+	}
+	defer tconn.Close()
+
+	addr = ToSocksAddr(tconn.RemoteAddr())
+	glog.V(LINFO).Infoln("socks5 bind accept:", addr.String())
+
+	rep = gosocks5.NewReply(gosocks5.Succeeded, addr)
+	if err := rep.Write(conn); err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind accept:", err)
+		return err
+	}
+	glog.V(LDEBUG).Infoln(rep)
+
+	return Transport(conn, tconn)
+}
+
+func forwardBind(req *gosocks5.Request, conn net.Conn) error {
+	fconn, _, err := forwardChain(forwardArgs...)
+	if err != nil {
+		if fconn != nil {
+			fconn.Close()
+		}
+		rep := gosocks5.NewReply(gosocks5.Failure, nil)
+		if err := rep.Write(conn); err != nil {
+			glog.V(LWARNING).Infoln("socks5 bind forward:", err)
+		} else {
+			glog.V(LDEBUG).Infoln(rep)
+		}
+		return err
+	}
+	defer fconn.Close()
+
+	if err := req.Write(fconn); err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind forward:", err)
+		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
+		return err
+	}
+	glog.V(LDEBUG).Infoln(req)
+
+	// first reply
+	if err := peekReply(conn, fconn); err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind forward:", err)
+		return err
+	}
+	// second reply
+	if err := peekReply(conn, fconn); err != nil {
+		glog.V(LWARNING).Infoln("socks5 bind forward:", err)
+		return err
+	}
+
+	return Transport(conn, fconn)
+}
+
+func peekReply(dst io.Writer, src io.Reader) error {
+	rep, err := gosocks5.ReadReply(src)
+	if err != nil {
+		glog.V(LWARNING).Infoln(err)
+		rep = gosocks5.NewReply(gosocks5.Failure, nil)
+	}
+	if err := rep.Write(dst); err != nil {
+		return err
+	}
+	glog.V(LDEBUG).Infoln(rep)
+
+	if rep.Rep != gosocks5.Succeeded {
+		return errors.New("Failure")
+	}
+
+	return nil
 }
 
 func createClientConn(conn net.Conn, uconn *net.UDPConn) (c *UDPConn, dgram *gosocks5.UDPDatagram, err error) {
@@ -338,7 +411,7 @@ func createClientConn(conn net.Conn, uconn *net.UDPConn) (c *UDPConn, dgram *gos
 	return
 }
 
-func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
+func createServerConn(uconn *net.UDPConn, addr net.Addr) (c *UDPConn, err error) {
 	if len(forwardArgs) == 0 {
 		c = Server(uconn)
 		return
@@ -351,291 +424,30 @@ func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
 		}
 		return
 	}
+	glog.V(LINFO).Infoln("forward udp associate")
+
+	req := gosocks5.NewRequest(gosocks5.CmdUdp, nil)
+	if err = req.Write(fconn); err != nil {
+		fconn.Close()
+		return
+	}
+	glog.V(LDEBUG).Infoln(req)
+
+	rep, err := gosocks5.ReadReply(fconn)
+	if err != nil {
+		fconn.Close()
+		return
+	}
+	glog.V(LDEBUG).Infoln(rep)
+	if rep.Rep != gosocks5.Succeeded {
+		fconn.Close()
+		return nil, errors.New("Failure")
+	}
 
 	c = Server(fconn)
 	return
 }
 
-/*
-func forwardUDP(req *gosocks5.Request) (conn net.Conn, err error) {
-
-	if err != nil {
-		if conn != nil {
-			conn.Close()
-		}
-		rep := gosocks5.NewReply(gosocks5.Failure, nil)
-		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 udp forward:", err)
-			}
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
-		}
-		return
-	}
-
-	if err = req.Write(fconn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 udp forward:", err)
-		}
-		return
-	}
-
-	if err = peekReply(conn, fconn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 udp forward:", err)
-		}
-		return
-	}
-
-}
-*/
-func serveBind(conn net.Conn) error {
-	l, err := net.ListenTCP("tcp", nil)
-	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind listen:", err)
-		}
-		rep := gosocks5.NewReply(gosocks5.Failure, nil)
-		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 bind listen:", err)
-			}
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
-		}
-		return err
-	}
-
-	addr := ToSocksAddr(l.Addr())
-	// Issue: may not reachable when host has two interfaces
-	addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-	if glog.V(LINFO) {
-		glog.Infoln("socks5 bind:", addr)
-	}
-	rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
-	if err := rep.Write(conn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind:", err)
-		}
-		l.Close()
-		return err
-	}
-	if glog.V(LDEBUG) {
-		glog.Infoln(rep)
-	}
-
-	tconn, err := l.AcceptTCP()
-	l.Close() // only accept one peer
-	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind accept:", err)
-		}
-		rep = gosocks5.NewReply(gosocks5.Failure, nil)
-		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 bind accept:", err)
-			}
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
-		}
-		return err
-	}
-	defer tconn.Close()
-
-	addr = ToSocksAddr(tconn.RemoteAddr())
-	if glog.V(LINFO) {
-		glog.Infoln("socks5 bind accept:", addr.String())
-	}
-	rep = gosocks5.NewReply(gosocks5.Succeeded, addr)
-	if err := rep.Write(conn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind accept:", err)
-		}
-		return err
-	}
-	if glog.V(LDEBUG) {
-		glog.Infoln(rep)
-	}
-
-	return Transport(conn, tconn)
-}
-
-func forwardBind(req *gosocks5.Request, conn net.Conn) error {
-	fconn, _, err := forwardChain(forwardArgs...)
-	if err != nil {
-		if fconn != nil {
-			fconn.Close()
-		}
-		rep := gosocks5.NewReply(gosocks5.Failure, nil)
-		if err := rep.Write(conn); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 bind forward:", err)
-			}
-		} else {
-			if glog.V(LDEBUG) {
-				glog.Infoln(rep)
-			}
-		}
-		return err
-	}
-	defer fconn.Close()
-
-	if err := req.Write(fconn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind forward:", err)
-		}
-		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
-		return err
-	}
-	if glog.V(LDEBUG) {
-		glog.Infoln(req)
-	}
-
-	// first reply
-	if err := peekReply(conn, fconn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind forward:", err)
-		}
-		return err
-	}
-	// second reply
-	if err := peekReply(conn, fconn); err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("socks5 bind forward:", err)
-		}
-		return err
-	}
-
-	return Transport(conn, fconn)
-}
-
-func peekReply(dst io.Writer, src io.Reader) error {
-	rep, err := gosocks5.ReadReply(src)
-	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln(err)
-		}
-		rep = gosocks5.NewReply(gosocks5.Failure, nil)
-	}
-	if err := rep.Write(dst); err != nil {
-		return err
-	}
-	if glog.V(LDEBUG) {
-		glog.Infoln(rep)
-	}
-	if rep.Rep != gosocks5.Succeeded {
-		return errors.New("Failure")
-	}
-
-	return nil
-}
-
-/*
-func cliTunnelUDP(uconn *net.UDPConn, sconn net.Conn) {
-	var raddr *net.UDPAddr
-
-	go func() {
-		b := make([]byte, 16*1024)
-		for {
-			n, addr, err := uconn.ReadFromUDP(b)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			raddr = addr
-			r := bytes.NewBuffer(b[:n])
-			udp, err := gosocks5.ReadUDPDatagram(r)
-			if err != nil {
-				return
-			}
-			udp.Header.Rsv = uint16(len(udp.Data))
-			//log.Println("r", raddr.String(), udp.Header)
-
-			if err := udp.Write(sconn); err != nil {
-				log.Println(err)
-				return
-			}
-		}
-	}()
-
-	for {
-		b := lpool.Take()
-		defer lpool.put(b)
-
-		udp, err := gosocks5.ReadUDPDatagram(sconn)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		//log.Println("w", udp.Header)
-		udp.Header.Rsv = 0
-		buf := bytes.NewBuffer(b[0:0])
-		udp.Write(buf)
-		if _, err := uconn.WriteTo(buf.Bytes(), raddr); err != nil {
-			log.Println(err)
-			return
-		}
-	}
-}
-
-func srvTunnelUDP(conn net.Conn, uconn *net.UDPConn) {
-	go func() {
-		b := make([]byte, 16*1024)
-
-		for {
-			n, addr, err := uconn.ReadFromUDP(b)
-			if err != nil {
-				if glog.V(LWARNING) {
-					glog.Warningln(err)
-				}
-				return
-			}
-
-			udp := gosocks5.NewUDPDatagram(
-				gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
-			//log.Println("r", udp.Header)
-			if err := udp.Write(conn); err != nil {
-				if glog.V(LWARNING) {
-					glog.Warningln(err)
-				}
-				return
-			}
-		}
-	}()
-
-	for {
-		udp, err := gosocks5.ReadUDPDatagram(conn)
-		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
-			return
-		}
-		//log.Println("w", udp.Header)
-		addr, err := net.ResolveUDPAddr("udp", udp.Header.Addr.String())
-		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
-			continue // drop silently
-		}
-
-		if _, err := uconn.WriteToUDP(udp.Data, addr); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
-			return
-		}
-	}
-}
-*/
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 	host, port, _ := net.SplitHostPort(addr.String())
 	p, _ := strconv.Atoi(port)
@@ -645,4 +457,41 @@ func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
 		Host: host,
 		Port: uint16(p),
 	}
+}
+
+func PipeUDP(src, dst *UDPConn, ch chan<- error) {
+	var err error
+
+	for {
+		var dgram *gosocks5.UDPDatagram
+		dgram, err = src.ReadUDP()
+		if err != nil {
+			break
+		}
+		glog.V(LDEBUG).Infof("[udp] addr %s, length %d", dgram.Header.Addr, len(dgram.Data))
+
+		if err = dst.WriteUDP(dgram); err != nil {
+			break
+		}
+	}
+
+	ch <- err
+	close(ch)
+}
+
+func TransportUDP(cc, sc *UDPConn) (err error) {
+	rChan := make(chan error, 1)
+	wChan := make(chan error, 1)
+
+	go PipeUDP(cc, sc, wChan)
+	go PipeUDP(sc, cc, rChan)
+
+	select {
+	case err = <-wChan:
+		//log.Println("w exit", err)
+	case err = <-rChan:
+		//log.Println("r exit", err)
+	}
+
+	return
 }

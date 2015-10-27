@@ -105,9 +105,7 @@ func (s *ws) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		if glog.V(LERROR) {
-			glog.Errorln(err)
-		}
+		glog.V(LERROR).Infoln(err)
 		return
 	}
 	handleConn(wsServer(conn), s.arg)

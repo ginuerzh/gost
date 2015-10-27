@@ -16,9 +16,7 @@ func handleShadow(conn net.Conn, arg Args) {
 		password, _ := arg.User.Password()
 		cipher, err := shadowsocks.NewCipher(method, password)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("shadowsocks:", err)
-			}
+			glog.V(LWARNING).Infoln("shadowsocks:", err)
 			return
 		}
 		conn = shadowsocks.NewConn(conn, cipher)
@@ -26,28 +24,21 @@ func handleShadow(conn net.Conn, arg Args) {
 
 	addr, extra, err := getShadowRequest(conn)
 	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("shadowsocks:", err)
-		}
+		glog.V(LWARNING).Infoln("shadowsocks:", err)
 		return
 	}
-	if glog.V(LINFO) {
-		glog.Infoln("shadowsocks connect:", addr.String())
-	}
+	glog.V(LINFO).Infoln("shadowsocks connect:", addr.String())
+
 	sconn, err := Connect(addr.String())
 	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("shadowsocks:", err)
-		}
+		glog.V(LWARNING).Infoln("shadowsocks:", err)
 		return
 	}
 	defer sconn.Close()
 
 	if extra != nil {
 		if _, err := sconn.Write(extra); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("shadowsocks:", err)
-			}
+			glog.V(LWARNING).Infoln("shadowsocks:", err)
 			return
 		}
 	}

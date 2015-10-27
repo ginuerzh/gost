@@ -67,7 +67,7 @@ gost -L=admin:123456@localhost:8080
 
 * 多端口监听
 ```bash
-gost -L=http://localhost:8080 -L=socks://localhost:8081 -L=ss://aes-256-cfb:123456@:8082
+gost -L=:8080 -L=ss://aes-256-cfb:123456@:8081
 ```
 
 ##### 设置转发代理
@@ -88,28 +88,29 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 ```bash
 gost -L=:8080 -F=http://192.168.1.1:8081 -F=socks://192.168.1.2:8082 -F=a.b.c.d:NNNN
 ```
-gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意一种类型的代理(http/socks5)。
+gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意http/socks5类型代理。
 
 
 #### SOCKS5 UDP数据处理
 
 ##### 不设置转发代理
 
-<img src="https://ginuerzh.github.io/images/udp01.png" height=110 />
+<img src="https://ginuerzh.github.io/images/udp01.png" height=100 />
 
 gost作为标准socks5代理处理UDP数据
 
 ##### 设置转发代理
 
-<img src="https://ginuerzh.github.io/images/udp02.png" height=110 />
+<img src="https://ginuerzh.github.io/images/udp02.png" height=100 />
 
 ##### 设置多个转发代理(转发链)
 
 <img src="https://ginuerzh.github.io/images/udp03.png" height=200 />
 
-当设置转发代理时，gost会使用UDP over TCP方式转发UDP数据。
+当设置转发代理时，gost会使用UDP-Over-TCP方式转发UDP数据。proxy1 - proxyN可以为任意http/socks5类型代理。
 
 ##### 限制条件
+
 如果要转发socks5的BIND和UDP请求，转发链的末端(最后一个-F参数)必须是gost socks5类型代理，且转发链中的http代理必须支持CONNECT方法。
 
 

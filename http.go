@@ -34,29 +34,21 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
 
 		if _, err := conn.Write([]byte(resp)); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
+			glog.V(LWARNING).Infoln(err)
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(resp)
-		}
-		if glog.V(LWARNING) {
-			glog.Warningln("http: proxy authentication required")
-		}
+		glog.V(LDEBUG).Infoln(resp)
+
+		glog.V(LWARNING).Infoln("http: proxy authentication required")
 		return
 	}
 
 	c, err := Connect(req.Host)
 	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln(err)
-		}
+		glog.V(LWARNING).Infoln(err)
+
 		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		if glog.V(LDEBUG) {
-			glog.Infoln(string(b))
-		}
+		glog.V(LDEBUG).Infoln(string(b))
 		conn.Write(b)
 		return
 	}
@@ -65,13 +57,10 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 	if req.Method == "CONNECT" {
 		b := []byte("HTTP/1.1 200 Connection established\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		if glog.V(LDEBUG) {
-			glog.Infoln(string(b))
-		}
+		glog.V(LDEBUG).Infoln(string(b))
+
 		if _, err := conn.Write(b); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
+			glog.V(LWARNING).Infoln(err)
 			return
 		}
 	} else {
@@ -81,9 +70,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			err = req.Write(c)
 		}
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
+			glog.V(LWARNING).Infoln(err)
 			return
 		}
 	}

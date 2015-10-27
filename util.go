@@ -62,12 +62,11 @@ nh/BAoGBAMY5z2f1pmMhrvtPDSlEVjgjELbaInxFaxPLR4Pdyzn83gtIIU14+R8X
 func init() {
 	var err error
 	if cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem"); err != nil {
-		if glog.V(LFATAL) {
-			glog.Warningln(err)
-		}
+		glog.V(LWARNING).Infoln(err)
+
 		cert, err = tls.X509KeyPair([]byte(rawCert), []byte(rawKey))
-		if err != nil && glog.V(LFATAL) {
-			glog.Warningln(err)
+		if err != nil {
+			glog.V(LFATAL).Infoln(err)
 		}
 	}
 }
@@ -112,9 +111,7 @@ func parseArgs(ss []string) (args []Args) {
 		}
 		u, err := url.Parse(s)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
+			glog.V(LWARNING).Infoln(err)
 			continue
 		}
 
@@ -186,9 +183,9 @@ func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
 	return
 }
 
-func Pipe(src io.Reader, dst io.Writer, c chan<- error) {
+func Pipe(src io.Reader, dst io.Writer, ch chan<- error) {
 	_, err := Copy(dst, src)
-	c <- err
+	ch <- err
 }
 
 func Transport(conn, conn2 net.Conn) (err error) {
