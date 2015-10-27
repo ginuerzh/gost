@@ -4,12 +4,12 @@ gost - GO Simple Tunnel
 ### GO语言实现的安全隧道
 
 #### 特性
-1. 可同时监听多端口。
-2. 可设置多转发代理。
-3. 兼容标准http/socks5代理协议。
-4. socks5代理支持tls协商加密。
-4. Tunnel UDP over TCP。
-6. 兼容shadowsocks协议。
+* 可同时监听多端口。
+* 可设置多转发代理。
+* 兼容标准http/socks5代理协议。
+* socks5代理支持tls协商加密。
+* Tunnel UDP over TCP。
+* 兼容shadowsocks协议。
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -19,9 +19,13 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 
 #### 参数说明
 
--L和-F参数格式：[scheme://][user:pass@host]:port
+##### -L和-F参数格式
+```bash
+[scheme://][user:pass@host]:port
+```
+scheme分为两部分: protocol+transport
 
-scheme分为两部分: protocol - 代理协议类型(http, socks5, shadowsocks), transport - 数据传输方式(tcp, websocket, tls)。
+protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(tcp, websocket, tls), 二者可以任意组合，或单独使用。
 
 > http - 作为标准http代理: http://:8080
 
@@ -29,17 +33,28 @@ scheme分为两部分: protocol - 代理协议类型(http, socks5, shadowsocks),
 
 > socks - 作为标准socks5代理: socks://:8080
 
-> socks+ws -作为socks5代理，使用websocket传输数据: socks+ws://:8080
+> socks+ws - 作为socks5代理，使用websocket传输数据: socks+ws://:8080
 
 > tls - 作为http/socks5代理，使用tls传输数据: tls://:8080
 
 > ss - 作为shadowsocks服务，ss://aes-256-cfb:123456@:8080
+
+
+##### 开启日志
+
+> -logtostderr : 输出到控制台
+
+> -v=4 : 日志级别(1-4)，级别越高，日志越详细
+
+> -log_dir=. : 输出到目录
+
 
 #### 使用方法
 
 ##### 不设置转发代理
 
 <img src="https://ginuerzh.github.io/images/gost_01.png" />
+
 * 作为标准http/socks5代理
 ```bash
 gost -L=:8080
@@ -71,9 +86,31 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 
 <img src="https://ginuerzh.github.io/images/gost_03.png" />
 ```bash
-gost -L=:8080 -F=http+tls://192.168.1.1:8081 -F socks+ws://192.168.1.2:8082 -F=··· -F=a.b.c.d:NNNN
+gost -L=:8080 -F=http://192.168.1.1:8081 -F=socks://192.168.1.2:8082 -F=a.b.c.d:NNNN
 ```
-gost通过转发链按照-F设置顺序将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意一种类型的代理(http/socks5)
+gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意一种类型的代理(http/socks5)。
+
+
+#### SOCKS5 UDP数据处理
+
+##### 不设置转发代理
+
+<img src="https://ginuerzh.github.io/images/udp01.png" height=110 />
+
+gost作为标准socks5代理处理UDP数据
+
+##### 设置转发代理
+
+<img src="https://ginuerzh.github.io/images/udp02.png" height=110 />
+
+##### 设置多个转发代理(转发链)
+
+<img src="https://ginuerzh.github.io/images/udp03.png" height=200 />
+
+当设置转发代理时，gost会使用UDP over TCP方式转发UDP数据。
+
+##### 限制条件
+如果要转发socks5的BIND和UDP请求，转发链的末端(最后一个-F参数)必须是gost socks5类型代理，且转发链中的http代理必须支持CONNECT方法。
 
 
 
