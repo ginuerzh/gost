@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"time"
 )
 
 const (
@@ -235,18 +236,18 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			return
 		}
 
-		if err = sc.WriteUDP(dgram); err != nil {
+		if err = sc.WriteUDPTimeout(dgram, time.Second*30); err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		dgram, err = sc.ReadUDP()
+		dgram, err = sc.ReadUDPTimeout(time.Second * 30)
 		if err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
 		glog.V(LDEBUG).Infof("[udp] from %s, length %d", dgram.Header.Addr, len(dgram.Data))
 
-		if err = cc.WriteUDP(dgram); err != nil {
+		if err = cc.WriteUDPTimeout(dgram, time.Second*30); err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
@@ -468,7 +469,7 @@ func PipeUDP(src, dst *UDPConn, ch chan<- error) {
 		if err != nil {
 			break
 		}
-		glog.V(LDEBUG).Infof("[udp] addr %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		// glog.V(LDEBUG).Infof("[udp] addr %s, length %d", dgram.Header.Addr, len(dgram.Data))
 
 		if err = dst.WriteUDP(dgram); err != nil {
 			break

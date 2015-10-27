@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 var (
@@ -204,7 +205,7 @@ func Connect(addr string) (conn net.Conn, err error) {
 		addr += ":80"
 	}
 	if len(forwardArgs) == 0 {
-		return net.Dial("tcp", addr)
+		return net.DialTimeout("tcp", addr, time.Second*30)
 	}
 
 	var end Args
@@ -224,7 +225,7 @@ func Connect(addr string) (conn net.Conn, err error) {
 
 func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
 	end = chain[0]
-	if conn, err = net.Dial("tcp", end.Addr); err != nil {
+	if conn, err = net.DialTimeout("tcp", end.Addr, time.Second*30); err != nil {
 		return
 	}
 	c, err := forward(conn, end)

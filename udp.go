@@ -49,6 +49,20 @@ func (c *UDPConn) ReadUDP() (*gosocks5.UDPDatagram, error) {
 	return c.readUDPServer()
 }
 
+func (c *UDPConn) ReadUDPTimeout(timeout time.Duration) (*gosocks5.UDPDatagram, error) {
+	if c.udp != nil {
+		c.udp.SetReadDeadline(time.Now().Add(timeout))
+		defer c.udp.SetReadDeadline(time.Time{})
+	} else {
+		c.tcp.SetReadDeadline(time.Now().Add(timeout))
+		defer c.tcp.SetReadDeadline(time.Time{})
+	}
+	if c.isClient {
+		return c.readUDPClient()
+	}
+	return c.readUDPServer()
+}
+
 func (c *UDPConn) readUDPClient() (*gosocks5.UDPDatagram, error) {
 	if c.udp != nil {
 		return gosocks5.ReadUDPDatagram(c.udp)
@@ -59,7 +73,7 @@ func (c *UDPConn) readUDPClient() (*gosocks5.UDPDatagram, error) {
 func (c *UDPConn) readUDPServer() (*gosocks5.UDPDatagram, error) {
 	if c.udp != nil {
 		b := make([]byte, 65535)
-		n, addr, err := c.udp.ReadFromUDP(b)
+		n, addr, err := c.udp.ReadFrom(b)
 		if err != nil {
 			return nil, err
 		}
@@ -67,11 +81,24 @@ func (c *UDPConn) readUDPServer() (*gosocks5.UDPDatagram, error) {
 			gosocks5.NewUDPHeader(0, 0, ToSocksAddr(addr)), b[:n])
 		return dgram, nil
 	}
-
 	return gosocks5.ReadUDPDatagram(c.tcp)
 }
 
 func (c *UDPConn) WriteUDP(dgram *gosocks5.UDPDatagram) error {
+	if c.isClient {
+		return c.writeUDPClient(dgram)
+	}
+	return c.writeUDPServer(dgram)
+}
+
+func (c *UDPConn) WriteUDPTimeout(dgram *gosocks5.UDPDatagram, timeout time.Duration) error {
+	if c.udp != nil {
+		c.udp.SetWriteDeadline(time.Now().Add(timeout))
+		defer c.udp.SetWriteDeadline(time.Time{})
+	} else {
+		c.tcp.SetWriteDeadline(time.Now().Add(timeout))
+		defer c.tcp.SetWriteDeadline(time.Time{})
+	}
 	if c.isClient {
 		return c.writeUDPClient(dgram)
 	}
