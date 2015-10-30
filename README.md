@@ -39,7 +39,6 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 
 > ss - 作为shadowsocks服务，ss://aes-256-cfb:123456@:8080
 
-
 ##### 开启日志
 
 > -logtostderr : 输出到控制台
@@ -90,6 +89,26 @@ gost -L=:8080 -F=http://192.168.1.1:8081 -F=socks://192.168.1.2:8082 -F=a.b.c.d:
 ```
 gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意http/socks5类型代理。
 
+##### 加密机制
+
+gost的http/socks5只采用一种加密方式：tls
+
+对于http或socks5都可以使用tls加密整个通讯过程：
+
+http:
+```bash
+gost -L=http+tls://:8080
+```
+
+socks5:
+```bash
+gost -L=socks+tls://:8080
+```
+
+gost针对socks5额外提供了一种协商的tls传输方法，与上面的不同之处在于socks5最开始的方法选择(method selection)过程是非加密的。
+如果连接方是gost则会使用tls方法，后续的通讯使用tls加密，否则使用标准socks5进行通讯(未加密)。
+
+gost内置了tls证书，如果需要使用其他的tls证书，在gost目录放置key.pem(公钥)和cert.pem(私钥)两个文件即可。
 
 #### SOCKS5 UDP数据处理
 
