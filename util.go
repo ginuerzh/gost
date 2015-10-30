@@ -66,7 +66,7 @@ func init() {
 
 		cert, err = tls.X509KeyPair([]byte(rawCert), []byte(rawKey))
 		if err != nil {
-			glog.V(LFATAL).Infoln(err)
+			glog.Infoln(err)
 		}
 	}
 }

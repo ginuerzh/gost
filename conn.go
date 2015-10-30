@@ -29,8 +29,8 @@ func listenAndServe(arg Args) error {
 	switch arg.Transport {
 	case "ws": // websocket connection
 		err = NewWs(arg).ListenAndServe()
-		if err != nil && glog.V(LFATAL) {
-			glog.Errorln(err)
+		if err != nil {
+			glog.Infoln(err)
 		}
 		return err
 	case "tls": // tls connection
@@ -43,9 +43,7 @@ func listenAndServe(arg Args) error {
 	}
 
 	if err != nil {
-		if glog.V(LFATAL) {
-			glog.Errorln(err)
-		}
+		glog.Infoln(err)
 		return err
 	}
 
@@ -54,9 +52,7 @@ func listenAndServe(arg Args) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln(err)
-			}
+			glog.V(LWARNING).Infoln(err)
 			continue
 		}
 		go handleConn(conn, arg)
@@ -67,10 +63,9 @@ func listenAndServe(arg Args) error {
 
 func handleConn(conn net.Conn, arg Args) {
 	atomic.AddInt32(&connCounter, 1)
-	if glog.V(LINFO) {
-		glog.Infof("%s connected, connections: %d",
-			conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
-	}
+	glog.V(LINFO).Infof("%s connected, connections: %d",
+		conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
+
 	if glog.V(LINFO) {
 		defer func() {
 			glog.Infof("%s disconnected, connections: %d",
@@ -97,9 +92,7 @@ func handleConn(conn net.Conn, arg Args) {
 	case "http":
 		req, err := http.ReadRequest(bufio.NewReader(conn))
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("http:", err)
-			}
+			glog.V(LWARNING).Infoln("http:", err)
 			return
 		}
 		handleHttpRequest(req, conn, arg)
@@ -108,9 +101,7 @@ func handleConn(conn net.Conn, arg Args) {
 		conn = gosocks5.ServerConn(conn, selector)
 		req, err := gosocks5.ReadRequest(conn)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5:", err)
 			return
 		}
 		handleSocks5Request(req, conn)
@@ -123,9 +114,7 @@ func handleConn(conn net.Conn, arg Args) {
 
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("client:", err)
-		}
+		glog.V(LWARNING).Infoln("client:", err)
 		return
 	}
 
@@ -134,34 +123,26 @@ func handleConn(conn net.Conn, arg Args) {
 		length := 2 + mn
 		if n < length {
 			if _, err := io.ReadFull(conn, b[n:length]); err != nil {
-				if glog.V(LWARNING) {
-					glog.Warningln("socks5:", err)
-				}
+				glog.V(LWARNING).Infoln("socks5:", err)
 				return
 			}
 		}
 		methods := b[2 : 2+mn]
 		method := selector.Select(methods...)
 		if _, err := conn.Write([]byte{gosocks5.Ver5, method}); err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 select:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 select:", err)
 			return
 		}
 		c, err := selector.OnSelected(method, conn)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 onselected:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 onselected:", err)
 			return
 		}
 		conn = c
 
 		req, err := gosocks5.ReadRequest(conn)
 		if err != nil {
-			if glog.V(LWARNING) {
-				glog.Warningln("socks5 request:", err)
-			}
+			glog.V(LWARNING).Infoln("socks5 request:", err)
 			return
 		}
 		handleSocks5Request(req, conn)
@@ -170,9 +151,7 @@ func handleConn(conn net.Conn, arg Args) {
 
 	req, err := http.ReadRequest(bufio.NewReader(newReqReader(b[:n], conn)))
 	if err != nil {
-		if glog.V(LWARNING) {
-			glog.Warningln("http:", err)
-		}
+		glog.V(LWARNING).Infoln("http:", err)
 		return
 	}
 	handleHttpRequest(req, conn, arg)
@@ -315,16 +294,13 @@ func establish(conn net.Conn, addr string, arg Args) error {
 		if err := req.Write(conn); err != nil {
 			return err
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(req)
-		}
+		glog.V(LDEBUG).Infoln(req)
+
 		rep, err := gosocks5.ReadReply(conn)
 		if err != nil {
 			return err
 		}
-		if glog.V(LDEBUG) {
-			glog.Infoln(rep)
-		}
+		glog.V(LDEBUG).Infoln(rep)
 		if rep.Rep != gosocks5.Succeeded {
 			return errors.New("Service unavailable")
 		}
