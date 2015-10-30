@@ -144,14 +144,14 @@ func handleConn(conn net.Conn, arg Args) {
 		method := selector.Select(methods...)
 		if _, err := conn.Write([]byte{gosocks5.Ver5, method}); err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln("socks5:", err)
+				glog.Warningln("socks5 select:", err)
 			}
 			return
 		}
 		c, err := selector.OnSelected(method, conn)
 		if err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln("socks5:", err)
+				glog.Warningln("socks5 onselected:", err)
 			}
 			return
 		}
@@ -160,7 +160,7 @@ func handleConn(conn net.Conn, arg Args) {
 		req, err := gosocks5.ReadRequest(conn)
 		if err != nil {
 			if glog.V(LWARNING) {
-				glog.Warningln("socks5:", err)
+				glog.Warningln("socks5 request:", err)
 			}
 			return
 		}

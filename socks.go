@@ -409,8 +409,10 @@ func createClientConn(conn net.Conn, uconn *net.UDPConn) (c *UDPConn, dgram *gos
 	select {
 	case dgram = <-dgramChan:
 		if raddr != nil {
+			glog.V(LINFO).Infoln("[udp] client", raddr)
 			c = Client(uconn, raddr)
 		} else {
+			glog.V(LINFO).Infoln("[udp] tunnel")
 			c = Client(conn, nil)
 		}
 	case err = <-errChan:
@@ -451,6 +453,7 @@ func createServerConn(uconn *net.UDPConn, addr net.Addr) (c *UDPConn, err error)
 		fconn.Close()
 		return nil, errors.New("Failure")
 	}
+	glog.V(LINFO).Infoln("forward udp associate, on", rep.Addr, "OK")
 
 	c = Server(fconn)
 	return
