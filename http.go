@@ -18,6 +18,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			glog.Infoln(string(dump))
 		}
 	}
+	glog.V(LINFO).Infoln("[http] CONNECT", req.Host)
 
 	var username, password string
 	if arg.User != nil {
@@ -44,7 +45,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 
 	c, err := Connect(req.Host)
 	if err != nil {
-		glog.V(LWARNING).Infoln(err)
+		glog.V(LWARNING).Infoln("[http] CONNECT", req.Host, err)
 
 		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
@@ -74,6 +75,8 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			return
 		}
 	}
+
+	glog.V(LINFO).Infoln("[http] CONNECT", req.Host, "OK")
 	Transport(conn, c)
 }
 
