@@ -4,18 +4,18 @@ gost - GO Simple Tunnel
 ### GO语言实现的安全隧道
 
 #### 特性
-* 可同时监听多端口。
-* 可设置多转发代理。
-* 兼容标准http/socks5代理协议。
-* socks5代理支持tls协商加密。
-* Tunnel UDP over TCP。
-* 兼容shadowsocks协议。
+* 可同时监听多端口
+* 可设置转发代理，支持多级转发(转发链)
+* 兼容标准http/socks5代理协议
+* socks5代理支持tls协商加密
+* Tunnel UDP over TCP
+* 兼容shadowsocks协议
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
 Google讨论组: https://groups.google.com/d/forum/go-gost
 
-在gost中，gost与其他代理服务都被看作是代理节点(proxy node)，gost可以自己处理请求，或者将请求转发给任意一个或多个代理节点。
+在gost中，gost与其他代理服务都被看作是代理节点，gost可以自己处理请求，或者将请求转发给任意一个或多个代理节点。
 
 #### 参数说明
 
@@ -81,7 +81,7 @@ gost -L=:8080 -F=192.168.1.1:8081
 gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 ```
 
-##### 设置多个转发代理(转发链)
+##### 设置多级转发代理(转发链)
 
 <img src="https://ginuerzh.github.io/images/gost_03.png" />
 ```bash
@@ -90,8 +90,6 @@ gost -L=:8080 -F=http://192.168.1.1:8081 -F=socks://192.168.1.2:8082 -F=a.b.c.d:
 gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意http/socks5类型代理。
 
 ##### 加密机制
-
-gost的http/socks5只采用一种加密方式：tls
 
 对于http或socks5都可以使用tls加密整个通讯过程：
 
@@ -105,8 +103,8 @@ socks5:
 gost -L=socks+tls://:8080
 ```
 
-gost针对socks5额外提供了一种协商的tls传输方法，与上面的不同之处在于socks5最开始的方法选择(method selection)过程是非加密的。
-如果连接方是gost则会使用tls方法，后续的通讯使用tls加密，否则使用标准socks5进行通讯(未加密)。
+gost针对socks5额外提供了协商的tls传输方法，与上面的不同之处在于socks5最开始的方法选择(method selection)过程是非加密的。
+如果连接方是gost则后续的通讯使用tls加密，否则使用标准socks5进行通讯(未加密)。
 
 gost内置了tls证书，如果需要使用其他的tls证书，在gost目录放置key.pem(公钥)和cert.pem(私钥)两个文件即可。
 
@@ -130,7 +128,9 @@ gost作为标准socks5代理处理UDP数据
 
 ##### 限制条件
 
-如果要转发socks5的BIND和UDP请求，转发链的末端(最后一个-F参数)必须是gost socks5类型代理，且转发链中的http代理必须支持CONNECT方法。
+转发链中的http代理必须支持CONNECT方法。
+
+如果要转发socks5的BIND和UDP请求，转发链的末端(最后一个-F参数)必须是gost socks5类型代理。
 
 
 
