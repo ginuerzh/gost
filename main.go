@@ -17,7 +17,7 @@ const (
 )
 
 const (
-	Version = "2.0"
+	Version = "2.0-20151106"
 )
 
 var (
