@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
+	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
 	"net"
 	"net/http"
@@ -254,8 +256,6 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 	}
 
 	switch arg.Protocol {
-	case "ss": // shadowsocks
-		return nil, errors.New("Not implemented")
 	case "socks", "socks5":
 		selector := &clientSelector{
 			methods: []uint8{
@@ -270,6 +270,16 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 			return nil, err
 		}
 		conn = c
+	case "ss": // shadowsocks
+		if arg.User != nil {
+			method := arg.User.Username()
+			password, _ := arg.User.Password()
+			cipher, err := shadowsocks.NewCipher(method, password)
+			if err != nil {
+				return nil, err
+			}
+			conn = shadowsocks.NewConn(conn, cipher)
+		}
 	case "http":
 		fallthrough
 	default:
@@ -281,11 +291,31 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 func establish(conn net.Conn, addr string, arg Args) error {
 	switch arg.Protocol {
 	case "ss": // shadowsocks
-		return nil
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return err
+		}
+		p, _ := strconv.Atoi(port)
+		req := gosocks5.NewRequest(gosocks5.CmdConnect, &gosocks5.Addr{
+			Type: gosocks5.AddrDomain,
+			Host: host,
+			Port: uint16(p),
+		})
+		buf := bytes.Buffer{}
+		if err := req.Write(&buf); err != nil {
+			return err
+		}
+		b := buf.Bytes()
+		if _, err := conn.Write(b[3:]); err != nil {
+			return err
+		}
+		glog.V(LDEBUG).Infoln(req)
 	case "socks", "socks5":
 		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return err
+		}
 		p, _ := strconv.Atoi(port)
-		// TODO: support bind and udp
 		req := gosocks5.NewRequest(gosocks5.CmdConnect, &gosocks5.Addr{
 			Type: gosocks5.AddrDomain,
 			Host: host,
