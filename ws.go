@@ -17,7 +17,7 @@ type wsConn struct {
 }
 
 func wsClient(conn net.Conn, host string) (*wsConn, error) {
-	c, resp, err := websocket.NewClient(conn, &url.URL{Host: host, Path: "/ws"}, nil, 1024, 1024)
+	c, resp, err := websocket.NewClient(conn, &url.URL{Scheme: "ws", Host: host, Path: "/ws"}, nil, 1024, 1024)
 	if err != nil {
 		return nil, err
 	}
