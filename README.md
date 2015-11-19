@@ -85,9 +85,9 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 
 <img src="https://ginuerzh.github.io/images/gost_03.png" />
 ```bash
-gost -L=:8080 -F=http+tls://192.168.1.1:443 -F=socks+ws://192.168.1.2:8082 -F=a.b.c.d:NNNN
+gost -L=:8080 -F=http+tls://192.168.1.1:443 -F=socks+ws://192.168.1.2:1080 -F=ss://aes-128-cfb:123456@192.168.1.3:8338 -F=a.b.c.d:NNNN
 ```
-gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意http(s)/socks5类型代理。
+gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意http(s)/socks5/shadowsocks类型代理。
 
 ##### 加密机制
 
