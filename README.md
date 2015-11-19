@@ -66,7 +66,7 @@ gost -L=admin:123456@localhost:8080
 
 * 多端口监听
 ```bash
-gost -L=:8080 -L=ss://aes-256-cfb:123456@:8081
+gost -L=http+tls://:443 -L=socks://:1080 -L=ss://aes-128-cfb:123456@:8338
 ```
 
 ##### 设置转发代理
