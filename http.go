@@ -28,7 +28,6 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 
 	u, p, _ := basicAuth(req.Header.Get("Proxy-Authorization"))
 	req.Header.Del("Proxy-Authorization")
-
 	if (username != "" && u != username) || (password != "" && p != password) {
 		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
 			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
@@ -65,12 +64,10 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			return
 		}
 	} else {
-		if len(forwardArgs) > 0 {
-			err = req.WriteProxy(c)
-		} else {
-			err = req.Write(c)
-		}
-		if err != nil {
+		req.Header.Del("Proxy-Connection")
+		req.Header.Set("Connection", "Keep-Alive")
+
+		if err = req.Write(c); err != nil {
 			glog.V(LWARNING).Infoln(err)
 			return
 		}
