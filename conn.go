@@ -77,6 +77,7 @@ func handleConn(conn net.Conn, arg Args) {
 	defer atomic.AddInt32(&connCounter, -1)
 	defer conn.Close()
 
+	// server supported methods
 	selector := &serverSelector{
 		methods: []uint8{
 			gosocks5.MethodNoAuth,
@@ -84,7 +85,8 @@ func handleConn(conn net.Conn, arg Args) {
 			MethodTLS,
 			MethodTLSAuth,
 		},
-		arg: arg,
+		user: arg.User,
+		cert: arg.Cert,
 	}
 
 	switch arg.Protocol {
@@ -242,13 +244,19 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 		}
 		glog.Infof("forward: %s/%s %s", proto, arg.Transport, arg.Addr)
 	}
+
+	var tlsUsed bool
+
 	switch arg.Transport {
 	case "ws": // websocket connection
 		conn, err = wsClient(conn, arg.Addr)
 		if err != nil {
 			return nil, err
 		}
+	//case "wss": // websocket security
+	//	tlsUsed = true
 	case "tls": // tls connection
+		tlsUsed = true
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 	case "tcp":
 		fallthrough
@@ -261,10 +269,15 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 			methods: []uint8{
 				gosocks5.MethodNoAuth,
 				gosocks5.MethodUserPass,
-				MethodTLS,
+				//MethodTLS,
 			},
-			arg: arg,
+			user: arg.User,
 		}
+
+		if !tlsUsed { // if transport is not security, enable security socks5
+			selector.methods = append(selector.methods, MethodTLS)
+		}
+
 		c := gosocks5.ClientConn(conn, selector)
 		if err := c.Handleshake(); err != nil {
 			return nil, err

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/golang/glog"
+	"os"
 	"sync"
 )
 
@@ -17,7 +18,7 @@ const (
 )
 
 const (
-	Version = "2.0-20151106"
+	Version = "2.0-rc2"
 )
 
 var (
@@ -43,7 +44,7 @@ func main() {
 		return
 	}
 	if pv {
-		fmt.Println("gost", Version)
+		fmt.Fprintln(os.Stderr, "gost", Version)
 		return
 	}
 

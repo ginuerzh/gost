@@ -8,6 +8,7 @@ import (
 	"github.com/golang/glog"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -19,7 +20,7 @@ const (
 
 type clientSelector struct {
 	methods []uint8
-	arg     Args
+	user    *url.Userinfo
 }
 
 func (selector *clientSelector) Methods() []uint8 {
@@ -41,9 +42,9 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		}
 
 		var username, password string
-		if selector.arg.User != nil {
-			username = selector.arg.User.Username()
-			password, _ = selector.arg.User.Password()
+		if selector.user != nil {
+			username = selector.user.Username()
+			password, _ = selector.user.Password()
 		}
 
 		req := gosocks5.NewUserPassRequest(gosocks5.UserPassVer, username, password)
@@ -72,7 +73,8 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 
 type serverSelector struct {
 	methods []uint8
-	arg     Args
+	user    *url.Userinfo
+	cert    tls.Certificate
 }
 
 func (selector *serverSelector) Methods() []uint8 {
@@ -80,7 +82,7 @@ func (selector *serverSelector) Methods() []uint8 {
 }
 
 func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
-	glog.V(LDEBUG).Infof("%d %d % d", gosocks5.Ver5, len(methods), methods)
+	glog.V(LDEBUG).Infof("%d %d %v", gosocks5.Ver5, len(methods), methods)
 
 	method = gosocks5.MethodNoAuth
 	for _, m := range methods {
@@ -91,7 +93,7 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 	}
 
 	// when user/pass is set, auth is mandatory
-	if selector.arg.User != nil {
+	if selector.user != nil {
 		if method == gosocks5.MethodNoAuth {
 			method = gosocks5.MethodUserPass
 		}
@@ -108,11 +110,11 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 
 	switch method {
 	case MethodTLS:
-		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{selector.arg.Cert}})
+		conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{selector.cert}})
 
 	case gosocks5.MethodUserPass, MethodTLSAuth:
 		if method == MethodTLSAuth {
-			conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{selector.arg.Cert}})
+			conn = tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{selector.cert}})
 		}
 
 		req, err := gosocks5.ReadUserPassRequest(conn)
@@ -123,9 +125,9 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		glog.V(LDEBUG).Infoln(req.String())
 
 		var username, password string
-		if selector.arg.User != nil {
-			username = selector.arg.User.Username()
-			password, _ = selector.arg.User.Password()
+		if selector.user != nil {
+			username = selector.user.Username()
+			password, _ = selector.user.Password()
 		}
 
 		if (username != "" && req.Username != username) || (password != "" && req.Password != password) {
