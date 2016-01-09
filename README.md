@@ -26,7 +26,7 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(tcp, websocket, tls), 二者可以任意组合，或单独使用。
+protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(tcp, ws, wss, tls), 二者可以任意组合，或单独使用。
 
 > http - 作为http代理: http://:8080
 
@@ -118,6 +118,8 @@ gost -L=:8080 -F=socks://server_ip:1080
 
 如果两端都是gost(如上)则数据传输会被加密(使用tls或tls-auth方法)，否则使用标准socks5进行通讯(no-auth或user/pass方法)。
 
+注：如果transport已经使用了加密模式(wss, tls)，则socks5不会再使用加密方法，防止不必要的双重加密。
+
 #### shadowsocks
 gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
@@ -130,6 +132,7 @@ gost -L=ss://aes-128-cfb:123456@:8338
 gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
 ```
 
+#### TLS
 gost内置了tls证书，如果需要使用其他tls证书，在gost目录放置key.pem(公钥)和cert.pem(私钥)两个文件即可。
 
 SOCKS5 UDP数据处理
