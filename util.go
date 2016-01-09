@@ -72,7 +72,7 @@ func parseArgs(ss []string) (args []Args) {
 			arg.Protocol = "default"
 		}
 		switch arg.Transport {
-		case "ws", "tls", "tcp":
+		case "ws", "wss", "tls", "tcp":
 		default:
 			arg.Transport = "tcp"
 		}

@@ -2,6 +2,7 @@ package main
 
 import (
 	//"github.com/ginuerzh/gosocks5"
+	"crypto/tls"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 	"net"
@@ -17,7 +18,23 @@ type wsConn struct {
 }
 
 func wsClient(conn net.Conn, host string) (*wsConn, error) {
-	c, resp, err := websocket.NewClient(conn, &url.URL{Scheme: "ws", Host: host, Path: "/ws"}, nil, 1024, 1024)
+	c, resp, err := websocket.NewClient(conn, &url.URL{Scheme: "ws", Host: host, Path: "/ws"}, nil, 4096, 4096)
+	if err != nil {
+		return nil, err
+	}
+	resp.Body.Close()
+
+	return &wsConn{conn: c}, nil
+}
+
+func wssClient(conn net.Conn, host string) (*wsConn, error) {
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	if err := tlsConn.Handshake(); err != nil {
+		return nil, err
+	}
+	conn = tlsConn
+
+	c, resp, err := websocket.NewClient(conn, &url.URL{Scheme: "wss", Host: host, Path: "/ws"}, nil, 4096, 4096)
 	if err != nil {
 		return nil, err
 	}
@@ -114,4 +131,13 @@ func (s *ws) handle(w http.ResponseWriter, r *http.Request) {
 func (s *ws) ListenAndServe() error {
 	http.HandleFunc("/ws", s.handle)
 	return http.ListenAndServe(s.arg.Addr, nil)
+}
+
+func (s *ws) listenAndServeTLS() error {
+	http.HandleFunc("/ws", s.handle)
+	server := &http.Server{
+		Addr:      s.arg.Addr,
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.arg.Cert}},
+	}
+	return server.ListenAndServeTLS("", "")
 }

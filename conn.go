@@ -35,6 +35,12 @@ func listenAndServe(arg Args) error {
 			glog.Infoln(err)
 		}
 		return err
+	case "wss": // websocket security connection
+		err = NewWs(arg).listenAndServeTLS()
+		if err != nil {
+			glog.Infoln(err)
+		}
+		return err
 	case "tls": // tls connection
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
@@ -253,8 +259,12 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-	//case "wss": // websocket security
-	//	tlsUsed = true
+	case "wss": // websocket security
+		tlsUsed = true
+		conn, err = wssClient(conn, arg.Addr)
+		if err != nil {
+			return nil, err
+		}
 	case "tls": // tls connection
 		tlsUsed = true
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
