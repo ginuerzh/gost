@@ -119,7 +119,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 如果两端都是gost(如上)则数据传输会被加密(使用tls或tls-auth方法)，否则使用标准socks5进行通讯(no-auth或user/pass方法)。
 
 #### shadowsocks
-gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
+gost对shadowsocks加密方法的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
 服务端:
 ```bash
@@ -130,7 +130,7 @@ gost -L=ss://aes-128-cfb:123456@:8338
 gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
 ```
 
-gost内置了tls证书，如果需要使用其他tls证书，在gost目录放置key.pem(公钥)和cert.pem(私钥)两个文件即可。
+gost内置了tls证书，如果需要使用其他tls证书，在gost目录放置cert.pem(公钥)和key.pem(私钥)两个文件即可。
 
 SOCKS5 UDP数据处理
 ------

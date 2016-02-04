@@ -16,12 +16,28 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 var (
 	connCounter int32
+)
+
+var (
+	// tcp buffer pool
+	tcpPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 16*1024)
+		},
+	}
+	// udp buffer pool
+	udpPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 64*1024+262)
+		},
+	}
 )
 
 func listenAndServe(arg Args) error {
@@ -120,7 +136,9 @@ func handleConn(conn net.Conn, arg Args) {
 
 	// http + socks5
 
-	b := make([]byte, 16*1024)
+	//b := make([]byte, 16*1024)
+	b := tcpPool.Get().([]byte)
+	defer tcpPool.Put(b)
 
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
