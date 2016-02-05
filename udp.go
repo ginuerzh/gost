@@ -72,7 +72,10 @@ func (c *UDPConn) readUDPClient() (*gosocks5.UDPDatagram, error) {
 
 func (c *UDPConn) readUDPServer() (*gosocks5.UDPDatagram, error) {
 	if c.udp != nil {
-		b := make([]byte, 65535)
+		// b := make([]byte, 65535)
+		b := udpPool.Get().([]byte)
+		defer udpPool.Put(b)
+
 		n, addr, err := c.udp.ReadFrom(b)
 		if err != nil {
 			return nil, err

@@ -7,6 +7,7 @@ import (
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"strconv"
@@ -16,6 +17,10 @@ import (
 const (
 	MethodTLS     uint8 = 0x80 // extended method for tls
 	MethodTLSAuth uint8 = 0x82 // extended method for tls+auth
+)
+
+const (
+	CmdUdpTun uint8 = 0xf3 // extended method for udp over tcp
 )
 
 type clientSelector struct {
@@ -193,7 +198,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		} else {
 			serveBind(conn)
 		}
-	case gosocks5.CmdUdp:
+	case gosocks5.CmdUdp, CmdUdpTun:
 		glog.V(LINFO).Infoln("[socks5] UDP ASSOCIATE", req.Addr)
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
@@ -211,7 +216,6 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 
 		addr := ToSocksAddr(uconn.LocalAddr())
 		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-		glog.V(LINFO).Infoln("[socks5] UDP listen on", addr)
 
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
@@ -219,43 +223,67 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			return
 		} else {
 			glog.V(LDEBUG).Infoln(rep)
+			glog.V(LINFO).Infoln("[socks5] UDP listen on", addr)
 		}
 
-		cc, dgram, err := createClientConn(conn, uconn)
+		var cc *UDPConn
+		var dgram *gosocks5.UDPDatagram
+		if req.Cmd == CmdUdpTun {
+			dgram, err = gosocks5.ReadUDPDatagram(conn)
+			if err != nil {
+				glog.V(LWARNING).Infoln("socks5 udp:", err)
+				return
+			}
+			cc = Client(conn, nil)
+			glog.V(LINFO).Infof("[udp] -> %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		} else {
+			b := udpPool.Get().([]byte)
+			defer udpPool.Put(b)
+
+			n, raddr, err := uconn.ReadFromUDP(b)
+			if err != nil {
+				glog.V(LWARNING).Infoln("socks5 udp:", err)
+				return
+			}
+			dgram, err = gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
+			if err != nil {
+				glog.V(LWARNING).Infoln("socks5 udp:", err)
+				return
+			}
+			cc = Client(uconn, raddr)
+			glog.V(LINFO).Infof("[udp] %s -> %s, length %d", raddr, dgram.Header.Addr, len(dgram.Data))
+		}
+
+		sc, err := createServerConn(uconn)
 		if err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		glog.V(LINFO).Infof("[udp] to %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		defer sc.Close()
 
-		raddr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+		if err = sc.WriteUDPTimeout(dgram, time.Second*90); err != nil {
+			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			return
+		}
+		dgram, err = sc.ReadUDPTimeout(time.Second * 90)
 		if err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		sc, err := createServerConn(uconn, raddr)
-		if err != nil {
+		glog.V(LINFO).Infof("[udp] <- %s, length %d", dgram.Header.Addr, len(dgram.Data))
+
+		if err = cc.WriteUDPTimeout(dgram, time.Second*90); err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
 
-		if err = sc.WriteUDPTimeout(dgram, time.Second*30); err != nil {
-			glog.V(LWARNING).Infoln("socks5 udp:", err)
-			return
+		if req.Cmd == gosocks5.CmdUdp {
+			go TransportUDP(cc, sc)
+			ioutil.ReadAll(conn) // wait for client exit
+			glog.V(LINFO).Infoln("[udp] transfer done")
+		} else {
+			TransportUDP(cc, sc)
 		}
-		dgram, err = sc.ReadUDPTimeout(time.Second * 30)
-		if err != nil {
-			glog.V(LWARNING).Infoln("socks5 udp:", err)
-			return
-		}
-		glog.V(LINFO).Infof("[udp] from %s, length %d", dgram.Header.Addr, len(dgram.Data))
-
-		if err = cc.WriteUDPTimeout(dgram, time.Second*30); err != nil {
-			glog.V(LWARNING).Infoln("socks5 udp:", err)
-			return
-		}
-
-		TransportUDP(cc, sc)
 	default:
 		glog.V(LWARNING).Infoln("Unrecognized request: ", req)
 	}
@@ -288,6 +316,7 @@ func serveBind(conn net.Conn) error {
 	glog.V(LDEBUG).Infoln(rep)
 	glog.V(LINFO).Infoln("[socks5] BIND on", addr, "OK")
 
+	l.SetDeadline(time.Now().Add(time.Minute * 30)) // wait 30 minutes at most
 	tconn, err := l.AcceptTCP()
 	l.Close() // only accept one peer
 	if err != nil {
@@ -319,7 +348,7 @@ func serveBind(conn net.Conn) error {
 func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 	fconn, _, err := forwardChain(forwardArgs...)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward)", req.Addr, err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward", req.Addr, err)
 		if fconn != nil {
 			fconn.Close()
 		}
@@ -334,7 +363,7 @@ func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 	defer fconn.Close()
 
 	if err := req.Write(fconn); err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward)", err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward", err)
 		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 		return err
 	}
@@ -343,18 +372,18 @@ func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 	// first reply
 	rep, err := peekReply(conn, fconn)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward)", err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward", err)
 		return err
 	}
-	glog.V(LINFO).Infoln("[socks5] BIND(forward) on", rep.Addr, "OK")
+	glog.V(LINFO).Infoln("[socks5] BIND forward on", rep.Addr, "OK")
 
 	// second reply
 	rep, err = peekReply(conn, fconn)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward) accept", err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward accept", err)
 		return err
 	}
-	glog.V(LINFO).Infoln("[socks5] BIND(forward) accept", rep.Addr)
+	glog.V(LINFO).Infoln("[socks5] BIND forward accept", rep.Addr)
 
 	return Transport(conn, fconn)
 }
@@ -377,53 +406,7 @@ func peekReply(dst io.Writer, src io.Reader) (rep *gosocks5.Reply, err error) {
 	return
 }
 
-func createClientConn(conn net.Conn, uconn *net.UDPConn) (c *UDPConn, dgram *gosocks5.UDPDatagram, err error) {
-	var raddr *net.UDPAddr
-	dgramChan := make(chan *gosocks5.UDPDatagram, 1)
-	errChan := make(chan error, 1)
-	go func() {
-		b := make([]byte, 64*1024+262)
-
-		n, addr, err := uconn.ReadFromUDP(b)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		raddr = addr
-
-		dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
-		if err != nil {
-			errChan <- err
-			return
-		}
-		dgramChan <- dgram
-	}()
-
-	go func() {
-		dgram, err := gosocks5.ReadUDPDatagram(conn)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		dgramChan <- dgram
-	}()
-
-	select {
-	case dgram = <-dgramChan:
-		if raddr != nil {
-			glog.V(LINFO).Infoln("[udp] client", raddr)
-			c = Client(uconn, raddr)
-		} else {
-			glog.V(LINFO).Infoln("[udp] tunnel")
-			c = Client(conn, nil)
-		}
-	case err = <-errChan:
-	}
-
-	return
-}
-
-func createServerConn(uconn *net.UDPConn, addr net.Addr) (c *UDPConn, err error) {
+func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
 	if len(forwardArgs) == 0 {
 		c = Server(uconn)
 		return
@@ -436,9 +419,9 @@ func createServerConn(uconn *net.UDPConn, addr net.Addr) (c *UDPConn, err error)
 		}
 		return
 	}
-	glog.V(LINFO).Infoln("forward udp associate")
+	glog.V(LINFO).Infoln("[udp] forward associate")
 
-	req := gosocks5.NewRequest(gosocks5.CmdUdp, nil)
+	req := gosocks5.NewRequest(CmdUdpTun, nil)
 	if err = req.Write(fconn); err != nil {
 		fconn.Close()
 		return
@@ -455,7 +438,7 @@ func createServerConn(uconn *net.UDPConn, addr net.Addr) (c *UDPConn, err error)
 		fconn.Close()
 		return nil, errors.New("Failure")
 	}
-	glog.V(LINFO).Infoln("forward udp associate, on", rep.Addr, "OK")
+	glog.V(LINFO).Infoln("[udp] forward associate on", rep.Addr, "OK")
 
 	c = Server(fconn)
 	return
@@ -481,8 +464,11 @@ func PipeUDP(src, dst *UDPConn, ch chan<- error) {
 		if err != nil {
 			break
 		}
-		// glog.V(LDEBUG).Infof("[udp] addr %s, length %d", dgram.Header.Addr, len(dgram.Data))
-
+		if src.isClient {
+			glog.V(LDEBUG).Infof("[udp] -> %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		} else {
+			glog.V(LDEBUG).Infof("[udp] <- %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		}
 		if err = dst.WriteUDP(dgram); err != nil {
 			break
 		}
@@ -501,9 +487,9 @@ func TransportUDP(cc, sc *UDPConn) (err error) {
 
 	select {
 	case err = <-wChan:
-		//log.Println("w exit", err)
+		// glog.V(LDEBUG).Infoln("w exit", err)
 	case err = <-rChan:
-		//log.Println("r exit", err)
+		// glog.V(LDEBUG).Infoln("r exit", err)
 	}
 
 	return

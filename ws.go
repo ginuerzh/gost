@@ -129,15 +129,18 @@ func (s *ws) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *ws) ListenAndServe() error {
-	http.HandleFunc("/ws", s.handle)
-	return http.ListenAndServe(s.arg.Addr, nil)
+	sm := http.NewServeMux()
+	sm.HandleFunc("/ws", s.handle)
+	return http.ListenAndServe(s.arg.Addr, sm)
 }
 
 func (s *ws) listenAndServeTLS() error {
-	http.HandleFunc("/ws", s.handle)
+	sm := http.NewServeMux()
+	sm.HandleFunc("/ws", s.handle)
 	server := &http.Server{
 		Addr:      s.arg.Addr,
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.arg.Cert}},
+		Handler:   sm,
 	}
 	return server.ListenAndServeTLS("", "")
 }
