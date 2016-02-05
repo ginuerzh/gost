@@ -18,7 +18,7 @@ const (
 )
 
 const (
-	Version = "2.0-rc2"
+	Version = "2.0-rc3"
 )
 
 var (

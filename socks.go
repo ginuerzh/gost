@@ -235,7 +235,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 				return
 			}
 			cc = Client(conn, nil)
-			glog.V(LINFO).Infof("[udp] tunnel to %s, length %d", dgram.Header.Addr, len(dgram.Data))
+			glog.V(LINFO).Infof("[udp] -> %s, length %d", dgram.Header.Addr, len(dgram.Data))
 		} else {
 			b := udpPool.Get().([]byte)
 			defer udpPool.Put(b)
@@ -259,32 +259,31 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
+		defer sc.Close()
 
-		if err = sc.WriteUDPTimeout(dgram, time.Second*60); err != nil {
+		if err = sc.WriteUDPTimeout(dgram, time.Second*90); err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		dgram, err = sc.ReadUDPTimeout(time.Second * 60)
+		dgram, err = sc.ReadUDPTimeout(time.Second * 90)
 		if err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		glog.V(LINFO).Infof("[udp] from %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		glog.V(LINFO).Infof("[udp] <- %s, length %d", dgram.Header.Addr, len(dgram.Data))
 
-		if err = cc.WriteUDPTimeout(dgram, time.Second*60); err != nil {
+		if err = cc.WriteUDPTimeout(dgram, time.Second*90); err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
 
 		if req.Cmd == gosocks5.CmdUdp {
-			go func() {
-				ioutil.ReadAll(conn)
-				cc.Close()
-				sc.Close()
-				glog.V(LINFO).Infoln("[udp] transfer done")
-			}()
+			go TransportUDP(cc, sc)
+			ioutil.ReadAll(conn) // wait for client exit
+			glog.V(LINFO).Infoln("[udp] transfer done")
+		} else {
+			TransportUDP(cc, sc)
 		}
-		TransportUDP(cc, sc)
 	default:
 		glog.V(LWARNING).Infoln("Unrecognized request: ", req)
 	}
@@ -317,6 +316,7 @@ func serveBind(conn net.Conn) error {
 	glog.V(LDEBUG).Infoln(rep)
 	glog.V(LINFO).Infoln("[socks5] BIND on", addr, "OK")
 
+	l.SetDeadline(time.Now().Add(time.Minute * 30)) // wait 30 minutes at most
 	tconn, err := l.AcceptTCP()
 	l.Close() // only accept one peer
 	if err != nil {
@@ -348,7 +348,7 @@ func serveBind(conn net.Conn) error {
 func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 	fconn, _, err := forwardChain(forwardArgs...)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward)", req.Addr, err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward", req.Addr, err)
 		if fconn != nil {
 			fconn.Close()
 		}
@@ -372,18 +372,18 @@ func forwardBind(req *gosocks5.Request, conn net.Conn) error {
 	// first reply
 	rep, err := peekReply(conn, fconn)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward)", err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward", err)
 		return err
 	}
-	glog.V(LINFO).Infoln("[socks5] BIND(forward) on", rep.Addr, "OK")
+	glog.V(LINFO).Infoln("[socks5] BIND forward on", rep.Addr, "OK")
 
 	// second reply
 	rep, err = peekReply(conn, fconn)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[socks5] BIND(forward) accept", err)
+		glog.V(LWARNING).Infoln("[socks5] BIND forward accept", err)
 		return err
 	}
-	glog.V(LINFO).Infoln("[socks5] BIND(forward) accept", rep.Addr)
+	glog.V(LINFO).Infoln("[socks5] BIND forward accept", rep.Addr)
 
 	return Transport(conn, fconn)
 }
@@ -460,13 +460,16 @@ func PipeUDP(src, dst *UDPConn, ch chan<- error) {
 
 	for {
 		var dgram *gosocks5.UDPDatagram
-		dgram, err = src.ReadUDPTimeout(time.Second * 60)
+		dgram, err = src.ReadUDP()
 		if err != nil {
 			break
 		}
-		glog.V(LDEBUG).Infof("[udp] addr %s, length %d", dgram.Header.Addr, len(dgram.Data))
-
-		if err = dst.WriteUDPTimeout(dgram, time.Second*60); err != nil {
+		if src.isClient {
+			glog.V(LDEBUG).Infof("[udp] -> %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		} else {
+			glog.V(LDEBUG).Infof("[udp] <- %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		}
+		if err = dst.WriteUDP(dgram); err != nil {
 			break
 		}
 	}

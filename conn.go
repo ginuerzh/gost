@@ -232,7 +232,7 @@ func Connect(addr string) (conn net.Conn, err error) {
 
 func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
 	end = chain[0]
-	if conn, err = net.DialTimeout("tcp", end.Addr, time.Second*30); err != nil {
+	if conn, err = net.DialTimeout("tcp", end.Addr, time.Second*90); err != nil {
 		return
 	}
 	c, err := forward(conn, end)
