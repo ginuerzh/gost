@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/tls"
 	"github.com/golang/glog"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -54,9 +56,19 @@ nh/BAoGBAMY5z2f1pmMhrvtPDSlEVjgjELbaInxFaxPLR4Pdyzn83gtIIU14+R8X
 -----END RSA PRIVATE KEY-----`
 )
 
+func getCurrentDirectory() string {
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
 func init() {
 	var err error
-	if tlsCert, err = tls.LoadX509KeyPair("cert.pem", "key.pem"); err != nil {
+	cert := filepath.Join(getCurrentDirectory(), "cert.pem")
+	key := filepath.Join(getCurrentDirectory(), "key.pem")
+	if tlsCert, err = tls.LoadX509KeyPair(cert, key); err != nil {
 		glog.V(LWARNING).Infoln(err)
 
 		tlsCert, err = tls.X509KeyPair([]byte(rawCert), []byte(rawKey))
