@@ -23,8 +23,9 @@ func (ss *strSlice) Set(value string) error {
 // admin:123456@localhost:8080
 type Args struct {
 	Addr      string // host:port
-	Protocol  string // protocol: http&socks5/http/socks/socks5/ss, default is http&socks5
-	Transport string // transport: tcp/ws/tls, default is tcp(raw tcp)
+	Protocol  string // protocol: http/socks(5)/ss
+	Transport string // transport: ws(s)/tls/tcp/udp
+	Forward   string // forward address, used by tcp/udp port forwarding
 	User      *url.Userinfo
 	Cert      tls.Certificate // tls certificate
 }
@@ -35,14 +36,14 @@ func (args Args) String() string {
 		authUser = args.User.Username()
 		authPass, _ = args.User.Password()
 	}
-	return fmt.Sprintf("host: %s, protocol: %s, transport: %s, auth: %s:%s",
-		args.Addr, args.Protocol, args.Transport, authUser, authPass)
+	return fmt.Sprintf("host: %s, protocol: %s, transport: %s, forward: %s, auth: %s/%s",
+		args.Addr, args.Protocol, args.Transport, args.Forward, authUser, authPass)
 }
 
 func parseArgs(ss []string) (args []Args) {
 	for _, s := range ss {
 		if !strings.Contains(s, "://") {
-			s = "tcp://" + s
+			s = "auto://" + s
 		}
 		u, err := url.Parse(s)
 		if err != nil {
@@ -51,9 +52,10 @@ func parseArgs(ss []string) (args []Args) {
 		}
 
 		arg := Args{
-			Addr: u.Host,
-			User: u.User,
-			Cert: tlsCert,
+			Addr:    u.Host,
+			User:    u.User,
+			Cert:    tlsCert,
+			Forward: strings.Trim(u.EscapedPath(), "/"),
 		}
 
 		schemes := strings.Split(u.Scheme, "+")
@@ -69,12 +71,15 @@ func parseArgs(ss []string) (args []Args) {
 		switch arg.Protocol {
 		case "http", "socks", "socks5", "ss":
 		default:
-			arg.Protocol = "default"
+			arg.Protocol = ""
 		}
+
 		switch arg.Transport {
-		case "ws", "wss", "tls", "tcp":
+		case "ws", "wss", "tls":
+		case "tcp", "udp": // started from v2.1, tcp and udp are for port forwarding
+			arg.Protocol = ""
 		default:
-			arg.Transport = "tcp"
+			arg.Transport = ""
 		}
 
 		args = append(args, arg)
@@ -83,7 +88,7 @@ func parseArgs(ss []string) (args []Args) {
 	return
 }
 
-// based on io.Copy
+// Based on io.Copy, but the io.ErrShortWrite is ignored (mainly for websocket)
 func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
 	buf := make([]byte, 32*1024)
 

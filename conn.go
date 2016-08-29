@@ -46,28 +46,22 @@ func listenAndServe(arg Args) error {
 
 	switch arg.Transport {
 	case "ws": // websocket connection
-		err = NewWs(arg).ListenAndServe()
-		if err != nil {
-			glog.Infoln(err)
-		}
-		return err
+		return NewWs(arg).ListenAndServe()
 	case "wss": // websocket security connection
-		err = NewWs(arg).listenAndServeTLS()
-		if err != nil {
-			glog.Infoln(err)
-		}
-		return err
+		return NewWs(arg).listenAndServeTLS()
 	case "tls": // tls connection
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
-	case "tcp":
-		fallthrough
+	case "tcp": // TCP port forwarding
+		return listenAndServeTcpForward(arg)
+	case "udp": // UDP port forwarding
+		//return listenAndServeUdpForward(arg)
+		return nil
 	default:
 		ln, err = net.Listen("tcp", arg.Addr)
 	}
 
 	if err != nil {
-		glog.Infoln(err)
 		return err
 	}
 
@@ -81,10 +75,47 @@ func listenAndServe(arg Args) error {
 		}
 		go handleConn(conn, arg)
 	}
+}
 
+func listenAndServeTcpForward(arg Args) error {
+	ln, err := net.Listen("tcp", arg.Addr)
+	if err != nil {
+		return err
+	}
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			glog.V(LWARNING).Infoln(err)
+			continue
+		}
+		go handleTcpForward(conn, arg)
+	}
 	return nil
 }
 
+/*
+func listenAndServeUdpForward(arg Args) error {
+	addr, err := net.ResolveUDPAddr("udp", arg.Addr)
+	if err != nil {
+		return err
+	}
+	ln, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return err
+	}
+	for {
+		b := udpPool.Get().([]byte)
+		defer udpPool.Put(b)
+
+		_, c, err := ln.ReadFromUDP(b)
+		if err != nil {
+			glog.V(LWARNING).Infoln(err)
+			continue
+		}
+		handleUdpForward(c, arg)
+	}
+}
+*/
 func handleConn(conn net.Conn, arg Args) {
 	atomic.AddInt32(&connCounter, 1)
 	glog.V(LINFO).Infof("%s connected, connections: %d",
@@ -99,7 +130,7 @@ func handleConn(conn net.Conn, arg Args) {
 	defer atomic.AddInt32(&connCounter, -1)
 	defer conn.Close()
 
-	// server supported methods
+	// socks5 server supported methods
 	selector := &serverSelector{
 		methods: []uint8{
 			gosocks5.MethodNoAuth,
@@ -134,7 +165,7 @@ func handleConn(conn net.Conn, arg Args) {
 		return
 	}
 
-	// http + socks5
+	// http or socks5
 
 	//b := make([]byte, 16*1024)
 	b := tcpPool.Get().([]byte)
@@ -212,7 +243,7 @@ func Connect(addr string) (conn net.Conn, err error) {
 		addr += ":80"
 	}
 	if len(forwardArgs) == 0 {
-		return net.DialTimeout("tcp", addr, time.Second*30)
+		return net.DialTimeout("tcp", addr, time.Second*60)
 	}
 
 	var end Args

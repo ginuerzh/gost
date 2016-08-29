@@ -6,6 +6,8 @@ import (
 )
 
 const (
+
+	// This is the default cert file for convenience, providing your own cert is recommended.
 	rawCert = `-----BEGIN CERTIFICATE-----
 MIIC5jCCAdCgAwIBAgIBADALBgkqhkiG9w0BAQUwEjEQMA4GA1UEChMHQWNtZSBD
 bzAeFw0xNDAzMTcwNjIwNTFaFw0xNTAzMTcwNjIwNTFaMBIxEDAOBgNVBAoTB0Fj

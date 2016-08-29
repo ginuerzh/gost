@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"os"
+	"runtime"
 	"sync"
 )
 
@@ -18,7 +19,7 @@ const (
 )
 
 const (
-	Version = "2.0"
+	Version = "2.1-dev"
 )
 
 var (
@@ -45,6 +46,7 @@ func main() {
 	}
 	if pv {
 		fmt.Fprintln(os.Stderr, "gost", Version)
+		fmt.Fprintln(os.Stderr, runtime.Version())
 		return
 	}
 
@@ -60,7 +62,7 @@ func main() {
 		wg.Add(1)
 		go func(arg Args) {
 			defer wg.Done()
-			listenAndServe(arg)
+			glog.V(LERROR).Infoln(listenAndServe(arg))
 		}(args)
 	}
 	wg.Wait()
