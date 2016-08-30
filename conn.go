@@ -55,8 +55,7 @@ func listenAndServe(arg Args) error {
 	case "tcp": // TCP port forwarding
 		return listenAndServeTcpForward(arg)
 	case "udp": // UDP port forwarding
-		//return listenAndServeUdpForward(arg)
-		return nil
+		return listenAndServeUdpForward(arg)
 	default:
 		ln, err = net.Listen("tcp", arg.Addr)
 	}
@@ -82,6 +81,8 @@ func listenAndServeTcpForward(arg Args) error {
 	if err != nil {
 		return err
 	}
+	defer ln.Close()
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -93,29 +94,32 @@ func listenAndServeTcpForward(arg Args) error {
 	return nil
 }
 
-/*
 func listenAndServeUdpForward(arg Args) error {
-	addr, err := net.ResolveUDPAddr("udp", arg.Addr)
+	laddr, err := net.ResolveUDPAddr("udp", arg.Addr)
 	if err != nil {
 		return err
 	}
-	ln, err := net.ListenUDP("udp", addr)
+	ln, err := net.ListenUDP("udp", laddr)
 	if err != nil {
 		return err
 	}
+	defer ln.Close()
+
 	for {
 		b := udpPool.Get().([]byte)
-		defer udpPool.Put(b)
 
-		_, c, err := ln.ReadFromUDP(b)
+		n, raddr, err := ln.ReadFromUDP(b)
 		if err != nil {
 			glog.V(LWARNING).Infoln(err)
 			continue
 		}
-		handleUdpForward(c, arg)
+		go func(data []byte, length int) {
+			handleUdpForward(ln, raddr, data[:length], arg)
+			udpPool.Put(data)
+		}(b, n)
 	}
 }
-*/
+
 func handleConn(conn net.Conn, arg Args) {
 	atomic.AddInt32(&connCounter, 1)
 	glog.V(LINFO).Infof("%s connected, connections: %d",
@@ -261,6 +265,7 @@ func Connect(addr string) (conn net.Conn, err error) {
 	return conn, nil
 }
 
+// establish connection throughout the forward chain
 func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
 	end = chain[0]
 	if conn, err = net.DialTimeout("tcp", end.Addr, time.Second*90); err != nil {
@@ -294,10 +299,14 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 	var err error
 	if glog.V(LINFO) {
 		proto := arg.Protocol
-		if proto == "default" {
+		trans := arg.Transport
+		if proto == "" {
 			proto = "http" // default is http
 		}
-		glog.Infof("forward: %s/%s %s", proto, arg.Transport, arg.Addr)
+		if trans == "" { // default is tcp
+			trans = "tcp"
+		}
+		glog.Infof("forward: %s/%s %s", proto, trans, arg.Addr)
 	}
 
 	var tlsUsed bool

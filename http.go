@@ -18,7 +18,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			glog.Infoln(string(dump))
 		}
 	}
-	glog.V(LINFO).Infoln("[http] CONNECT", req.Host)
+	glog.V(LINFO).Infof("[http] %s -> %s", conn.RemoteAddr(), req.Host)
 
 	var username, password string
 	if arg.User != nil {
@@ -34,21 +34,21 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
 
 		if _, err := conn.Write([]byte(resp)); err != nil {
-			glog.V(LWARNING).Infoln(err)
+			glog.V(LWARNING).Infof("[http] %s <- %s : %s", conn.RemoteAddr(), req.Host, err)
 		}
-		glog.V(LDEBUG).Infoln(resp)
+		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, resp)
 
-		glog.V(LWARNING).Infoln("http: proxy authentication required")
+		glog.V(LWARNING).Infof("[http] %s <- %s : proxy authentication required", conn.RemoteAddr(), req.Host)
 		return
 	}
 
 	c, err := Connect(req.Host)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[http] CONNECT", req.Host, err)
+		glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 
 		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		glog.V(LDEBUG).Infoln(string(b))
+		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
 		conn.Write(b)
 		return
 	}
@@ -57,10 +57,10 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 	if req.Method == "CONNECT" {
 		b := []byte("HTTP/1.1 200 Connection established\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		glog.V(LDEBUG).Infoln(string(b))
+		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
 
 		if _, err := conn.Write(b); err != nil {
-			glog.V(LWARNING).Infoln(err)
+			glog.V(LWARNING).Infof("[http] %s <- %s : %s", conn.RemoteAddr(), req.Host, err)
 			return
 		}
 	} else {
@@ -68,13 +68,14 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		req.Header.Set("Connection", "Keep-Alive")
 
 		if err = req.Write(c); err != nil {
-			glog.V(LWARNING).Infoln(err)
+			glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 			return
 		}
 	}
 
-	glog.V(LINFO).Infoln("[http] CONNECT", req.Host, "OK")
+	glog.V(LINFO).Infof("[http] %s <-> %s OK", conn.RemoteAddr(), req.Host)
 	Transport(conn, c)
+	glog.V(LINFO).Infof("[http] %s >-< %s DISCONNECTED", conn.RemoteAddr(), req.Host)
 }
 
 func basicAuth(authInfo string) (username, password string, ok bool) {

@@ -162,20 +162,20 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 }
 
 func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
-	glog.V(LDEBUG).Infoln(req)
+	glog.V(LDEBUG).Infof("[socks5-connect] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, req)
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
-		glog.V(LINFO).Infoln("[socks5] CONNECT", req.Addr)
+		glog.V(LINFO).Infof("[socks5-connect] %s -> %s", conn.RemoteAddr(), req.Addr)
 
 		tconn, err := Connect(req.Addr.String())
 		if err != nil {
-			glog.V(LWARNING).Infoln("[socks5] CONNECT", req.Addr, err)
+			glog.V(LWARNING).Infof("[socks5-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			rep := gosocks5.NewReply(gosocks5.HostUnreachable, nil)
 			if err := rep.Write(conn); err != nil {
-				glog.V(LWARNING).Infoln("socks5 connect:", err)
+				glog.V(LWARNING).Infof("[socks5-connect] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
 			} else {
-				glog.V(LDEBUG).Infoln(rep)
+				glog.V(LDEBUG).Infof("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
 			}
 			return
 		}
@@ -183,47 +183,50 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 
 		rep := gosocks5.NewReply(gosocks5.Succeeded, nil)
 		if err := rep.Write(conn); err != nil {
-			glog.V(LWARNING).Infoln("socks5 connect:", err)
+			glog.V(LWARNING).Infof("[socks5-connect] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
 			return
 		}
-		glog.V(LDEBUG).Infoln(rep)
+		glog.V(LDEBUG).Infof("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
 
-		glog.V(LINFO).Infoln("[socks5] CONNECT", req.Addr, "OK")
+		glog.V(LINFO).Infof("[socks5-connect] %s <-> %s OK", conn.RemoteAddr(), req.Addr)
 		Transport(conn, tconn)
+		glog.V(LINFO).Infof("[socks5-connect] %s >-< %s DISCONNECTED", conn.RemoteAddr(), req.Addr)
 	case gosocks5.CmdBind:
-		glog.V(LINFO).Infoln("[socks5] BIND", req.Addr)
+		glog.V(LINFO).Infof("[socks5-bind] %s -> %s", conn.RemoteAddr(), req.Addr)
 
 		if len(forwardArgs) > 0 {
 			forwardBind(req, conn)
 		} else {
 			serveBind(conn)
 		}
+		glog.V(LINFO).Infof("[socks5-bind] %s >-< %s DISCONNECTED", conn.RemoteAddr(), req.Addr)
 	case gosocks5.CmdUdp, CmdUdpTun:
-		glog.V(LINFO).Infoln("[socks5] UDP ASSOCIATE", req.Addr)
+		// TODO: udp tunnel <-> forward chain
+		glog.V(LINFO).Infof("[socks5-udp] %s -> %s ASSOCIATE", conn.RemoteAddr(), req.Addr)
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
-			glog.V(LWARNING).Infoln("socks5 udp listen:", err)
+			glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 
 			rep := gosocks5.NewReply(gosocks5.Failure, nil)
 			if err := rep.Write(conn); err != nil {
-				glog.V(LWARNING).Infoln("socks5 udp listen:", err)
+				glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
 			} else {
-				glog.V(LDEBUG).Infoln(rep)
+				glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
 			}
 			return
 		}
 		defer uconn.Close()
 
 		addr := ToSocksAddr(uconn.LocalAddr())
-		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
+		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String()) // BUG: when server has multi-interfaces, this may cause a mistake
 
 		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 		if err := rep.Write(conn); err != nil {
-			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
 			return
 		} else {
-			glog.V(LDEBUG).Infoln(rep)
-			glog.V(LINFO).Infoln("[socks5] UDP listen on", addr)
+			glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			glog.V(LINFO).Infof("[socks5-udp] %s -> %s LISTEN ON %s", conn.RemoteAddr(), req.Addr, addr)
 		}
 
 		var cc *UDPConn
@@ -231,32 +234,32 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		if req.Cmd == CmdUdpTun {
 			dgram, err = gosocks5.ReadUDPDatagram(conn)
 			if err != nil {
-				glog.V(LWARNING).Infoln("socks5 udp:", err)
+				glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 				return
 			}
+			glog.V(LINFO).Infof("[socks5-udp] %s >>> %s, length %d", conn.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
 			cc = Client(conn, nil)
-			glog.V(LINFO).Infof("[udp] -> %s, length %d", dgram.Header.Addr, len(dgram.Data))
 		} else {
 			b := udpPool.Get().([]byte)
 			defer udpPool.Put(b)
 
 			n, raddr, err := uconn.ReadFromUDP(b)
 			if err != nil {
-				glog.V(LWARNING).Infoln("socks5 udp:", err)
+				glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 				return
 			}
 			dgram, err = gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
 			if err != nil {
-				glog.V(LWARNING).Infoln("socks5 udp:", err)
+				glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 				return
 			}
+			glog.V(LINFO).Infof("[socks5-udp] %s >>> %s, length %d", raddr, dgram.Header.Addr, len(dgram.Data))
 			cc = Client(uconn, raddr)
-			glog.V(LINFO).Infof("[udp] %s -> %s, length %d", raddr, dgram.Header.Addr, len(dgram.Data))
 		}
 
 		sc, err := createServerConn(uconn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("socks5 udp:", err)
+			glog.V(LWARNING).Infof("[socks5-udp] %s", err)
 			return
 		}
 		defer sc.Close()
@@ -270,7 +273,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
 			return
 		}
-		glog.V(LINFO).Infof("[udp] <- %s, length %d", dgram.Header.Addr, len(dgram.Data))
+		glog.V(LINFO).Infof("[socks5-udp] <<< %s, length %d", dgram.Header.Addr, len(dgram.Data))
 
 		if err = cc.WriteUDPTimeout(dgram, time.Second*90); err != nil {
 			glog.V(LWARNING).Infoln("socks5 udp:", err)
