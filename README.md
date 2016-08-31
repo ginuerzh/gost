@@ -11,6 +11,7 @@ gost - GO Simple Tunnel
 * socks5代理支持tls协商加密
 * Tunnel UDP over TCP
 * 兼容shadowsocks协议
+* 支持端口转发(2.1及以上版本)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -20,13 +21,16 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 
 参数说明
 ------
-#### -L和-F参数格式
+#### 代理及转发链
+
+适用于-L和-F参数
+
 ```bash
 [scheme://][user:pass@host]:port
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(tcp, ws, wss, tls), 二者可以任意组合，或单独使用。
+protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls), 二者可以任意组合，或单独使用:
 
 > http - 作为http代理: http://:8080
 
@@ -39,6 +43,21 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 > tls - 作为https/socks5代理，使用tls传输数据: tls://:8080
 
 > ss - 作为shadowsocks服务，ss://aes-256-cfb:123456@:8080
+
+#### 本地端口转发
+
+适用于-L参数
+
+```bash
+scheme://[bind_address]:port/[host]:hostport
+```	
+> scheme - 端口转发类型: tcp, udp
+
+> bind_address:port - 本地监听地址
+
+> host:hostport - 远程监听地址
+
+当在bind_address:port上收到连接信息，则会(通过转发链)与host:hostport建立连接，创建一条数据通道。
 
 #### 开启日志
 
@@ -89,6 +108,22 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 gost -L=:8080 -F=http+tls://192.168.1.1:443 -F=socks+ws://192.168.1.2:1080 -F=ss://aes-128-cfb:123456@192.168.1.3:8338 -F=a.b.c.d:NNNN
 ```
 gost按照-F设置顺序通过转发链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意http(s)/socks5/shadowsocks类型代理。
+
+#### 本地端口转发(TCP)
+
+```bash
+gost -L=tcp://:2222/192.168.1.1:22 -F=...
+```
+将本地TCP端口2222上的数据(通过转发链)转发到192.168.1.1:22上。
+
+#### 本地端口转发(UDP)
+
+```bash
+gost -L=udp://:5353/192.168.1.1:53 -F=...
+```
+将本地UDP端口5353上的数据(通过转发链)转发到192.168.1.1:53上。
+
+**注: 如果有转发链，则转发链的末端(最后一个-F参数)必须是gost socks5类型代理。**
 
 加密机制
 ------

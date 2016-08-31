@@ -166,7 +166,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
-		glog.V(LINFO).Infof("[socks5-connect] %s -> %s", conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[socks5-connect] %s - %s", conn.RemoteAddr(), req.Addr)
 
 		tconn, err := Connect(req.Addr.String())
 		if err != nil {
@@ -192,7 +192,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		Transport(conn, tconn)
 		glog.V(LINFO).Infof("[socks5-connect] %s >-< %s DISCONNECTED", conn.RemoteAddr(), req.Addr)
 	case gosocks5.CmdBind:
-		glog.V(LINFO).Infof("[socks5-bind] %s -> %s", conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[socks5-bind] %s - %s", conn.RemoteAddr(), req.Addr)
 
 		if len(forwardArgs) > 0 {
 			forwardBind(req, conn)
@@ -202,7 +202,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		glog.V(LINFO).Infof("[socks5-bind] %s >-< %s DISCONNECTED", conn.RemoteAddr(), req.Addr)
 	case gosocks5.CmdUdp, CmdUdpTun:
 		// TODO: udp tunnel <-> forward chain
-		glog.V(LINFO).Infof("[socks5-udp] %s -> %s ASSOCIATE", conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[socks5-udp] %s - %s ASSOCIATE", conn.RemoteAddr(), req.Addr)
 		uconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
 			glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)

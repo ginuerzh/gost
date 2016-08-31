@@ -18,7 +18,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			glog.Infoln(string(dump))
 		}
 	}
-	glog.V(LINFO).Infof("[http] %s -> %s", conn.RemoteAddr(), req.Host)
+	glog.V(LINFO).Infof("[http] %s - %s", conn.RemoteAddr(), req.Host)
 
 	var username, password string
 	if arg.User != nil {
