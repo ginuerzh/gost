@@ -22,11 +22,12 @@ func (ss *strSlice) Set(value string) error {
 
 // admin:123456@localhost:8080
 type Args struct {
-	Addr      string // host:port
-	Protocol  string // protocol: http/socks(5)/ss
-	Transport string // transport: ws(s)/tls/tcp/udp
-	Forward   string // forward address, used by tcp/udp port forwarding
-	User      *url.Userinfo
+	Addr      string          // host:port
+	Protocol  string          // protocol: http/socks(5)/ss
+	Transport string          // transport: ws(s)/tls/tcp/udp/rtcp/rudp
+	Forward   string          // forward address, used by local tcp/udp port forwarding
+	Bind      string          // remote binding port, used by remote tcp/udp port forwarding
+	User      *url.Userinfo   // authentication for proxy
 	Cert      tls.Certificate // tls certificate
 }
 
@@ -52,10 +53,9 @@ func parseArgs(ss []string) (args []Args) {
 		}
 
 		arg := Args{
-			Addr:    u.Host,
-			User:    u.User,
-			Cert:    tlsCert,
-			Forward: strings.Trim(u.EscapedPath(), "/"),
+			Addr: u.Host,
+			User: u.User,
+			Cert: tlsCert,
 		}
 
 		schemes := strings.Split(u.Scheme, "+")
@@ -76,8 +76,14 @@ func parseArgs(ss []string) (args []Args) {
 
 		switch arg.Transport {
 		case "ws", "wss", "tls":
-		case "tcp", "udp": // started from v2.1, tcp and udp are for port forwarding
-			arg.Protocol = ""
+		case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
+			arg.Forward = strings.Trim(u.EscapedPath(), "/")
+		case "rtcp", "rudp": // started from v2.1, rtcp and rudp are for remote port forwarding\
+			if a := strings.Split(strings.Trim(u.EscapedPath(), "/"), ":"); len(a) == 3 {
+				arg.Forward = a[0] + ":" + a[1]
+				arg.Bind = ":" + a[2]
+				glog.V(LINFO).Infoln(arg.Forward, arg.Bind)
+			}
 		default:
 			arg.Transport = ""
 		}

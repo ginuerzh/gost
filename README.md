@@ -55,7 +55,7 @@ scheme://[bind_address]:port/[host]:hostport
 
 > bind_address:port - 本地监听地址
 
-> host:hostport - 远程监听地址
+> host:hostport - 远程地址
 
 当在bind_address:port上收到连接信息，则会(通过转发链)与host:hostport建立连接，创建一条数据通道。
 

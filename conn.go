@@ -52,10 +52,12 @@ func listenAndServe(arg Args) error {
 	case "tls": // tls connection
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
-	case "tcp": // TCP port forwarding
+	case "tcp": // Local TCP port forwarding
 		return listenAndServeTcpForward(arg)
-	case "udp": // UDP port forwarding
+	case "udp": // Local UDP port forwarding
 		return listenAndServeUdpForward(arg)
+	case "rtcp": // Remote TCP port forwarding
+		return serveRTcpForward(arg)
 	default:
 		ln, err = net.Listen("tcp", arg.Addr)
 	}
@@ -73,6 +75,49 @@ func listenAndServe(arg Args) error {
 			continue
 		}
 		go handleConn(conn, arg)
+	}
+}
+
+func serveRTcpForward(arg Args) error {
+	if arg.Forward == "" {
+		ln, err := net.Listen("tcp", arg.Addr)
+		if err != nil {
+			return err
+		}
+		defer ln.Close()
+
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				glog.V(LWARNING).Infoln(err)
+				continue
+			}
+
+			tc := conn.(*net.TCPConn)
+			tc.SetKeepAlive(true)
+			tc.SetKeepAlivePeriod(time.Second * 60)
+
+			go handleRTcpForwardConn(conn, arg)
+		}
+	} else {
+		retry := 0
+		for {
+			conn, err := Connect(arg.Forward)
+			if err != nil {
+				glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", arg.Addr, arg.Forward, err)
+				time.Sleep((1 << uint(retry)) * time.Second)
+				if retry < 5 {
+					retry++
+				}
+				continue
+			}
+			retry = 0
+
+			if err := connectRTcpForward(conn, arg); err != nil {
+				conn.Close()
+				time.Sleep(10 * time.Second)
+			}
+		}
 	}
 }
 
@@ -122,10 +167,10 @@ func listenAndServeUdpForward(arg Args) error {
 
 func handleConn(conn net.Conn, arg Args) {
 	atomic.AddInt32(&connCounter, 1)
-	glog.V(LINFO).Infof("%s connected, connections: %d",
+	glog.V(LDEBUG).Infof("%s connected, connections: %d",
 		conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
 
-	if glog.V(LINFO) {
+	if glog.V(LDEBUG) {
 		defer func() {
 			glog.Infof("%s disconnected, connections: %d",
 				conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
@@ -153,7 +198,7 @@ func handleConn(conn net.Conn, arg Args) {
 	case "http":
 		req, err := http.ReadRequest(bufio.NewReader(conn))
 		if err != nil {
-			glog.V(LWARNING).Infoln("http:", err)
+			glog.V(LWARNING).Infoln("[http]", err)
 			return
 		}
 		handleHttpRequest(req, conn, arg)
@@ -162,7 +207,7 @@ func handleConn(conn net.Conn, arg Args) {
 		conn = gosocks5.ServerConn(conn, selector)
 		req, err := gosocks5.ReadRequest(conn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("socks5:", err)
+			glog.V(LWARNING).Infoln("[socks5] request:", err)
 			return
 		}
 		handleSocks5Request(req, conn)
@@ -177,7 +222,7 @@ func handleConn(conn net.Conn, arg Args) {
 
 	n, err := io.ReadAtLeast(conn, b, 2)
 	if err != nil {
-		glog.V(LWARNING).Infoln("client:", err)
+		glog.V(LWARNING).Infoln("[client]", err)
 		return
 	}
 
@@ -186,26 +231,26 @@ func handleConn(conn net.Conn, arg Args) {
 		length := 2 + mn
 		if n < length {
 			if _, err := io.ReadFull(conn, b[n:length]); err != nil {
-				glog.V(LWARNING).Infoln("socks5:", err)
+				glog.V(LWARNING).Infoln("[socks5]", err)
 				return
 			}
 		}
 		methods := b[2 : 2+mn]
 		method := selector.Select(methods...)
 		if _, err := conn.Write([]byte{gosocks5.Ver5, method}); err != nil {
-			glog.V(LWARNING).Infoln("socks5 select:", err)
+			glog.V(LWARNING).Infoln("[socks5] select:", err)
 			return
 		}
 		c, err := selector.OnSelected(method, conn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("socks5 onselected:", err)
+			glog.V(LWARNING).Infoln("[socks5] onselected:", err)
 			return
 		}
 		conn = c
 
 		req, err := gosocks5.ReadRequest(conn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("socks5 request:", err)
+			glog.V(LWARNING).Infoln("[socks5] request:", err)
 			return
 		}
 		handleSocks5Request(req, conn)
@@ -214,7 +259,7 @@ func handleConn(conn net.Conn, arg Args) {
 
 	req, err := http.ReadRequest(bufio.NewReader(newReqReader(b[:n], conn)))
 	if err != nil {
-		glog.V(LWARNING).Infoln("http:", err)
+		glog.V(LWARNING).Infoln("[http]", err)
 		return
 	}
 	handleHttpRequest(req, conn, arg)
@@ -247,7 +292,7 @@ func Connect(addr string) (conn net.Conn, err error) {
 		addr += ":80"
 	}
 	if len(forwardArgs) == 0 {
-		return net.DialTimeout("tcp", addr, time.Second*60)
+		return net.DialTimeout("tcp", addr, time.Second*90)
 	}
 
 	var end Args
@@ -306,7 +351,7 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 		if trans == "" { // default is tcp
 			trans = "tcp"
 		}
-		glog.Infof("forward: %s/%s %s", proto, trans, arg.Addr)
+		glog.V(LDEBUG).Infof("forward: %s/%s %s", proto, trans, arg.Addr)
 	}
 
 	var tlsUsed bool

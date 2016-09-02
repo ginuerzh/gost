@@ -73,9 +73,9 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		}
 	}
 
-	glog.V(LINFO).Infof("[http] %s <-> %s OK", conn.RemoteAddr(), req.Host)
+	glog.V(LINFO).Infof("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
 	Transport(conn, c)
-	glog.V(LINFO).Infof("[http] %s >-< %s DISCONNECTED", conn.RemoteAddr(), req.Host)
+	glog.V(LINFO).Infof("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
 }
 
 func basicAuth(authInfo string) (username, password string, ok bool) {
