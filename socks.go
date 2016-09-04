@@ -192,18 +192,67 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		glog.V(LINFO).Infof("[socks5-connect] %s <-> %s", conn.RemoteAddr(), req.Addr)
 		Transport(conn, tconn)
 		glog.V(LINFO).Infof("[socks5-connect] %s >-< %s", conn.RemoteAddr(), req.Addr)
+
 	case gosocks5.CmdBind:
 		glog.V(LINFO).Infof("[socks5-bind] %s - %s", conn.RemoteAddr(), req.Addr)
 
-		if len(forwardArgs) > 0 {
-			forwardBind(req, conn)
-		} else {
-			tc := conn.(*net.TCPConn)
-			tc.SetKeepAlive(true)
-			tc.SetKeepAlivePeriod(time.Second * 60)
-
-			serveBind(req, conn)
+		reply, fconn, err := socks5Bind(req, conn)
+		if reply != nil {
+			if err := reply.Write(conn); err != nil {
+				glog.V(LWARNING).Infof("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+				if fconn != nil {
+					fconn.Close()
+				}
+				return
+			}
+			glog.V(LDEBUG).Infof("[socks5-bind] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, reply)
 		}
+
+		if err != nil {
+			glog.V(LWARNING).Infof("[socks5-bind] %s - %s : %s", conn.RemoteAddr(), req.Addr, err)
+			return
+		}
+		defer fconn.Close()
+
+		glog.V(LINFO).Infof("[socks5-bind] %s <-> %s", conn.RemoteAddr(), fconn.RemoteAddr())
+		Transport(conn, fconn)
+		glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", conn.RemoteAddr(), fconn.RemoteAddr())
+
+		/*
+			case gosocks5.CmdUdp:
+			case CmdUdpTun:
+				glog.V(LINFO).Infof("[socks5-udp] %s - %s ASSOCIATE", conn.RemoteAddr(), req.Addr)
+				if len(forwardArgs) > 0 { // direct forward
+					fconn, _, err := forwardChain(forwardArgs...)
+					if err != nil {
+						glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+						rep := gosocks5.NewReply(gosocks5.Failure, nil)
+						if err := rep.Write(conn); err != nil {
+							glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+						} else {
+							glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+						}
+						return
+					}
+					defer fconn.Close()
+					if err := req.Write(fconn); err != nil {
+						glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+						rep := gosocks5.NewReply(gosocks5.Failure, nil)
+						if err := rep.Write(conn); err != nil {
+							glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+						} else {
+							glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+						}
+						return
+					}
+
+					glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", conn.RemoteAddr(), req.Addr)
+					Transport(conn, fconn)
+					glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", conn.RemoteAddr(), req.Addr)
+				} else {
+
+				}
+		*/
 	case gosocks5.CmdUdp, CmdUdpTun:
 		// TODO: udp tunnel <-> forward chain
 		glog.V(LINFO).Infof("[socks5-udp] %s - %s ASSOCIATE", conn.RemoteAddr(), req.Addr)
@@ -296,35 +345,35 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 	}
 }
 
-func serveBind(req *gosocks5.Request, conn net.Conn) error {
+func socks5Bind(req *gosocks5.Request, conn net.Conn) (*gosocks5.Reply, net.Conn, error) {
+	if len(forwardArgs) > 0 {
+		fconn, _, err := forwardChain(forwardArgs...)
+		if err != nil {
+			return gosocks5.NewReply(gosocks5.Failure, nil), nil, err
+		}
+
+		if err := req.Write(fconn); err != nil {
+			fconn.Close()
+			return gosocks5.NewReply(gosocks5.Failure, nil), nil, err
+		}
+
+		return nil, fconn, nil
+	}
+
 	bindAddr, _ := net.ResolveTCPAddr("tcp", req.Addr.String())
 	ln, err := net.ListenTCP("tcp", bindAddr)
 	if err != nil {
-		glog.V(LWARNING).Infof("[socks5-bind] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
-		if bindAddr != nil {
-			ln, err = net.ListenTCP("tcp", nil)
-		}
-		if err != nil {
-			glog.V(LWARNING).Infof("[socks5-bind] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
-			rep := gosocks5.NewReply(gosocks5.Failure, nil)
-			if err := rep.Write(conn); err != nil {
-				glog.V(LWARNING).Infof("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
-			} else {
-				glog.V(LDEBUG).Infof("[socks5-bind] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
-			}
-			return err
-		}
+		return gosocks5.NewReply(gosocks5.Failure, nil), nil, err
 	}
 
 	addr := ToSocksAddr(ln.Addr())
 	// Issue: may not reachable when host has two interfaces
 	addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
-
 	rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
 	if err := rep.Write(conn); err != nil {
 		glog.V(LWARNING).Infof("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
 		ln.Close()
-		return err
+		return nil, nil, err
 	}
 	glog.V(LDEBUG).Infof("[socks5-bind] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
 	glog.V(LINFO).Infof("[socks5-bind] %s - %s BIND ON %s OK", conn.RemoteAddr(), req.Addr, addr)
@@ -342,7 +391,9 @@ func serveBind(req *gosocks5.Request, conn net.Conn) error {
 	peerChan := make(chan error, 1)
 	go func() {
 		defer close(peerChan)
-		_, err := ioutil.ReadAll(conn)
+		b := tcpPool.Get().([]byte)
+		defer tcpPool.Put(b)
+		_, err := conn.Read(b)
 		if err != nil {
 			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
 				return
@@ -358,14 +409,8 @@ func serveBind(req *gosocks5.Request, conn net.Conn) error {
 		case c := <-lnChan:
 			ln.Close() // only accept one peer
 			if c == nil {
-				if err := gosocks5.NewReply(gosocks5.Failure, nil).Write(conn); err != nil {
-					glog.V(LWARNING).Infoln("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), addr, err)
-				}
-				glog.V(LWARNING).Infof("[socks5-bind] %s >-< %s", conn.RemoteAddr(), addr)
-				return errors.New("accept error")
+				return gosocks5.NewReply(gosocks5.Failure, nil), nil, errors.New("[socks5-bind] accept error")
 			}
-			// glog.V(LINFO).Infof("[socks5-bind] %s <- %s PEER %s ACCEPTED", conn.RemoteAddr(), req.Addr, c.RemoteAddr())
-			// gosocks5.NewReply(gosocks5.Succeeded, ToSocksAddr(c.RemoteAddr())).Write(conn)
 			pconn = c
 			lnChan = nil
 			ln = nil
@@ -378,97 +423,22 @@ func serveBind(req *gosocks5.Request, conn net.Conn) error {
 				if pconn != nil {
 					pconn.Close()
 				}
-				glog.V(LWARNING).Infof("[socks5-bind] %s >-< %s", conn.RemoteAddr(), addr)
-				return err
+				if err == nil {
+					err = errors.New("Oops, some mysterious error!")
+				}
+				return nil, nil, err
 			}
 			goto out
 		}
 	}
 
 out:
-	defer pconn.Close()
 	conn.SetReadDeadline(time.Time{})
 
-	paddr := ToSocksAddr(pconn.RemoteAddr())
-	glog.V(LINFO).Infof("[socks5-bind] %s <- %s PEER %s ACCEPTED", conn.RemoteAddr(), addr, paddr)
-
-	rep = gosocks5.NewReply(gosocks5.Succeeded, paddr)
-	if err := rep.Write(conn); err != nil {
-		glog.V(LWARNING).Infof("[socks5 bind] %s <- %s : %s", conn.RemoteAddr(), addr, err)
-		return err
-	}
-	glog.V(LDEBUG).Infof("[socks5 bind] %s <- %s\n%s", conn.RemoteAddr(), addr, rep)
-
-	glog.V(LINFO).Infof("[socks5-bind] %s <-> %s", conn.RemoteAddr(), paddr)
-	defer glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", conn.RemoteAddr(), paddr)
-	return Transport(conn, pconn)
+	glog.V(LINFO).Infof("[socks5-bind] %s <- %s PEER %s ACCEPTED", conn.RemoteAddr(), addr, pconn.RemoteAddr())
+	rep = gosocks5.NewReply(gosocks5.Succeeded, ToSocksAddr(pconn.RemoteAddr()))
+	return rep, pconn, nil
 }
-
-func forwardBind(req *gosocks5.Request, conn net.Conn) error {
-	fconn, _, err := forwardChain(forwardArgs...)
-	if err != nil {
-		glog.V(LWARNING).Infof("[socks5-bind] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
-		if fconn != nil {
-			fconn.Close()
-		}
-		rep := gosocks5.NewReply(gosocks5.Failure, nil)
-		if err := rep.Write(conn); err != nil {
-			glog.V(LWARNING).Infof("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
-		} else {
-			glog.V(LDEBUG).Infof("[socks5-bind] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
-		}
-		return err
-	}
-	defer fconn.Close()
-
-	if err := req.Write(fconn); err != nil {
-		glog.V(LWARNING).Infoln("[socks5-bind] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
-		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
-		return err
-	}
-	glog.V(LDEBUG).Infof("[socks5-bind] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, req)
-
-	/*
-		// first reply
-		rep, err := peekReply(conn, fconn)
-		if err != nil {
-			glog.V(LWARNING).Infoln("[socks5] BIND forward", err)
-			return err
-		}
-		glog.V(LINFO).Infoln("[socks5] BIND forward on", rep.Addr, "OK")
-
-		// second reply
-		rep, err = peekReply(conn, fconn)
-		if err != nil {
-			glog.V(LWARNING).Infoln("[socks5] BIND forward accept", err)
-			return err
-		}
-		glog.V(LINFO).Infoln("[socks5] BIND forward accept", rep.Addr)
-	*/
-	glog.V(LINFO).Infof("[socks5-bind] %s <-> %s", conn.RemoteAddr(), req.Addr)
-	defer glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", conn.RemoteAddr(), req.Addr)
-	return Transport(conn, fconn)
-}
-
-/*
-func peekReply(dst, src net.Conn) (rep *gosocks5.Reply, err error) {
-	rep, err = gosocks5.ReadReply(src)
-	if err != nil {
-		glog.V(LWARNING).Infof("[socks5-bind] FORWARD %s <- : %s", dst.RemoteAddr(), err)
-		rep = gosocks5.NewReply(gosocks5.Failure, nil)
-	}
-	if err = rep.Write(dst); err != nil {
-		return
-	}
-	glog.V(LDEBUG).Infof("[socks5-bind] FORWARD %s <-\n%s", dst.RemoteAddr(), rep)
-
-	if rep.Rep != gosocks5.Succeeded {
-		err = errors.New("Failure")
-	}
-
-	return
-}
-*/
 
 func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
 	if len(forwardArgs) == 0 {
@@ -478,9 +448,6 @@ func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
 
 	fconn, _, err := forwardChain(forwardArgs...)
 	if err != nil {
-		if fconn != nil {
-			fconn.Close()
-		}
 		return
 	}
 	glog.V(LINFO).Infoln("[udp] forward associate")
@@ -509,7 +476,7 @@ func createServerConn(uconn *net.UDPConn) (c *UDPConn, err error) {
 }
 
 func ToSocksAddr(addr net.Addr) *gosocks5.Addr {
-	host := ""
+	host := "0.0.0.0"
 	port := 0
 	if addr != nil {
 		h, p, _ := net.SplitHostPort(addr.String())

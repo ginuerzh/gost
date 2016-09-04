@@ -58,6 +58,7 @@ func listenAndServe(arg Args) error {
 		return listenAndServeUdpForward(arg)
 	case "rtcp": // Remote TCP port forwarding
 		return serveRTcpForward(arg)
+	case "rudp": // Remote UDP port forwarding
 	default:
 		ln, err = net.Listen("tcp", arg.Addr)
 	}
@@ -75,49 +76,6 @@ func listenAndServe(arg Args) error {
 			continue
 		}
 		go handleConn(conn, arg)
-	}
-}
-
-func serveRTcpForward(arg Args) error {
-	if arg.Forward == "" {
-		ln, err := net.Listen("tcp", arg.Addr)
-		if err != nil {
-			return err
-		}
-		defer ln.Close()
-
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				glog.V(LWARNING).Infoln(err)
-				continue
-			}
-
-			tc := conn.(*net.TCPConn)
-			tc.SetKeepAlive(true)
-			tc.SetKeepAlivePeriod(time.Second * 60)
-
-			go handleRTcpForwardConn(conn, arg)
-		}
-	} else {
-		retry := 0
-		for {
-			conn, err := Connect(arg.Forward)
-			if err != nil {
-				glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", arg.Addr, arg.Forward, err)
-				time.Sleep((1 << uint(retry)) * time.Second)
-				if retry < 5 {
-					retry++
-				}
-				continue
-			}
-			retry = 0
-
-			if err := connectRTcpForward(conn, arg); err != nil {
-				conn.Close()
-				time.Sleep(10 * time.Second)
-			}
-		}
 	}
 }
 
@@ -165,6 +123,31 @@ func listenAndServeUdpForward(arg Args) error {
 	}
 }
 
+func serveRTcpForward(arg Args) error {
+	if len(forwardArgs) == 0 {
+		return errors.New("rtcp: at least one -F must be assigned")
+	}
+
+	retry := 0
+	for {
+		conn, _, err := forwardChain(forwardArgs...)
+		if err != nil {
+			glog.V(LWARNING).Infof("[rtcp] %s - %s : %s", arg.Addr, arg.Remote, err)
+			time.Sleep((1 << uint(retry)) * time.Second)
+			if retry < 5 {
+				retry++
+			}
+			continue
+		}
+		retry = 0
+
+		if err := connectRTcpForward(conn, arg); err != nil {
+			conn.Close()
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
+
 func handleConn(conn net.Conn, arg Args) {
 	atomic.AddInt32(&connCounter, 1)
 	glog.V(LDEBUG).Infof("%s connected, connections: %d",
@@ -207,7 +190,7 @@ func handleConn(conn net.Conn, arg Args) {
 		conn = gosocks5.ServerConn(conn, selector)
 		req, err := gosocks5.ReadRequest(conn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("[socks5] request:", err)
+			glog.V(LWARNING).Infoln("[socks5]", err)
 			return
 		}
 		handleSocks5Request(req, conn)
@@ -298,9 +281,6 @@ func Connect(addr string) (conn net.Conn, err error) {
 	var end Args
 	conn, end, err = forwardChain(forwardArgs...)
 	if err != nil {
-		if conn != nil {
-			conn.Close()
-		}
 		return nil, err
 	}
 	if err := establish(conn, addr, end); err != nil {
@@ -312,6 +292,13 @@ func Connect(addr string) (conn net.Conn, err error) {
 
 // establish connection throughout the forward chain
 func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
+	defer func() {
+		if err != nil && conn != nil {
+			conn.Close()
+			conn = nil
+		}
+	}()
+
 	end = chain[0]
 	if conn, err = net.DialTimeout("tcp", end.Addr, time.Second*90); err != nil {
 		return

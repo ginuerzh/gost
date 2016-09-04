@@ -45,8 +45,7 @@ func main() {
 		return
 	}
 	if pv {
-		fmt.Fprintln(os.Stderr, "gost", Version)
-		fmt.Fprintln(os.Stderr, runtime.Version())
+		fmt.Fprintf(os.Stderr, "gost %s (%s)\n", Version, runtime.Version())
 		return
 	}
 
