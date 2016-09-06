@@ -91,13 +91,15 @@ func parseArgs(ss []string) (args []Args) {
 
 // Based on io.Copy, but the io.ErrShortWrite is ignored (mainly for websocket)
 func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := make([]byte, 32*1024)
+	// b := make([]byte, 32*1024)
+	b := tcpPool.Get().([]byte)
+	defer tcpPool.Put(b)
 
 	for {
-		nr, er := src.Read(buf)
+		nr, er := src.Read(b)
 		//log.Println("cp r", nr, er)
 		if nr > 0 {
-			nw, ew := dst.Write(buf[:nr])
+			nw, ew := dst.Write(b[:nr])
 			//log.Println("cp w", nw, ew)
 			if nw > 0 {
 				written += int64(nw)

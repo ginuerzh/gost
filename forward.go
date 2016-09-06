@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"net"
@@ -72,27 +73,32 @@ func handleUdpForward(conn *net.UDPConn, raddr *net.UDPAddr, data []byte, arg Ar
 		return
 	}
 
-	fconn, _, err := forwardChain(forwardArgs...)
+	tun, _, err := forwardChain(forwardArgs...)
 	if err != nil {
 		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
 		return
 	}
-	defer fconn.Close()
+	defer tun.Close()
 
 	glog.V(LINFO).Infof("[udp-forward] %s -> %s ASSOCIATE", raddr, arg.Remote)
 
 	req := gosocks5.NewRequest(CmdUdpTun, nil)
-	if err = req.Write(fconn); err != nil {
+	tun.SetWriteDeadline(time.Now().Add(time.Second * 90))
+	if err = req.Write(tun); err != nil {
 		glog.V(LWARNING).Infof("[udp-forward] %s -> %s ASSOCIATE : %s", raddr, arg.Remote, err)
 		return
 	}
+	tun.SetWriteDeadline(time.Time{})
 	glog.V(LDEBUG).Infof("[udp-forward] %s -> %s\n%s", raddr, arg.Remote, req)
 
-	rep, err := gosocks5.ReadReply(fconn)
+	tun.SetReadDeadline(time.Now().Add(90 * time.Second))
+	rep, err := gosocks5.ReadReply(tun)
 	if err != nil {
 		glog.V(LWARNING).Infof("[udp-forward] %s <- %s ASSOCIATE : %s", raddr, arg.Remote, err)
 		return
 	}
+	tun.SetReadDeadline(time.Time{})
+
 	glog.V(LDEBUG).Infof("[udp-forward] %s <- %s\n%s", raddr, arg.Remote, rep)
 	if rep.Rep != gosocks5.Succeeded {
 		glog.V(LWARNING).Infof("[udp-forward] %s <- %s ASSOCIATE failured", raddr, arg.Remote)
@@ -103,25 +109,28 @@ func handleUdpForward(conn *net.UDPConn, raddr *net.UDPAddr, data []byte, arg Ar
 	dgram := gosocks5.NewUDPDatagram(
 		gosocks5.NewUDPHeader(uint16(len(data)), 0, ToSocksAddr(faddr)), data)
 
-	fconn.SetWriteDeadline(time.Now().Add(time.Second * 90))
-	if err = dgram.Write(fconn); err != nil {
+	tun.SetWriteDeadline(time.Now().Add(time.Second * 90))
+	if err = dgram.Write(tun); err != nil {
 		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
 		return
 	}
+	tun.SetWriteDeadline(time.Time{})
 	glog.V(LDEBUG).Infof("[udp-forward] %s >>> %s length %d", raddr, arg.Remote, len(data))
 
-	fconn.SetReadDeadline(time.Now().Add(time.Second * 90))
-	dgram, err = gosocks5.ReadUDPDatagram(fconn)
+	tun.SetReadDeadline(time.Now().Add(time.Second * 90))
+	dgram, err = gosocks5.ReadUDPDatagram(tun)
 	if err != nil {
 		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", raddr, arg.Remote, err)
 		return
 	}
+	tun.SetReadDeadline(time.Time{})
 	glog.V(LDEBUG).Infof("[udp-forward] %s <<< %s length %d", raddr, dgram.Header.Addr, len(dgram.Data))
 
 	if _, err = conn.WriteToUDP(dgram.Data, raddr); err != nil {
 		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", raddr, arg.Remote, err)
 	}
 
+	// NOTE: for now we only get one response from peer
 	glog.V(LINFO).Infof("[udp-forward] %s >-< %s", raddr, arg.Remote)
 }
 
@@ -137,11 +146,13 @@ func connectRTcpForward(conn net.Conn, arg Args) error {
 	}
 
 	// first reply, bind status
+	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	rep, err := gosocks5.ReadReply(conn)
 	if err != nil {
 		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", bindAddr, arg.Remote, err)
 		return err
 	}
+	conn.SetReadDeadline(time.Time{})
 	if rep.Rep != gosocks5.Succeeded {
 		glog.V(LWARNING).Infof("[rtcp] %s -> %s : bind on %s failure", bindAddr, arg.Remote, arg.Addr)
 		return errors.New("Bind on " + arg.Addr + " failure")
@@ -177,4 +188,80 @@ func connectRTcpForward(conn net.Conn, arg Args) error {
 	}()
 
 	return nil
+}
+
+func connectRUdpForward(conn net.Conn, arg Args) error {
+	glog.V(LINFO).Infof("[rudp] %s - %s", arg.Addr, arg.Remote)
+
+	addr, _ := net.ResolveUDPAddr("udp", arg.Addr)
+	req := gosocks5.NewRequest(CmdUdpTun, ToSocksAddr(addr))
+	bindAddr := req.Addr
+	conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
+	if err := req.Write(conn); err != nil {
+		glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
+		return err
+	}
+	conn.SetWriteDeadline(time.Time{})
+
+	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+	rep, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+		return err
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	if rep.Rep != gosocks5.Succeeded {
+		glog.V(LWARNING).Infof("[rudp] %s <- %s : bind on %s failure", bindAddr, arg.Remote, arg.Addr)
+		return errors.New(fmt.Sprintf("Bind on %s failure", bindAddr))
+	}
+
+	glog.V(LINFO).Infof("[rudp] %s - %s BIND ON %s OK", bindAddr, arg.Remote, rep.Addr)
+
+	raddr, err := net.ResolveUDPAddr("udp", arg.Remote)
+	if err != nil {
+		glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+		return err
+	}
+
+	for {
+		dgram, err := gosocks5.ReadUDPDatagram(conn)
+		if err != nil {
+			glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+			return err
+		}
+
+		go func() {
+			b := udpPool.Get().([]byte)
+			defer udpPool.Put(b)
+
+			relay, err := net.DialUDP("udp", nil, raddr)
+			if err != nil {
+				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
+				return
+			}
+			defer relay.Close()
+
+			if _, err := relay.Write(dgram.Data); err != nil {
+				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
+				return
+			}
+
+			relay.SetReadDeadline(time.Now().Add(time.Second * 60))
+			n, err := relay.Read(b)
+			if err != nil {
+				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+				return
+			}
+			relay.SetReadDeadline(time.Time{})
+
+			conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
+			if err := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, dgram.Header.Addr), b[:n]).Write(conn); err != nil {
+				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+				return
+			}
+			conn.SetWriteDeadline(time.Time{})
+		}()
+	}
+
 }

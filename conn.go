@@ -29,7 +29,7 @@ var (
 	// tcp buffer pool
 	tcpPool = sync.Pool{
 		New: func() interface{} {
-			return make([]byte, 16*1024)
+			return make([]byte, 32*1024)
 		},
 	}
 	// udp buffer pool
@@ -59,6 +59,7 @@ func listenAndServe(arg Args) error {
 	case "rtcp": // Remote TCP port forwarding
 		return serveRTcpForward(arg)
 	case "rudp": // Remote UDP port forwarding
+		return serveRUdpForward(arg)
 	default:
 		ln, err = net.Listen("tcp", arg.Addr)
 	}
@@ -142,6 +143,31 @@ func serveRTcpForward(arg Args) error {
 		retry = 0
 
 		if err := connectRTcpForward(conn, arg); err != nil {
+			conn.Close()
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
+
+func serveRUdpForward(arg Args) error {
+	if len(forwardArgs) == 0 {
+		return errors.New("rudp: at least one -F must be assigned")
+	}
+
+	retry := 0
+	for {
+		conn, _, err := forwardChain(forwardArgs...)
+		if err != nil {
+			glog.V(LWARNING).Infof("[rudp] %s - %s : %s", arg.Addr, arg.Remote, err)
+			time.Sleep((1 << uint(retry)) * time.Second)
+			if retry < 5 {
+				retry++
+			}
+			continue
+		}
+		retry = 0
+
+		if err := connectRUdpForward(conn, arg); err != nil {
 			conn.Close()
 			time.Sleep(10 * time.Second)
 		}

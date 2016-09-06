@@ -5,174 +5,166 @@ import (
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"net"
-	"time"
+	//"time"
 )
 
-type UDPConn struct {
-	isClient bool
-	udp      *net.UDPConn
-	addr     net.Addr
-	tcp      net.Conn
-}
+func transportUDP(relay, peer *net.UDPConn) (err error) {
+	rChan := make(chan error, 1)
+	wChan := make(chan error, 1)
 
-func Client(conn net.Conn, addr net.Addr) *UDPConn {
-	c := &UDPConn{isClient: true}
+	var clientAddr *net.UDPAddr
 
-	switch conn := conn.(type) {
-	case *net.UDPConn:
-		c.udp = conn
-		c.addr = addr
-	default:
-		c.tcp = conn
-	}
-
-	return c
-}
-
-func Server(conn net.Conn) *UDPConn {
-	c := &UDPConn{}
-
-	switch conn := conn.(type) {
-	case *net.UDPConn:
-		c.udp = conn
-	default:
-		c.tcp = conn
-	}
-
-	return c
-}
-
-func (c *UDPConn) ReadUDP() (*gosocks5.UDPDatagram, error) {
-	if c.isClient {
-		return c.readUDPClient()
-	}
-	return c.readUDPServer()
-}
-
-func (c *UDPConn) ReadUDPTimeout(timeout time.Duration) (*gosocks5.UDPDatagram, error) {
-	if c.udp != nil {
-		c.udp.SetReadDeadline(time.Now().Add(timeout))
-		defer c.udp.SetReadDeadline(time.Time{})
-	} else {
-		c.tcp.SetReadDeadline(time.Now().Add(timeout))
-		defer c.tcp.SetReadDeadline(time.Time{})
-	}
-	if c.isClient {
-		return c.readUDPClient()
-	}
-	return c.readUDPServer()
-}
-
-func (c *UDPConn) readUDPClient() (*gosocks5.UDPDatagram, error) {
-	if c.udp != nil {
-		return gosocks5.ReadUDPDatagram(c.udp)
-	}
-	return gosocks5.ReadUDPDatagram(c.tcp)
-}
-
-func (c *UDPConn) readUDPServer() (*gosocks5.UDPDatagram, error) {
-	if c.udp != nil {
-		// b := make([]byte, 65535)
+	go func() {
 		b := udpPool.Get().([]byte)
 		defer udpPool.Put(b)
 
-		n, addr, err := c.udp.ReadFrom(b)
-		if err != nil {
-			return nil, err
+		for {
+			n, laddr, err := relay.ReadFromUDP(b)
+			if err != nil {
+				rChan <- err
+				return
+			}
+			if clientAddr == nil {
+				clientAddr = laddr
+			}
+			dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
+			if err != nil {
+				rChan <- err
+				return
+			}
+
+			raddr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+			if err != nil {
+				continue // drop silently
+			}
+			if _, err := peer.WriteToUDP(dgram.Data, raddr); err != nil {
+				rChan <- err
+				return
+			}
+			glog.V(LDEBUG).Infof("[socks5-udp] %s >>> %s length: %d", relay.LocalAddr(), raddr, len(dgram.Data))
 		}
-		dgram := gosocks5.NewUDPDatagram(
-			gosocks5.NewUDPHeader(0, 0, ToSocksAddr(addr)), b[:n])
-		return dgram, nil
-	}
-	return gosocks5.ReadUDPDatagram(c.tcp)
-}
+	}()
 
-func (c *UDPConn) WriteUDP(dgram *gosocks5.UDPDatagram) error {
-	if c.isClient {
-		return c.writeUDPClient(dgram)
-	}
-	return c.writeUDPServer(dgram)
-}
+	go func() {
+		b := udpPool.Get().([]byte)
+		defer udpPool.Put(b)
 
-func (c *UDPConn) WriteUDPTimeout(dgram *gosocks5.UDPDatagram, timeout time.Duration) error {
-	if c.udp != nil {
-		c.udp.SetWriteDeadline(time.Now().Add(timeout))
-		defer c.udp.SetWriteDeadline(time.Time{})
-	} else {
-		c.tcp.SetWriteDeadline(time.Now().Add(timeout))
-		defer c.tcp.SetWriteDeadline(time.Time{})
-	}
-	if c.isClient {
-		return c.writeUDPClient(dgram)
-	}
-	return c.writeUDPServer(dgram)
-}
-
-func (c *UDPConn) writeUDPClient(dgram *gosocks5.UDPDatagram) error {
-	if c.udp != nil {
-		dgram.Header.Rsv = 0
-		buffer := bytes.Buffer{}
-		dgram.Write(&buffer)
-		_, err := c.udp.WriteTo(buffer.Bytes(), c.addr)
-		return err
-	}
-
-	dgram.Header.Rsv = uint16(len(dgram.Data))
-	return dgram.Write(c.tcp)
-}
-
-func (c *UDPConn) writeUDPServer(dgram *gosocks5.UDPDatagram) error {
-	if c.udp != nil {
-		addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
-		if err != nil {
-			glog.V(LWARNING).Infoln(err)
-			return nil // drop silently
+		for {
+			n, raddr, err := peer.ReadFrom(b)
+			if err != nil {
+				wChan <- err
+				return
+			}
+			if clientAddr == nil {
+				continue
+			}
+			buf := bytes.Buffer{}
+			dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, ToSocksAddr(raddr)), b[:n])
+			dgram.Write(&buf)
+			if _, err := relay.WriteToUDP(buf.Bytes(), clientAddr); err != nil {
+				wChan <- err
+				return
+			}
+			glog.V(LDEBUG).Infof("[socks5-udp] %s <<< %s length: %d", relay.LocalAddr(), raddr, len(dgram.Data))
 		}
-		_, err = c.udp.WriteTo(dgram.Data, addr)
-		return err
+	}()
+
+	select {
+	case err = <-wChan:
+		//log.Println("w exit", err)
+	case err = <-rChan:
+		//log.Println("r exit", err)
 	}
-	dgram.Header.Rsv = uint16(len(dgram.Data))
-	return dgram.Write(c.tcp)
+
+	return
 }
 
-func (c *UDPConn) Close() error {
-	if c.udp != nil {
-		return c.udp.Close()
-	}
-	return c.tcp.Close()
-}
+func tunnelUDP(conn *net.UDPConn, tun net.Conn, client bool) (err error) {
+	rChan := make(chan error, 1)
+	wChan := make(chan error, 1)
 
-func (c *UDPConn) LocalAddr() net.Addr {
-	if c.udp != nil {
-		return c.udp.LocalAddr()
-	}
-	return c.tcp.LocalAddr()
-}
+	var clientAddr *net.UDPAddr
 
-func (c *UDPConn) RemoteAddr() net.Addr {
-	if c.udp != nil {
-		return c.udp.RemoteAddr()
-	}
-	return c.tcp.RemoteAddr()
-}
+	go func() {
+		b := udpPool.Get().([]byte)
+		defer udpPool.Put(b)
 
-func (c *UDPConn) SetDeadline(t time.Time) error {
-	if c.udp != nil {
-		return c.udp.SetDeadline(t)
-	}
-	return c.tcp.SetDeadline(t)
-}
+		for {
+			n, addr, err := conn.ReadFromUDP(b)
+			if err != nil {
+				rChan <- err
+				return
+			}
 
-func (c *UDPConn) SetReadDeadline(t time.Time) error {
-	if c.udp != nil {
-		return c.udp.SetReadDeadline(t)
-	}
-	return c.tcp.SetReadDeadline(t)
-}
+			var dgram *gosocks5.UDPDatagram
+			if client { // pipe from relay to tunnel
+				dgram, err = gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
+				if err != nil {
+					rChan <- err
+					return
+				}
+				if clientAddr == nil {
+					clientAddr = addr
+				}
+				dgram.Header.Rsv = uint16(len(dgram.Data))
+				if err := dgram.Write(tun); err != nil {
+					rChan <- err
+					return
+				}
+				glog.V(LDEBUG).Infof("[socks5-udp] %s >>> %s length: %d", conn.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
+			} else { // pipe from peer to tunnel
+				dgram = gosocks5.NewUDPDatagram(
+					gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
+				if err := dgram.Write(tun); err != nil {
+					rChan <- err
+					return
+				}
+				glog.V(LDEBUG).Infof("[socks5-udp] %s <<< %s length: %d", tun.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
+			}
+		}
+	}()
 
-func (c *UDPConn) SetWriteDeadline(t time.Time) error {
-	if c.udp != nil {
-		return c.udp.SetWriteDeadline(t)
+	go func() {
+		for {
+			dgram, err := gosocks5.ReadUDPDatagram(tun)
+			if err != nil {
+				wChan <- err
+				return
+			}
+
+			if client { // pipe from tunnel to relay
+				if clientAddr == nil {
+					continue
+				}
+				dgram.Header.Rsv = 0
+
+				buf := bytes.Buffer{}
+				dgram.Write(&buf)
+				if _, err := conn.WriteToUDP(buf.Bytes(), clientAddr); err != nil {
+					wChan <- err
+					return
+				}
+				glog.V(LDEBUG).Infof("[socks5-udp] %s <<< %s length: %d", conn.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
+			} else { // pipe from tunnel to peer
+				addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+				if err != nil {
+					continue // drop silently
+				}
+				if _, err := conn.WriteToUDP(dgram.Data, addr); err != nil {
+					wChan <- err
+					return
+				}
+				glog.V(LDEBUG).Infof("[socks5-udp] %s >>> %s length: %d", tun.RemoteAddr(), addr, len(dgram.Data))
+			}
+		}
+	}()
+
+	select {
+	case err = <-wChan:
+		//log.Println("w exit", err)
+	case err = <-rChan:
+		//log.Println("r exit", err)
 	}
-	return c.tcp.SetWriteDeadline(t)
+
+	return
 }
