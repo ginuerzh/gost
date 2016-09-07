@@ -341,9 +341,13 @@ func socks5TunnelUDP(req *gosocks5.Request, conn net.Conn) error {
 		}
 		defer uconn.Close()
 
-		if err := gosocks5.NewReply(gosocks5.Succeeded, ToSocksAddr(uconn.LocalAddr())).Write(conn); err != nil {
+		addr := ToSocksAddr(uconn.LocalAddr())
+		addr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
+		rep := gosocks5.NewReply(gosocks5.Succeeded, addr)
+		if err := rep.Write(conn); err != nil {
 			return nil
 		}
+		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), uconn.LocalAddr(), rep)
 
 		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", conn.RemoteAddr(), uconn.LocalAddr())
 		tunnelUDP(uconn, conn, false)

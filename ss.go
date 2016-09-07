@@ -11,12 +11,14 @@ import (
 )
 
 func handleShadow(conn net.Conn, arg Args) {
+	glog.V(LINFO).Infof("[ss] %s -> %s", conn.RemoteAddr(), conn.LocalAddr())
+
 	if arg.User != nil {
 		method := arg.User.Username()
 		password, _ := arg.User.Password()
 		cipher, err := shadowsocks.NewCipher(method, password)
 		if err != nil {
-			glog.V(LWARNING).Infoln("shadowsocks:", err)
+			glog.V(LWARNING).Infof("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 			return
 		}
 		conn = shadowsocks.NewConn(conn, cipher)
@@ -24,26 +26,28 @@ func handleShadow(conn net.Conn, arg Args) {
 
 	addr, extra, err := getShadowRequest(conn)
 	if err != nil {
-		glog.V(LWARNING).Infoln("shadowsocks:", err)
+		glog.V(LWARNING).Infof("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
-	glog.V(LINFO).Infoln("shadowsocks connect:", addr.String())
+	glog.V(LINFO).Infof("[ss] %s -> %s", conn.RemoteAddr(), addr.String())
 
 	sconn, err := Connect(addr.String())
 	if err != nil {
-		glog.V(LWARNING).Infoln("shadowsocks:", err)
+		glog.V(LWARNING).Infof("[ss] %s -> %s : %s", conn.RemoteAddr(), addr.String(), err)
 		return
 	}
 	defer sconn.Close()
 
 	if extra != nil {
 		if _, err := sconn.Write(extra); err != nil {
-			glog.V(LWARNING).Infoln("shadowsocks:", err)
+			glog.V(LWARNING).Infof("[ss] %s - %s : %s", conn.RemoteAddr(), addr.String(), err)
 			return
 		}
 	}
 
+	glog.V(LINFO).Infof("[ss] %s <-> %s", conn.RemoteAddr(), addr.String())
 	Transport(conn, sconn)
+	glog.V(LINFO).Infof("[ss] %s >-< %s", conn.RemoteAddr(), addr.String())
 }
 
 func getShadowRequest(conn net.Conn) (addr *gosocks5.Addr, extra []byte, err error) {

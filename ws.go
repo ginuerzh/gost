@@ -112,13 +112,13 @@ func NewWs(arg Args) *ws {
 }
 
 func (s *ws) handle(w http.ResponseWriter, r *http.Request) {
-	glog.V(LINFO).Infoln("[ws] %s - %s", r.RemoteAddr, s.arg.Addr)
+	glog.V(LINFO).Infof("[ws] %s - %s", r.RemoteAddr, s.arg.Addr)
 	if glog.V(LDEBUG) {
 		dump, err := httputil.DumpRequest(r, false)
 		if err != nil {
-			glog.V(LWARNING).Infoln("[ws] %s - %s : %s", r.RemoteAddr, s.arg.Addr, err)
+			glog.V(LWARNING).Infof("[ws] %s - %s : %s", r.RemoteAddr, s.arg.Addr, err)
 		} else {
-			glog.V(LDEBUG).Infoln("[ws] %s - %s\n%s", r.RemoteAddr, s.arg.Addr, string(dump))
+			glog.V(LDEBUG).Infof("[ws] %s - %s\n%s", r.RemoteAddr, s.arg.Addr, string(dump))
 		}
 	}
 	conn, err := s.upgrader.Upgrade(w, r, nil)

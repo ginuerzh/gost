@@ -246,6 +246,7 @@ func connectRUdpForward(conn net.Conn, arg Args) error {
 				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
 				return
 			}
+			glog.V(LDEBUG).Infof("[rudp] %s <<< %s length: %d", arg.Remote, bindAddr, len(dgram.Data))
 
 			relay.SetReadDeadline(time.Now().Add(time.Second * 60))
 			n, err := relay.Read(b)
@@ -254,6 +255,8 @@ func connectRUdpForward(conn net.Conn, arg Args) error {
 				return
 			}
 			relay.SetReadDeadline(time.Time{})
+
+			glog.V(LDEBUG).Infof("[rudp] %s >>> %s length: %d", arg.Remote, bindAddr, n)
 
 			conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
 			if err := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, dgram.Header.Addr), b[:n]).Write(conn); err != nil {

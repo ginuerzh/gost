@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
+	//"sync/atomic"
 	"time"
 )
 
@@ -75,6 +75,10 @@ func listenAndServe(arg Args) error {
 		if err != nil {
 			glog.V(LWARNING).Infoln(err)
 			continue
+		}
+		if tc, ok := conn.(*net.TCPConn); ok {
+			tc.SetKeepAlive(true)
+			tc.SetKeepAlivePeriod(time.Second * 180)
 		}
 		go handleConn(conn, arg)
 	}
@@ -175,17 +179,19 @@ func serveRUdpForward(arg Args) error {
 }
 
 func handleConn(conn net.Conn, arg Args) {
-	atomic.AddInt32(&connCounter, 1)
-	glog.V(LDEBUG).Infof("%s connected, connections: %d",
-		conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
+	/*
+		atomic.AddInt32(&connCounter, 1)
+		glog.V(LDEBUG).Infof("%s connected, connections: %d",
+			conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
 
-	if glog.V(LDEBUG) {
-		defer func() {
-			glog.Infof("%s disconnected, connections: %d",
-				conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
-		}()
-	}
-	defer atomic.AddInt32(&connCounter, -1)
+		if glog.V(LDEBUG) {
+			defer func() {
+				glog.Infof("%s disconnected, connections: %d",
+					conn.RemoteAddr(), atomic.LoadInt32(&connCounter))
+			}()
+		}
+		defer atomic.AddInt32(&connCounter, -1)
+	*/
 	defer conn.Close()
 
 	// socks5 server supported methods
@@ -329,6 +335,10 @@ func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
 	if conn, err = net.DialTimeout("tcp", end.Addr, time.Second*90); err != nil {
 		return
 	}
+	tc := conn.(*net.TCPConn)
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(time.Second * 180) // 3min
+
 	c, err := forward(conn, end)
 	if err != nil {
 		return
