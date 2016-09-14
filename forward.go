@@ -6,7 +6,6 @@ import (
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"net"
-	"strings"
 	"time"
 )
 
@@ -56,109 +55,98 @@ func handleUdpForwardLocal(conn *net.UDPConn, laddr, raddr *net.UDPAddr, data []
 	return
 }
 
-func handleUdpForward(conn *net.UDPConn, raddr *net.UDPAddr, data []byte, arg Args) {
-	if !strings.Contains(arg.Remote, ":") {
-		arg.Remote += ":53" // default is dns service
-	}
-
-	faddr, err := net.ResolveUDPAddr("udp", arg.Remote)
+func prepareUdpConnectTunnel(addr net.Addr) (net.Conn, error) {
+	conn, _, err := forwardChain(forwardArgs...)
 	if err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
-		return
+		return nil, err
 	}
 
-	glog.V(LINFO).Infof("[udp-forward] %s - %s", raddr, faddr)
+	conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
+	if err = gosocks5.NewRequest(CmdUdpConnect, ToSocksAddr(addr)).Write(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn.SetWriteDeadline(time.Time{})
 
-	if len(forwardArgs) == 0 {
-		lconn, err := net.ListenUDP("udp", nil)
+	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+	reply, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	if reply.Rep != gosocks5.Succeeded {
+		conn.Close()
+		return nil, errors.New("failure")
+	}
+
+	return conn, nil
+}
+
+func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosocks5.UDPDatagram) {
+	var tun net.Conn
+	var err error
+	retry := 0
+	for {
+		tun, err = prepareUdpConnectTunnel(raddr)
 		if err != nil {
-			glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
-			return
+			glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+			time.Sleep((1 << uint(retry)) * time.Second)
+			if retry < 5 {
+				retry++
+			}
+			continue
 		}
-		defer lconn.Close()
+		break
+	}
 
-		if _, err := lconn.WriteToUDP(data, faddr); err != nil {
-			glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
-			return
+	glog.V(LINFO).Infof("[udp-connect] %s <-> %s", laddr, raddr)
+
+	rExit := make(chan interface{})
+	rErr, wErr := make(chan error, 1), make(chan error, 1)
+
+	go func() {
+		for {
+			select {
+			case dgram := <-rChan:
+				if err := dgram.Write(tun); err != nil {
+					glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+					rErr <- err
+					return
+				}
+				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", laddr, raddr, len(dgram.Data))
+			case <-rExit:
+				// glog.V(LDEBUG).Infof("[udp-connect] %s -> %s : exited", laddr, raddr)
+				return
+			}
 		}
-		glog.V(LDEBUG).Infof("[udp-forward] %s >>> %s length %d", raddr, arg.Remote, len(data))
+	}()
+	go func() {
+		for {
+			dgram, err := gosocks5.ReadUDPDatagram(tun)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", laddr, raddr, err)
+				close(rExit)
+				wErr <- err
+				return
+			}
 
-		b := udpPool.Get().([]byte)
-		defer udpPool.Put(b)
-		lconn.SetReadDeadline(time.Now().Add(time.Second * 60))
-		n, addr, err := lconn.ReadFromUDP(b)
-		if err != nil {
-			glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", raddr, arg.Remote, err)
-			return
+			select {
+			case wChan <- dgram:
+				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", laddr, raddr, len(dgram.Data))
+			default:
+			}
 		}
-		glog.V(LDEBUG).Infof("[udp-forward] %s <<< %s length %d", raddr, addr, n)
+	}()
 
-		if _, err := conn.WriteToUDP(b[:n], raddr); err != nil {
-			glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", raddr, arg.Remote, err)
-		}
-		glog.V(LINFO).Infof("[udp-forward] %s >-< %s", raddr, arg.Remote)
-		return
+	select {
+	case <-rErr:
+		//log.Println("w exit", err)
+	case <-wErr:
+		//log.Println("r exit", err)
 	}
-
-	tun, _, err := forwardChain(forwardArgs...)
-	if err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
-		return
-	}
-	defer tun.Close()
-
-	glog.V(LINFO).Infof("[udp-forward] %s -> %s ASSOCIATE", raddr, arg.Remote)
-
-	req := gosocks5.NewRequest(CmdUdpTun, nil)
-	tun.SetWriteDeadline(time.Now().Add(time.Second * 90))
-	if err = req.Write(tun); err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s -> %s ASSOCIATE : %s", raddr, arg.Remote, err)
-		return
-	}
-	tun.SetWriteDeadline(time.Time{})
-	glog.V(LDEBUG).Infof("[udp-forward] %s -> %s\n%s", raddr, arg.Remote, req)
-
-	tun.SetReadDeadline(time.Now().Add(90 * time.Second))
-	rep, err := gosocks5.ReadReply(tun)
-	if err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s <- %s ASSOCIATE : %s", raddr, arg.Remote, err)
-		return
-	}
-	tun.SetReadDeadline(time.Time{})
-
-	glog.V(LDEBUG).Infof("[udp-forward] %s <- %s\n%s", raddr, arg.Remote, rep)
-	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[udp-forward] %s <- %s ASSOCIATE failured", raddr, arg.Remote)
-		return
-	}
-	glog.V(LINFO).Infof("[udp-forward] %s <-> %s ASSOCIATE ON %s", raddr, arg.Remote, rep.Addr)
-
-	dgram := gosocks5.NewUDPDatagram(
-		gosocks5.NewUDPHeader(uint16(len(data)), 0, ToSocksAddr(faddr)), data)
-
-	tun.SetWriteDeadline(time.Now().Add(time.Second * 90))
-	if err = dgram.Write(tun); err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", raddr, arg.Remote, err)
-		return
-	}
-	tun.SetWriteDeadline(time.Time{})
-	glog.V(LDEBUG).Infof("[udp-forward] %s >>> %s length %d", raddr, arg.Remote, len(data))
-
-	tun.SetReadDeadline(time.Now().Add(time.Second * 90))
-	dgram, err = gosocks5.ReadUDPDatagram(tun)
-	if err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", raddr, arg.Remote, err)
-		return
-	}
-	tun.SetReadDeadline(time.Time{})
-	glog.V(LDEBUG).Infof("[udp-forward] %s <<< %s length %d", raddr, dgram.Header.Addr, len(dgram.Data))
-
-	if _, err = conn.WriteToUDP(dgram.Data, raddr); err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", raddr, arg.Remote, err)
-	}
-
-	// NOTE: for now we only get one response from peer
-	glog.V(LINFO).Infof("[udp-forward] %s >-< %s", raddr, arg.Remote)
+	glog.V(LINFO).Infof("[udp-connect] %s >-< %s", laddr, raddr)
 }
 
 func connectRTcpForward(conn net.Conn, arg Args) error {

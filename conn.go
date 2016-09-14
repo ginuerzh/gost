@@ -35,7 +35,7 @@ var (
 	// udp buffer pool
 	udpPool = sync.Pool{
 		New: func() interface{} {
-			return make([]byte, 64*1024+262)
+			return make([]byte, 32*1024)
 		},
 	}
 )
@@ -108,35 +108,6 @@ func listenAndServeTcpForward(arg Args) error {
 	}
 }
 
-func prepareUdpConnectTunnel(addr net.Addr) (net.Conn, error) {
-	conn, _, err := forwardChain(forwardArgs...)
-	if err != nil {
-		return nil, err
-	}
-
-	conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
-	if err = gosocks5.NewRequest(CmdUdpConnect, ToSocksAddr(addr)).Write(conn); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn.SetWriteDeadline(time.Time{})
-
-	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
-	reply, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn.SetReadDeadline(time.Time{})
-
-	if reply.Rep != gosocks5.Succeeded {
-		conn.Close()
-		return nil, errors.New("udp connect failure")
-	}
-
-	return conn, nil
-}
-
 func listenAndServeUdpForward(arg Args) error {
 	laddr, err := net.ResolveUDPAddr("udp", arg.Addr)
 	if err != nil {
@@ -148,55 +119,65 @@ func listenAndServeUdpForward(arg Args) error {
 		return err
 	}
 
+	conn, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+		return err
+	}
+	defer conn.Close()
+
+	if len(forwardArgs) == 0 {
+		for {
+			b := udpPool.Get().([]byte)
+
+			n, addr, err := conn.ReadFromUDP(b)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+				continue
+			}
+			go func() {
+				handleUdpForwardLocal(conn, addr, raddr, b[:n])
+				udpPool.Put(b)
+			}()
+		}
+	}
+
+	rChan, wChan := make(chan *gosocks5.UDPDatagram, 32), make(chan *gosocks5.UDPDatagram, 32)
+
+	go func() {
+		for {
+			b := make([]byte, 32*1024)
+			n, addr, err := conn.ReadFromUDP(b)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+				return
+			}
+
+			select {
+			case rChan <- gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n]):
+			default:
+				// glog.V(LWARNING).Infof("[udp-connect] %s -> %s : rbuf is full", laddr, raddr)
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			dgram := <-wChan
+			addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", laddr, raddr, err)
+				continue // drop silently
+			}
+			if _, err = conn.WriteToUDP(dgram.Data, addr); err != nil {
+				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", laddr, raddr, err)
+				return
+			}
+		}
+	}()
+
 	for {
-		var conn *net.UDPConn
-
-		for {
-			conn, err = net.ListenUDP("udp", laddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
-				time.Sleep((1) * time.Second)
-				continue
-			}
-			break
-		}
-
-		if len(forwardArgs) == 0 {
-			defer conn.Close()
-
-			for {
-				b := udpPool.Get().([]byte)
-
-				n, addr, err := conn.ReadFromUDP(b)
-				if err != nil {
-					glog.V(LWARNING).Infoln(err)
-					continue
-				}
-				go func() {
-					handleUdpForwardLocal(conn, addr, raddr, b[:n])
-					udpPool.Put(b)
-				}()
-			}
-		}
-
-		var tun net.Conn
-		retry := 0
-		for {
-			tun, err = prepareUdpConnectTunnel(raddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
-				time.Sleep((1 << uint(retry)) * time.Second)
-				if retry < 5 {
-					retry++
-				}
-				continue
-			}
-			break
-		}
-		glog.V(LWARNING).Infof("[udp-connect] %s <-> %s", laddr, raddr)
-		tunnelUDP(conn, tun, false)
-		glog.V(LWARNING).Infof("[udp-connect] %s >-< %s", laddr, raddr)
-		conn.Close()
+		handleUdpForwardTunnel(laddr, raddr, rChan, wChan)
 	}
 }
 
