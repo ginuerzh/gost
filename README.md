@@ -130,7 +130,7 @@ gost -L=rtcp://:2222/192.168.1.1:22 -F=... -F=socks://172.24.10.1:1080
 ```
 将172.24.10.1:2222上的数据(通过转发链)转发到192.168.1.1:22上。
 
-#### 远程端口转发(UDP
+#### 远程端口转发(UDP)
 
 ```bash
 gost -L=rudp://:5353/192.168.1.1:53 -F=... -F=socks://172.24.10.1:1080
@@ -182,7 +182,7 @@ gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
 ```
 
 #### TLS
-gost内置了tls证书，如果需要使用其他tls证书，在gost目录放置cert.pem(公钥)和key.pem(私钥)两个文件即可。
+gost内置了tls证书，如果需要使用其他tls证书，在gost运行目录放置cert.pem(公钥)和key.pem(私钥)两个文件即可。
 
 
 SOCKS5 UDP数据处理
@@ -201,7 +201,7 @@ gost作为标准socks5代理处理UDP数据
 
 <img src="https://ginuerzh.github.io/images/udp03.png" height=200 />
 
-当设置转发代理时，gost会使用UDP-Over-TCP方式转发UDP数据。proxy1 - proxyN可以为任意http(s)/socks5/shadowsocks类型代理。
+当设置转发代理时，gost会使用UDP-over-TCP方式转发UDP数据。proxy1 - proxyN可以为任意http(s)/socks5/shadowsocks类型代理。
 
 限制条件
 ------

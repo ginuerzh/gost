@@ -10,23 +10,50 @@ import (
 	"time"
 )
 
-func handleTcpForward(conn net.Conn, arg Args) {
+func handleTcpForward(conn net.Conn, raddr net.Addr) {
 	defer conn.Close()
 
-	if !strings.Contains(arg.Remote, ":") {
-		arg.Remote += ":22" // default is ssh service
-	}
-	glog.V(LINFO).Infof("[tcp-forward] %s - %s", conn.RemoteAddr(), arg.Remote)
-	c, err := Connect(arg.Remote)
+	glog.V(LINFO).Infof("[tcp-forward] %s - %s", conn.RemoteAddr(), raddr)
+	c, err := Connect(raddr.String())
 	if err != nil {
-		glog.V(LWARNING).Infof("[tcp-forward] %s -> %s : %s", conn.RemoteAddr(), arg.Remote, err)
+		glog.V(LWARNING).Infof("[tcp-forward] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
 		return
 	}
 	defer c.Close()
 
-	glog.V(LINFO).Infof("[tcp-forward] %s <-> %s", conn.RemoteAddr(), arg.Remote)
+	glog.V(LINFO).Infof("[tcp-forward] %s <-> %s", conn.RemoteAddr(), raddr)
 	Transport(conn, c)
-	glog.V(LINFO).Infof("[tcp-forward] %s >-< %s", conn.RemoteAddr(), arg.Remote)
+	glog.V(LINFO).Infof("[tcp-forward] %s >-< %s", conn.RemoteAddr(), raddr)
+}
+
+func handleUdpForwardLocal(conn *net.UDPConn, laddr, raddr *net.UDPAddr, data []byte) {
+	lconn, err := net.ListenUDP("udp", nil)
+	if err != nil {
+		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", laddr, raddr, err)
+		return
+	}
+	defer lconn.Close()
+
+	if _, err := lconn.WriteToUDP(data, raddr); err != nil {
+		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", laddr, raddr, err)
+		return
+	}
+	glog.V(LDEBUG).Infof("[udp-forward] %s >>> %s length %d", laddr, raddr, len(data))
+
+	b := udpPool.Get().([]byte)
+	defer udpPool.Put(b)
+	lconn.SetReadDeadline(time.Now().Add(time.Second * 60))
+	n, addr, err := lconn.ReadFromUDP(b)
+	if err != nil {
+		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", laddr, raddr, err)
+		return
+	}
+	glog.V(LDEBUG).Infof("[udp-forward] %s <<< %s length %d", laddr, addr, n)
+
+	if _, err := conn.WriteToUDP(b[:n], laddr); err != nil {
+		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", laddr, raddr, err)
+	}
+	return
 }
 
 func handleUdpForward(conn *net.UDPConn, raddr *net.UDPAddr, data []byte, arg Args) {
@@ -141,7 +168,7 @@ func connectRTcpForward(conn net.Conn, arg Args) error {
 	req := gosocks5.NewRequest(gosocks5.CmdBind, ToSocksAddr(addr))
 	bindAddr := req.Addr
 	if err := req.Write(conn); err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s <- %s : %s", bindAddr, arg.Remote, err)
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", bindAddr, arg.Remote, err)
 		return err
 	}
 

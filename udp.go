@@ -111,7 +111,7 @@ func tunnelUDP(conn *net.UDPConn, tun net.Conn, client bool) (err error) {
 					rChan <- err
 					return
 				}
-				glog.V(LDEBUG).Infof("[socks5-udp] %s >>> %s length: %d", conn.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
+				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", conn.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
 			} else { // pipe from peer to tunnel
 				dgram = gosocks5.NewUDPDatagram(
 					gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
@@ -119,7 +119,7 @@ func tunnelUDP(conn *net.UDPConn, tun net.Conn, client bool) (err error) {
 					rChan <- err
 					return
 				}
-				glog.V(LDEBUG).Infof("[socks5-udp] %s <<< %s length: %d", tun.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
+				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", tun.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
 			}
 		}
 	}()
@@ -144,7 +144,7 @@ func tunnelUDP(conn *net.UDPConn, tun net.Conn, client bool) (err error) {
 					wChan <- err
 					return
 				}
-				glog.V(LDEBUG).Infof("[socks5-udp] %s <<< %s length: %d", conn.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
+				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", conn.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
 			} else { // pipe from tunnel to peer
 				addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
 				if err != nil {
@@ -154,7 +154,7 @@ func tunnelUDP(conn *net.UDPConn, tun net.Conn, client bool) (err error) {
 					wChan <- err
 					return
 				}
-				glog.V(LDEBUG).Infof("[socks5-udp] %s >>> %s length: %d", tun.RemoteAddr(), addr, len(dgram.Data))
+				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", tun.RemoteAddr(), addr, len(dgram.Data))
 			}
 		}
 	}()
