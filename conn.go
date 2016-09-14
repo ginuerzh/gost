@@ -193,9 +193,9 @@ func listenAndServeUdpForward(arg Args) error {
 			}
 			break
 		}
-		glog.V(LWARNING).Infof("[udp-connect] %s <-> %s : %s", laddr, raddr)
+		glog.V(LWARNING).Infof("[udp-connect] %s <-> %s", laddr, raddr)
 		tunnelUDP(conn, tun, false)
-		glog.V(LWARNING).Infof("[udp-connect] %s >-< %s : %s", laddr, raddr)
+		glog.V(LWARNING).Infof("[udp-connect] %s >-< %s", laddr, raddr)
 		conn.Close()
 	}
 }
