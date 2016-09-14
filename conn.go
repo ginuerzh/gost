@@ -87,16 +87,16 @@ func listenAndServe(arg Args) error {
 }
 
 func listenAndServeTcpForward(arg Args) error {
+	raddr, err := net.ResolveTCPAddr("tcp", arg.Remote)
+	if err != nil {
+		return err
+	}
+
 	ln, err := net.Listen("tcp", arg.Addr)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
-
-	raddr, err := net.ResolveTCPAddr("tcp", arg.Remote)
-	if err != nil {
-		return err
-	}
 
 	for {
 		conn, err := ln.Accept()
@@ -121,7 +121,7 @@ func listenAndServeUdpForward(arg Args) error {
 
 	conn, err := net.ListenUDP("udp", laddr)
 	if err != nil {
-		glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 		return err
 	}
 	defer conn.Close()
@@ -132,7 +132,7 @@ func listenAndServeUdpForward(arg Args) error {
 
 			n, addr, err := conn.ReadFromUDP(b)
 			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 				continue
 			}
 			go func() {
@@ -149,7 +149,7 @@ func listenAndServeUdpForward(arg Args) error {
 			b := make([]byte, 32*1024)
 			n, addr, err := conn.ReadFromUDP(b)
 			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 				return
 			}
 
@@ -166,11 +166,11 @@ func listenAndServeUdpForward(arg Args) error {
 			dgram := <-wChan
 			addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
 			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", laddr, raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
 				continue // drop silently
 			}
 			if _, err = conn.WriteToUDP(dgram.Data, addr); err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", laddr, raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
 				return
 			}
 		}
@@ -186,6 +186,15 @@ func serveRTcpForward(arg Args) error {
 		return errors.New("rtcp: at least one -F must be assigned")
 	}
 
+	laddr, err := net.ResolveTCPAddr("tcp", arg.Addr)
+	if err != nil {
+		return err
+	}
+	raddr, err := net.ResolveTCPAddr("tcp", arg.Remote)
+	if err != nil {
+		return err
+	}
+
 	retry := 0
 	for {
 		conn, _, err := forwardChain(forwardArgs...)
@@ -199,9 +208,9 @@ func serveRTcpForward(arg Args) error {
 		}
 		retry = 0
 
-		if err := connectRTcpForward(conn, arg); err != nil {
+		if err := connectRTcpForward(conn, laddr, raddr); err != nil {
 			conn.Close()
-			time.Sleep(10 * time.Second)
+			time.Sleep(6 * time.Second)
 		}
 	}
 }
@@ -209,6 +218,15 @@ func serveRTcpForward(arg Args) error {
 func serveRUdpForward(arg Args) error {
 	if len(forwardArgs) == 0 {
 		return errors.New("rudp: at least one -F must be assigned")
+	}
+
+	laddr, err := net.ResolveUDPAddr("udp", arg.Addr)
+	if err != nil {
+		return err
+	}
+	raddr, err := net.ResolveUDPAddr("udp", arg.Remote)
+	if err != nil {
+		return err
 	}
 
 	retry := 0
@@ -224,9 +242,9 @@ func serveRUdpForward(arg Args) error {
 		}
 		retry = 0
 
-		if err := connectRUdpForward(conn, arg); err != nil {
+		if err := connectRUdpForward(conn, laddr, raddr); err != nil {
 			conn.Close()
-			time.Sleep(10 * time.Second)
+			time.Sleep(6 * time.Second)
 		}
 	}
 }

@@ -220,7 +220,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 		glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", conn.RemoteAddr(), fconn.RemoteAddr())
 
 	case CmdUdpConnect:
-		glog.V(LINFO).Infof("[udp-connect] %s - %s", conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[udp] %s - %s", conn.RemoteAddr(), req.Addr)
 		udpConnect(req, conn)
 
 	case gosocks5.CmdUdp:
@@ -249,43 +249,43 @@ func udpConnect(req *gosocks5.Request, conn net.Conn) error {
 	if len(forwardArgs) > 0 { // direct forwarding
 		fconn, _, err := forwardChain(forwardArgs...)
 		if err != nil {
-			glog.V(LINFO).Infof("[udp-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+			glog.V(LINFO).Infof("[udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 			return err
 		}
 		defer fconn.Close()
 
 		if err := req.Write(fconn); err != nil {
-			glog.V(LINFO).Infof("[udp-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+			glog.V(LINFO).Infof("[udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 			return err
 		}
 
-		glog.V(LINFO).Infof("[udp-connect] %s <-> %s", conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[udp] %s <-> %s", conn.RemoteAddr(), req.Addr)
 		err = Transport(conn, fconn)
-		glog.V(LINFO).Infof("[udp-connect] %s >-< %s", conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[udp] %s >-< %s", conn.RemoteAddr(), req.Addr)
 		return err
 	}
 
 	raddr, err := net.ResolveUDPAddr("udp", req.Addr.String())
 	if err != nil {
-		glog.V(LINFO).Infof("[udp-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+		glog.V(LINFO).Infof("[udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 		return err
 	}
 
 	if err := gosocks5.NewReply(gosocks5.Succeeded, nil).Write(conn); err != nil {
-		glog.V(LINFO).Infof("[udp-connect] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+		glog.V(LINFO).Infof("[udp] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
 		return err
 	}
 
-	glog.V(LINFO).Infof("[udp-connect] %s <-> %s", conn.RemoteAddr(), raddr)
-	defer glog.V(LINFO).Infof("[udp-connect] %s >-< %s", conn.RemoteAddr(), raddr)
+	glog.V(LINFO).Infof("[udp] %s <-> %s", conn.RemoteAddr(), raddr)
+	defer glog.V(LINFO).Infof("[udp] %s >-< %s", conn.RemoteAddr(), raddr)
 
 	for {
 		dgram, err := gosocks5.ReadUDPDatagram(conn)
 		if err != nil {
-			glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			return err
 		}
 
@@ -295,30 +295,30 @@ func udpConnect(req *gosocks5.Request, conn net.Conn) error {
 
 			relay, err := net.DialUDP("udp", nil, raddr)
 			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
 				return
 			}
 			defer relay.Close()
 
 			if _, err := relay.Write(dgram.Data); err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
 				return
 			}
-			glog.V(LDEBUG).Infof("[udp-connect] %s >>> %s length: %d", conn.RemoteAddr(), raddr, len(dgram.Data))
+			glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", conn.RemoteAddr(), raddr, len(dgram.Data))
 
 			relay.SetReadDeadline(time.Now().Add(time.Second * 60))
 			n, err := relay.Read(b)
 			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", conn.RemoteAddr(), raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", conn.RemoteAddr(), raddr, err)
 				return
 			}
 			relay.SetReadDeadline(time.Time{})
 
-			glog.V(LDEBUG).Infof("[udp-connect] %s <<< %s length: %d", conn.RemoteAddr(), raddr, n)
+			glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", conn.RemoteAddr(), raddr, n)
 
 			conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
 			if err := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, dgram.Header.Addr), b[:n]).Write(conn); err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", conn.RemoteAddr(), raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", conn.RemoteAddr(), raddr, err)
 				return
 			}
 			conn.SetWriteDeadline(time.Time{})

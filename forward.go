@@ -12,45 +12,45 @@ import (
 func handleTcpForward(conn net.Conn, raddr net.Addr) {
 	defer conn.Close()
 
-	glog.V(LINFO).Infof("[tcp-forward] %s - %s", conn.RemoteAddr(), raddr)
+	glog.V(LINFO).Infof("[tcp] %s - %s", conn.RemoteAddr(), raddr)
 	c, err := Connect(raddr.String())
 	if err != nil {
-		glog.V(LWARNING).Infof("[tcp-forward] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
+		glog.V(LWARNING).Infof("[tcp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
 		return
 	}
 	defer c.Close()
 
-	glog.V(LINFO).Infof("[tcp-forward] %s <-> %s", conn.RemoteAddr(), raddr)
+	glog.V(LINFO).Infof("[tcp] %s <-> %s", conn.RemoteAddr(), raddr)
 	Transport(conn, c)
-	glog.V(LINFO).Infof("[tcp-forward] %s >-< %s", conn.RemoteAddr(), raddr)
+	glog.V(LINFO).Infof("[tcp] %s >-< %s", conn.RemoteAddr(), raddr)
 }
 
 func handleUdpForwardLocal(conn *net.UDPConn, laddr, raddr *net.UDPAddr, data []byte) {
 	lconn, err := net.ListenUDP("udp", nil)
 	if err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", laddr, raddr, err)
+		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 		return
 	}
 	defer lconn.Close()
 
 	if _, err := lconn.WriteToUDP(data, raddr); err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s -> %s : %s", laddr, raddr, err)
+		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 		return
 	}
-	glog.V(LDEBUG).Infof("[udp-forward] %s >>> %s length %d", laddr, raddr, len(data))
+	glog.V(LDEBUG).Infof("[udp] %s >>> %s length %d", laddr, raddr, len(data))
 
 	b := udpPool.Get().([]byte)
 	defer udpPool.Put(b)
 	lconn.SetReadDeadline(time.Now().Add(time.Second * 60))
 	n, addr, err := lconn.ReadFromUDP(b)
 	if err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", laddr, raddr, err)
+		glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
 		return
 	}
-	glog.V(LDEBUG).Infof("[udp-forward] %s <<< %s length %d", laddr, addr, n)
+	glog.V(LDEBUG).Infof("[udp] %s <<< %s length %d", laddr, addr, n)
 
 	if _, err := conn.WriteToUDP(b[:n], laddr); err != nil {
-		glog.V(LWARNING).Infof("[udp-forward] %s <- %s : %s", laddr, raddr, err)
+		glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
 	}
 	return
 }
@@ -91,7 +91,7 @@ func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosock
 	for {
 		tun, err = prepareUdpConnectTunnel(raddr)
 		if err != nil {
-			glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 			time.Sleep((1 << uint(retry)) * time.Second)
 			if retry < 5 {
 				retry++
@@ -101,7 +101,7 @@ func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosock
 		break
 	}
 
-	glog.V(LINFO).Infof("[udp-connect] %s <-> %s", laddr, raddr)
+	glog.V(LINFO).Infof("[udp] %s <-> %s", laddr, raddr)
 
 	rExit := make(chan interface{})
 	rErr, wErr := make(chan error, 1), make(chan error, 1)
@@ -111,7 +111,7 @@ func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosock
 			select {
 			case dgram := <-rChan:
 				if err := dgram.Write(tun); err != nil {
-					glog.V(LWARNING).Infof("[udp-connect] %s -> %s : %s", laddr, raddr, err)
+					glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 					rErr <- err
 					return
 				}
@@ -126,7 +126,7 @@ func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosock
 		for {
 			dgram, err := gosocks5.ReadUDPDatagram(tun)
 			if err != nil {
-				glog.V(LWARNING).Infof("[udp-connect] %s <- %s : %s", laddr, raddr, err)
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
 				close(rExit)
 				wErr <- err
 				return
@@ -146,17 +146,15 @@ func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosock
 	case <-wErr:
 		//log.Println("r exit", err)
 	}
-	glog.V(LINFO).Infof("[udp-connect] %s >-< %s", laddr, raddr)
+	glog.V(LINFO).Infof("[udp] %s >-< %s", laddr, raddr)
 }
 
-func connectRTcpForward(conn net.Conn, arg Args) error {
-	glog.V(LINFO).Infof("[rtcp] %s - %s", arg.Addr, arg.Remote)
+func connectRTcpForward(conn net.Conn, laddr, raddr net.Addr) error {
+	glog.V(LINFO).Infof("[rtcp] %s - %s", laddr, raddr)
 
-	addr, _ := net.ResolveTCPAddr("tcp", arg.Addr)
-	req := gosocks5.NewRequest(gosocks5.CmdBind, ToSocksAddr(addr))
-	bindAddr := req.Addr
+	req := gosocks5.NewRequest(gosocks5.CmdBind, ToSocksAddr(laddr))
 	if err := req.Write(conn); err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", bindAddr, arg.Remote, err)
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
 		return err
 	}
 
@@ -164,33 +162,33 @@ func connectRTcpForward(conn net.Conn, arg Args) error {
 	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	rep, err := gosocks5.ReadReply(conn)
 	if err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", bindAddr, arg.Remote, err)
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
 		return err
 	}
 	conn.SetReadDeadline(time.Time{})
 	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : bind on %s failure", bindAddr, arg.Remote, arg.Addr)
-		return errors.New("Bind on " + arg.Addr + " failure")
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : bind on %s failure", laddr, raddr, laddr)
+		return errors.New("Bind on " + laddr.String() + " failure")
 	}
-	glog.V(LINFO).Infof("[rtcp] %s - %s BIND ON %s OK", bindAddr, arg.Remote, rep.Addr)
+	glog.V(LINFO).Infof("[rtcp] %s - %s BIND ON %s OK", laddr, raddr, rep.Addr)
 
 	// second reply, peer connection
 	rep, err = gosocks5.ReadReply(conn)
 	if err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", bindAddr, arg.Remote, err)
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
 		return err
 	}
 	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : peer connect failure", bindAddr, arg.Remote)
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : peer connect failure", laddr, raddr)
 		return errors.New("peer connect failure")
 	}
 
-	glog.V(LINFO).Infof("[rtcp] %s -> %s PEER %s CONNECTED", bindAddr, arg.Remote, rep.Addr)
+	glog.V(LINFO).Infof("[rtcp] %s -> %s PEER %s CONNECTED", laddr, raddr, rep.Addr)
 
 	go func() {
 		defer conn.Close()
 
-		lconn, err := net.Dial("tcp", arg.Remote)
+		lconn, err := net.DialTimeout("tcp", raddr.String(), time.Second*180)
 		if err != nil {
 			glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", rep.Addr, lconn.RemoteAddr(), err)
 			return
@@ -205,15 +203,13 @@ func connectRTcpForward(conn net.Conn, arg Args) error {
 	return nil
 }
 
-func connectRUdpForward(conn net.Conn, arg Args) error {
-	glog.V(LINFO).Infof("[rudp] %s - %s", arg.Addr, arg.Remote)
+func connectRUdpForward(conn net.Conn, laddr, raddr *net.UDPAddr) error {
+	glog.V(LINFO).Infof("[rudp] %s - %s", laddr, raddr)
 
-	addr, _ := net.ResolveUDPAddr("udp", arg.Addr)
-	req := gosocks5.NewRequest(CmdUdpTun, ToSocksAddr(addr))
-	bindAddr := req.Addr
+	req := gosocks5.NewRequest(CmdUdpTun, ToSocksAddr(laddr))
 	conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
 	if err := req.Write(conn); err != nil {
-		glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
+		glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", laddr, raddr, err)
 		return err
 	}
 	conn.SetWriteDeadline(time.Time{})
@@ -221,28 +217,22 @@ func connectRUdpForward(conn net.Conn, arg Args) error {
 	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	rep, err := gosocks5.ReadReply(conn)
 	if err != nil {
-		glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+		glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
 		return err
 	}
 	conn.SetReadDeadline(time.Time{})
 
 	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[rudp] %s <- %s : bind on %s failure", bindAddr, arg.Remote, arg.Addr)
-		return errors.New(fmt.Sprintf("Bind on %s failure", bindAddr))
+		glog.V(LWARNING).Infof("[rudp] %s <- %s : bind on %s failure", laddr, raddr, laddr)
+		return errors.New(fmt.Sprintf("Bind on %s failure", laddr))
 	}
 
-	glog.V(LINFO).Infof("[rudp] %s - %s BIND ON %s OK", bindAddr, arg.Remote, rep.Addr)
-
-	raddr, err := net.ResolveUDPAddr("udp", arg.Remote)
-	if err != nil {
-		glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
-		return err
-	}
+	glog.V(LINFO).Infof("[rudp] %s - %s BIND ON %s OK", laddr, raddr, rep.Addr)
 
 	for {
 		dgram, err := gosocks5.ReadUDPDatagram(conn)
 		if err != nil {
-			glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+			glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
 			return err
 		}
 
@@ -252,30 +242,30 @@ func connectRUdpForward(conn net.Conn, arg Args) error {
 
 			relay, err := net.DialUDP("udp", nil, raddr)
 			if err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
+				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", laddr, raddr, err)
 				return
 			}
 			defer relay.Close()
 
 			if _, err := relay.Write(dgram.Data); err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", bindAddr, arg.Remote, err)
+				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", laddr, raddr, err)
 				return
 			}
-			glog.V(LDEBUG).Infof("[rudp] %s <<< %s length: %d", arg.Remote, bindAddr, len(dgram.Data))
+			glog.V(LDEBUG).Infof("[rudp] %s >>> %s length: %d", laddr, raddr, len(dgram.Data))
 
 			relay.SetReadDeadline(time.Now().Add(time.Second * 60))
 			n, err := relay.Read(b)
 			if err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
 				return
 			}
 			relay.SetReadDeadline(time.Time{})
 
-			glog.V(LDEBUG).Infof("[rudp] %s >>> %s length: %d", arg.Remote, bindAddr, n)
+			glog.V(LDEBUG).Infof("[rudp] %s <<< %s length: %d", laddr, raddr, n)
 
 			conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
 			if err := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, dgram.Header.Addr), b[:n]).Write(conn); err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", bindAddr, arg.Remote, err)
+				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
 				return
 			}
 			conn.SetWriteDeadline(time.Time{})
