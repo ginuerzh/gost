@@ -100,6 +100,7 @@ func handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosock
 		}
 		break
 	}
+	defer tun.Close()
 
 	glog.V(LINFO).Infof("[udp] %s <-> %s", laddr, raddr)
 
