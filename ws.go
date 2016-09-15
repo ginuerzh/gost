@@ -17,24 +17,18 @@ type wsConn struct {
 	rb   []byte
 }
 
-func wsClient(conn net.Conn, host string) (*wsConn, error) {
-	c, resp, err := websocket.NewClient(conn, &url.URL{Scheme: "ws", Host: host, Path: "/ws"}, nil, 4096, 4096)
-	if err != nil {
-		return nil, err
+func wsClient(scheme string, conn net.Conn, host string) (*wsConn, error) {
+	dialer := websocket.Dialer{
+		ReadBufferSize:   4096,
+		WriteBufferSize:  4096,
+		TLSClientConfig:  &tls.Config{InsecureSkipVerify: true},
+		HandshakeTimeout: time.Second * 90,
+		NetDial: func(net, addr string) (net.Conn, error) {
+			return conn, nil
+		},
 	}
-	resp.Body.Close()
-
-	return &wsConn{conn: c}, nil
-}
-
-func wssClient(conn net.Conn, host string) (*wsConn, error) {
-	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	if err := tlsConn.Handshake(); err != nil {
-		return nil, err
-	}
-	conn = tlsConn
-
-	c, resp, err := websocket.NewClient(conn, &url.URL{Scheme: "wss", Host: host, Path: "/ws"}, nil, 4096, 4096)
+	u := url.URL{Scheme: scheme, Host: host, Path: "/ws"}
+	c, resp, err := dialer.Dial(u.String(), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -440,13 +440,13 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 
 	switch arg.Transport {
 	case "ws": // websocket connection
-		conn, err = wsClient(conn, arg.Addr)
+		conn, err = wsClient("ws", conn, arg.Addr)
 		if err != nil {
 			return nil, err
 		}
 	case "wss": // websocket security
 		tlsUsed = true
-		conn, err = wssClient(conn, arg.Addr)
+		conn, err = wsClient("wss", conn, arg.Addr)
 		if err != nil {
 			return nil, err
 		}
