@@ -77,10 +77,7 @@ func listenAndServe(arg Args) error {
 			continue
 		}
 
-		if tc, ok := conn.(*net.TCPConn); ok {
-			tc.SetKeepAlive(true)
-			tc.SetKeepAlivePeriod(time.Second * 180)
-		}
+		setKeepAlive(conn, keepAliveTime)
 
 		go handleConn(conn, arg)
 	}
@@ -104,6 +101,8 @@ func listenAndServeTcpForward(arg Args) error {
 			glog.V(LWARNING).Infoln(err)
 			continue
 		}
+		setKeepAlive(conn, keepAliveTime)
+
 		go handleTcpForward(conn, raddr)
 	}
 }
@@ -361,15 +360,19 @@ func (r *reqReader) Read(p []byte) (n int, err error) {
 }
 
 func Connect(addr string) (conn net.Conn, err error) {
+	return connectWithChain(addr, forwardArgs...)
+}
+
+func connectWithChain(addr string, chain ...Args) (conn net.Conn, err error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
-	if len(forwardArgs) == 0 {
+	if len(chain) == 0 {
 		return net.DialTimeout("tcp", addr, time.Second*90)
 	}
 
 	var end Args
-	conn, end, err = forwardChain(forwardArgs...)
+	conn, end, err = forwardChain(chain...)
 	if err != nil {
 		return nil, err
 	}
@@ -394,9 +397,7 @@ func forwardChain(chain ...Args) (conn net.Conn, end Args, err error) {
 		return
 	}
 
-	tc := conn.(*net.TCPConn)
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(time.Second * 180) // 3min
+	setKeepAlive(conn, keepAliveTime)
 
 	c, err := forward(conn, end)
 	if err != nil {
@@ -453,6 +454,7 @@ func forward(conn net.Conn, arg Args) (net.Conn, error) {
 	case "tls": // tls connection
 		tlsUsed = true
 		conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+		// conn = tls.Client(conn, &tls.Config{ServerName: "ice139.com"})
 	case "tcp":
 		fallthrough
 	default:
