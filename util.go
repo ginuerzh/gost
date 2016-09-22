@@ -2,12 +2,18 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/golang/glog"
 	"io"
 	"net"
 	"net/url"
 	"strings"
+	"time"
+)
+
+const (
+	keepAliveTime = 180 * time.Second
 )
 
 type strSlice []string
@@ -69,12 +75,18 @@ func parseArgs(ss []string) (args []Args) {
 
 		switch arg.Protocol {
 		case "http", "socks", "socks5", "ss":
+		case "https":
+			arg.Protocol = "http"
+			arg.Transport = "tls"
 		default:
 			arg.Protocol = ""
 		}
 
 		switch arg.Transport {
 		case "ws", "wss", "tls":
+		case "https":
+			arg.Protocol = "http"
+			arg.Transport = "tls"
 		case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
 			arg.Remote = strings.Trim(u.EscapedPath(), "/")
 		case "rtcp", "rudp": // started from v2.1, rtcp and rudp are for remote port forwarding
@@ -146,4 +158,18 @@ func Transport(conn, conn2 net.Conn) (err error) {
 	}
 
 	return
+}
+
+func setKeepAlive(conn net.Conn, d time.Duration) error {
+	c, ok := conn.(*net.TCPConn)
+	if !ok {
+		return errors.New("Not a TCP connection")
+	}
+	if err := c.SetKeepAlive(true); err != nil {
+		return err
+	}
+	if err := c.SetKeepAlivePeriod(d); err != nil {
+		return err
+	}
+	return nil
 }

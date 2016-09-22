@@ -42,7 +42,40 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		return
 	}
 
-	c, err := Connect(req.Host)
+	var c net.Conn
+	var err error
+
+	if len(forwardArgs) > 0 {
+		last := forwardArgs[len(forwardArgs)-1]
+		if last.Protocol == "http" || last.Protocol == "" {
+			c, _, err = forwardChain(forwardArgs...)
+			if err != nil {
+				glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), last.Addr, err)
+
+				b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
+					"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+				glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", conn.RemoteAddr(), last.Addr, string(b))
+				conn.Write(b)
+				return
+			}
+			defer c.Close()
+
+			if last.User != nil {
+				req.Header.Set("Proxy-Authorization",
+					"Basic "+base64.StdEncoding.EncodeToString([]byte(last.User.String())))
+			}
+
+			if err = req.Write(c); err != nil {
+				glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+				return
+			}
+			glog.V(LINFO).Infof("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
+			Transport(conn, c)
+			glog.V(LINFO).Infof("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
+			return
+		}
+	}
+	c, err = Connect(req.Host)
 	if err != nil {
 		glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 
@@ -58,11 +91,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		b := []byte("HTTP/1.1 200 Connection established\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
 		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
-
-		if _, err := conn.Write(b); err != nil {
-			glog.V(LWARNING).Infof("[http] %s <- %s : %s", conn.RemoteAddr(), req.Host, err)
-			return
-		}
+		conn.Write(b)
 	} else {
 		req.Header.Del("Proxy-Connection")
 		req.Header.Set("Connection", "Keep-Alive")
