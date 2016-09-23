@@ -19,7 +19,7 @@ const (
 )
 
 const (
-	Version = "2.1-rc1"
+	Version = "2.2-dev-http2"
 )
 
 var (

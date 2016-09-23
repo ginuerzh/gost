@@ -88,7 +88,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 	}
 	defer c.Close()
 
-	if req.Method == "CONNECT" {
+	if req.Method == http.MethodConnect {
 		b := []byte("HTTP/1.1 200 Connection established\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
 		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))

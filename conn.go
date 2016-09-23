@@ -89,11 +89,12 @@ func listenAndServe(arg Args) error {
 
 func listenAndServeHttp2(arg Args) error {
 	srv := http.Server{
-		Addr:    arg.Addr,
-		Handler: http.HandlerFunc(handlerHttp2Request),
+		Addr:      arg.Addr,
+		Handler:   http.HandlerFunc(handlerHttp2Request),
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{arg.Cert}},
 	}
 	http2.ConfigureServer(&srv, nil)
-	return srv.ListenAndServeTLS(certFile, keyFile)
+	return srv.ListenAndServeTLS("", "")
 }
 
 func listenAndServeTcpForward(arg Args) error {

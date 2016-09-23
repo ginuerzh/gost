@@ -74,7 +74,7 @@ func parseArgs(ss []string) (args []Args) {
 		}
 
 		switch arg.Protocol {
-		case "http", "socks", "socks5", "ss":
+		case "http", "http2", "h2", "socks", "socks5", "ss":
 		case "https":
 			arg.Protocol = "http"
 			arg.Transport = "tls"
