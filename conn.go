@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	//"sync/atomic"
+	"golang.org/x/net/http2"
 	"time"
 )
 
@@ -50,6 +51,9 @@ func listenAndServe(arg Args) error {
 	case "wss": // websocket security connection
 		return NewWs(arg).listenAndServeTLS()
 	case "tls": // tls connection
+		if arg.Protocol == "http2" || arg.Protocol == "h2" { // only support http2 over TLS
+			return listenAndServeHttp2(arg)
+		}
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
 	case "tcp": // Local TCP port forwarding
@@ -81,6 +85,15 @@ func listenAndServe(arg Args) error {
 
 		go handleConn(conn, arg)
 	}
+}
+
+func listenAndServeHttp2(arg Args) error {
+	srv := http.Server{
+		Addr:    arg.Addr,
+		Handler: http.HandlerFunc(handlerHttp2Request),
+	}
+	http2.ConfigureServer(&srv, nil)
+	return srv.ListenAndServeTLS(certFile, keyFile)
 }
 
 func listenAndServeTcpForward(arg Args) error {

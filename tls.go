@@ -6,7 +6,8 @@ import (
 )
 
 const (
-
+	certFile = "cert.pem"
+	keyFile  = "key.pem"
 	// This is the default cert file for convenience, providing your own cert is recommended.
 	rawCert = `-----BEGIN CERTIFICATE-----
 MIIC5jCCAdCgAwIBAgIBADALBgkqhkiG9w0BAQUwEjEQMA4GA1UEChMHQWNtZSBD
@@ -58,7 +59,7 @@ nh/BAoGBAMY5z2f1pmMhrvtPDSlEVjgjELbaInxFaxPLR4Pdyzn83gtIIU14+R8X
 
 func init() {
 	var err error
-	if tlsCert, err = tls.LoadX509KeyPair("cert.pem", "key.pem"); err != nil {
+	if tlsCert, err = tls.LoadX509KeyPair(certFile, keyFile); err != nil {
 		glog.V(LWARNING).Infoln(err)
 
 		tlsCert, err = tls.X509KeyPair([]byte(rawCert), []byte(rawKey))

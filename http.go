@@ -10,6 +10,8 @@ import (
 )
 
 func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
+	glog.V(LINFO).Infof("[http] %s - %s", conn.RemoteAddr(), req.Host)
+
 	if glog.V(LDEBUG) {
 		dump, err := httputil.DumpRequest(req, false)
 		if err != nil {
@@ -18,7 +20,6 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			glog.Infoln(string(dump))
 		}
 	}
-	glog.V(LINFO).Infof("[http] %s - %s", conn.RemoteAddr(), req.Host)
 
 	var username, password string
 	if arg.User != nil {
