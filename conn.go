@@ -51,11 +51,13 @@ func listenAndServe(arg Args) error {
 	case "wss": // websocket security connection
 		return NewWs(arg).listenAndServeTLS()
 	case "tls": // tls connection
-		if arg.Protocol == "http2" || arg.Protocol == "h2" { // only support http2 over TLS
-			return listenAndServeHttp2(arg)
+		if arg.Protocol == "http2" { // only support http2 over TLS
+			return listenAndServeHttp2(arg, http.HandlerFunc(handlerHttp2Request))
 		}
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
+	case "http2": // http2 connetction
+		return listenAndServeHttp2(arg, http.HandlerFunc(handleHttp2Transport))
 	case "tcp": // Local TCP port forwarding
 		return listenAndServeTcpForward(arg)
 	case "udp": // Local UDP port forwarding
@@ -87,14 +89,12 @@ func listenAndServe(arg Args) error {
 	}
 }
 
-func listenAndServeHttp2(arg Args) error {
+func listenAndServeHttp2(arg Args, handler http.Handler) error {
 	srv := http.Server{
 		Addr:    arg.Addr,
-		Handler: http.HandlerFunc(handlerHttp2Request),
+		Handler: handler,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{arg.Cert},
-			//MinVersion:               tls.VersionTLS12,
-			//PreferServerCipherSuites: true,
 		},
 	}
 	http2.ConfigureServer(&srv, nil)

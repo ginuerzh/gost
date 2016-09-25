@@ -74,7 +74,7 @@ func parseArgs(ss []string) (args []Args) {
 		}
 
 		switch arg.Protocol {
-		case "http", "http2", "h2", "socks", "socks5", "ss":
+		case "http", "http2", "socks", "socks5", "ss":
 		case "https":
 			arg.Protocol = "http"
 			arg.Transport = "tls"
@@ -87,6 +87,8 @@ func parseArgs(ss []string) (args []Args) {
 		case "https":
 			arg.Protocol = "http"
 			arg.Transport = "tls"
+		case "http2":
+			arg.Protocol = ""
 		case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
 			arg.Remote = strings.Trim(u.EscapedPath(), "/")
 		case "rtcp", "rudp": // started from v2.1, rtcp and rudp are for remote port forwarding

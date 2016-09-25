@@ -5,78 +5,67 @@ import (
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io"
-	"net"
+	//"net"
 	"net/http"
 	"net/http/httputil"
 )
 
 func init() {
-	http2.VerboseLogs = true
+	if glog.V(LDEBUG) {
+		http2.VerboseLogs = true
+	}
 }
 
 func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 	glog.V(LINFO).Infof("[http2] %s - %s", req.RemoteAddr, req.Host)
-
 	if glog.V(LDEBUG) {
-		dump, err := httputil.DumpRequest(req, false)
-		if err != nil {
-			glog.Infoln(err)
-		} else {
-			glog.Infoln(string(dump))
-		}
+		dump, _ := httputil.DumpRequest(req, false)
+		glog.Infoln(string(dump))
 	}
 
-	var c net.Conn
-	var err error
-
-	fw := flushWriter{w}
-
-	c, err = Connect(req.Host)
+	c, err := Connect(req.Host)
 	if err != nil {
 		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, req.Host, err)
-		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		glog.V(LDEBUG).Infof("[http2] %s <- %s\n%s", req.RemoteAddr, req.Host, string(b))
-		//w.WriteHeader(http.StatusServiceUnavailable)
-		fw.Write(b)
+		w.Header().Set("Proxy-Agent", "gost/"+Version)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		if fw, ok := w.(http.Flusher); ok {
+			fw.Flush()
+		}
 		return
 	}
 	defer c.Close()
 
-	rChan := make(chan error, 1)
-	wChan := make(chan error, 1)
+	glog.V(LINFO).Infof("[http2] %s <-> %s", req.RemoteAddr, req.Host)
+	errc := make(chan error, 2)
 
 	if req.Method == http.MethodConnect {
 		w.Header().Set("Proxy-Agent", "gost/"+Version)
 		w.WriteHeader(http.StatusOK)
-
 		if fw, ok := w.(http.Flusher); ok {
 			fw.Flush()
 		}
 
 		// compatible with HTTP 1.x
 		if hj, ok := w.(http.Hijacker); ok && req.ProtoMajor == 1 {
+			// we take over the underly connection
 			conn, _, err := hj.Hijack()
 			if err != nil {
-				glog.V(LWARNING).Infoln(err)
+				glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, req.Host, err)
 				return
 			}
 			defer conn.Close()
 
-			go Pipe(conn, c, rChan)
-			go Pipe(c, conn, wChan)
+			go Pipe(conn, c, errc)
+			go Pipe(c, conn, errc)
 		} else {
-			go Pipe(req.Body, c, rChan)
-			go Pipe(c, fw, wChan)
+			go Pipe(req.Body, c, errc)
+			go Pipe(c, flushWriter{w}, errc)
 		}
 
 		select {
-		case err := <-rChan:
-			glog.V(LWARNING).Infoln("r exit", err)
-		case err := <-wChan:
-			glog.V(LWARNING).Infoln("w exit", err)
+		case <-errc:
+			// glog.V(LWARNING).Infoln("exit", err)
 		}
-
 	} else {
 		req.Header.Set("Connection", "Keep-Alive")
 		if err = req.Write(c); err != nil {
@@ -96,16 +85,22 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 				w.Header().Add(k, vv)
 			}
 		}
-
 		w.WriteHeader(resp.StatusCode)
-		if _, err := io.Copy(fw, resp.Body); err != nil {
-			glog.V(LWARNING).Infoln(err)
+
+		if _, err := io.Copy(flushWriter{w}, resp.Body); err != nil {
+			glog.V(LWARNING).Infof("[http2] %s <- %s : %s", req.RemoteAddr, req.Host, err)
 		}
 	}
 
-	//glog.V(LINFO).Infof("[http2] %s <-> %s", req.RemoteAddr, req.Host)
+	glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, req.Host)
+}
 
-	//glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, req.Host)
+func handleHttp2Transport(w http.ResponseWriter, req *http.Request) {
+	glog.V(LINFO).Infof("[http2] %s - %s", req.RemoteAddr, req.Host)
+	if glog.V(LDEBUG) {
+		dump, _ := httputil.DumpRequest(req, false)
+		glog.Infoln(string(dump))
+	}
 }
 
 type flushWriter struct {
