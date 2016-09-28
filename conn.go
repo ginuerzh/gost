@@ -10,6 +10,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -378,7 +379,38 @@ func (r *reqReader) Read(p []byte) (n int, err error) {
 }
 
 func Connect(addr string) (conn net.Conn, err error) {
+	if len(forwardArgs) > 0 {
+		last := forwardArgs[len(forwardArgs)-1]
+		if http2Client != nil && last.Protocol == "http2" {
+			return connectHttp2(http2Client, addr)
+		}
+	}
 	return connectWithChain(addr, forwardArgs...)
+}
+
+func connectHttp2(client *http.Client, host string) (net.Conn, error) {
+	pr, pw := io.Pipe()
+	u := url.URL{Scheme: "https", Host: host}
+	req, err := http.NewRequest(http.MethodConnect, u.String(), ioutil.NopCloser(pr))
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = -1
+	if glog.V(LDEBUG) {
+		dump, _ := httputil.DumpRequest(req, false)
+		glog.Infoln(string(dump))
+	}
+	resp, err := http2Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, errors.New(resp.Status)
+	}
+	conn := &Http2ClientConn{r: resp.Body, w: pw}
+	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", host)
+	return conn, nil
 }
 
 func connectWithChain(addr string, chain ...Args) (conn net.Conn, err error) {

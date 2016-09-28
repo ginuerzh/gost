@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/golang/glog"
+	"golang.org/x/net/http2"
 	"os"
 	"runtime"
 	"sync"
@@ -35,6 +36,10 @@ func init() {
 	flag.Var(&forwardAddr, "F", "forward address, can make a forward chain")
 	flag.BoolVar(&pv, "V", false, "print version")
 	flag.Parse()
+
+	if glog.V(LDEBUG) {
+		http2.VerboseLogs = true
+	}
 }
 
 func main() {
@@ -50,11 +55,13 @@ func main() {
 	}
 
 	listenArgs = parseArgs(listenAddr)
-	forwardArgs = parseArgs(forwardAddr)
-
 	if len(listenArgs) == 0 {
-		glog.Exitln("no listen addr")
+		fmt.Fprintln(os.Stderr, "no listen address, please specify at least one -L parameter")
+		return
 	}
+
+	forwardArgs = parseArgs(forwardAddr)
+	processForwardChain(forwardArgs...)
 
 	var wg sync.WaitGroup
 	for _, args := range listenArgs {

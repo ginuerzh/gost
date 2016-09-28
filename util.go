@@ -29,8 +29,8 @@ func (ss *strSlice) Set(value string) error {
 // admin:123456@localhost:8080
 type Args struct {
 	Addr      string          // host:port
-	Protocol  string          // protocol: http/socks(5)/ss
-	Transport string          // transport: ws(s)/tls/tcp/udp/rtcp/rudp
+	Protocol  string          // protocol: http/http2/socks5/ss
+	Transport string          // transport: ws/wss/tls/tcp/udp/rtcp/rudp
 	Remote    string          // remote address, used by tcp/udp port forwarding
 	User      *url.Userinfo   // authentication for proxy
 	Cert      tls.Certificate // tls certificate
@@ -73,15 +73,6 @@ func parseArgs(ss []string) (args []Args) {
 			arg.Transport = schemes[1]
 		}
 
-		switch arg.Protocol {
-		case "http", "http2", "socks", "socks5", "ss":
-		case "https":
-			arg.Protocol = "http"
-			arg.Transport = "tls"
-		default:
-			arg.Protocol = ""
-		}
-
 		switch arg.Transport {
 		case "ws", "wss", "tls":
 		case "https":
@@ -97,10 +88,40 @@ func parseArgs(ss []string) (args []Args) {
 			arg.Transport = ""
 		}
 
+		switch arg.Protocol {
+		case "http", "socks", "socks5", "ss":
+		case "http2":
+			arg.Transport = "tls" // standard http2 proxy, only support http2 over tls
+		default:
+			arg.Protocol = ""
+		}
+
 		args = append(args, arg)
 	}
 
 	return
+}
+
+func processForwardChain(chain ...Args) {
+	glog.V(LINFO).Infoln(chain)
+	if len(chain) == 0 {
+		return
+	}
+	length := len(chain)
+	c, last := chain[:length-1], chain[length-1]
+
+	// http2 restrict: only last proxy can enable http2
+	for i, _ := range c {
+		if c[i].Protocol == "http2" {
+			c[i].Protocol = "http"
+		}
+		if c[i].Transport == "http2" {
+			c[i].Transport = ""
+		}
+	}
+	if last.Protocol == "http2" || last.Transport == "http2" {
+		initHttp2Client(last.Addr, c...)
+	}
 }
 
 // Based on io.Copy, but the io.ErrShortWrite is ignored (mainly for websocket)
