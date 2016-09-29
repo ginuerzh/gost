@@ -17,6 +17,7 @@ const (
 	LWARNING
 	LINFO
 	LDEBUG
+	LVDEBUG // verbose debug
 )
 
 const (
@@ -37,7 +38,7 @@ func init() {
 	flag.BoolVar(&pv, "V", false, "print version")
 	flag.Parse()
 
-	if glog.V(LDEBUG) {
+	if glog.V(LVDEBUG) {
 		http2.VerboseLogs = true
 	}
 }

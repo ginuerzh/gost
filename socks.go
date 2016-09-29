@@ -170,7 +170,7 @@ func handleSocks5Request(req *gosocks5.Request, conn net.Conn) {
 	case gosocks5.CmdConnect:
 		glog.V(LINFO).Infof("[socks5-connect] %s - %s", conn.RemoteAddr(), req.Addr)
 
-		tconn, err := Connect(req.Addr.String())
+		tconn, err := connect(req.Addr.String(), "socks5")
 		if err != nil {
 			glog.V(LWARNING).Infof("[socks5-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			rep := gosocks5.NewReply(gosocks5.HostUnreachable, nil)

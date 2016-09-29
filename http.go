@@ -19,7 +19,7 @@ var (
 )
 
 func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
-	glog.V(LINFO).Infof("[http] %s - %s", conn.RemoteAddr(), req.Host)
+	glog.V(LINFO).Infof("[http] %s %s - %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
 
 	if glog.V(LDEBUG) {
 		dump, _ := httputil.DumpRequest(req, false)
@@ -55,7 +55,8 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 			return
 		}
 	}
-	c, err := Connect(req.Host)
+
+	c, err := connect(req.Host, "http")
 	if err != nil {
 		glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 
@@ -160,7 +161,6 @@ func (c *Http2ClientConn) SetWriteDeadline(t time.Time) error {
 
 // init http2 client with target http2 proxy server addr, and forward chain chain
 func initHttp2Client(host string, chain ...Args) {
-	glog.V(LINFO).Infoln("init http2 client")
 	tr := http2.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
@@ -178,15 +178,20 @@ func initHttp2Client(host string, chain ...Args) {
 }
 
 func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
-	glog.V(LINFO).Infof("[http2] %s - %s", req.RemoteAddr, req.Host)
+	target := req.Header.Get("gost-target-addr")
+	if target == "" {
+		target = req.Host
+	}
+
+	glog.V(LINFO).Infof("[http2] %s %s - %s %s", req.Method, req.RemoteAddr, target, req.Proto)
 	if glog.V(LDEBUG) {
 		dump, _ := httputil.DumpRequest(req, false)
 		glog.Infoln(string(dump))
 	}
 
-	c, err := Connect(req.Host)
+	c, err := connect(target, req.Header.Get("gost-prot"))
 	if err != nil {
-		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, req.Host, err)
+		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 		w.Header().Set("Proxy-Agent", "gost/"+Version)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if fw, ok := w.(http.Flusher); ok {
@@ -196,7 +201,7 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 	}
 	defer c.Close()
 
-	glog.V(LINFO).Infof("[http2] %s <-> %s", req.RemoteAddr, req.Host)
+	glog.V(LINFO).Infof("[http2] %s <-> %s", req.RemoteAddr, target)
 	errc := make(chan error, 2)
 
 	if req.Method == http.MethodConnect {
@@ -211,7 +216,7 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 			// we take over the underly connection
 			conn, _, err := hj.Hijack()
 			if err != nil {
-				glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, req.Host, err)
+				glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 				return
 			}
 			defer conn.Close()
@@ -230,7 +235,7 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 	} else {
 		req.Header.Set("Connection", "Keep-Alive")
 		if err = req.Write(c); err != nil {
-			glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, req.Host, err)
+			glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 			return
 		}
 
@@ -250,14 +255,15 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 		if fw, ok := w.(http.Flusher); ok {
 			fw.Flush()
 		}
-
 		if _, err := io.Copy(flushWriter{w}, resp.Body); err != nil {
-			glog.V(LWARNING).Infof("[http2] %s <- %s : %s", req.RemoteAddr, req.Host, err)
+			glog.V(LWARNING).Infof("[http2] %s <- %s : %s", req.RemoteAddr, target, err)
 		}
 	}
 
-	glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, req.Host)
+	glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, target)
 }
+
+//func processSocks5OverHttp2()
 
 func handleHttp2Transport(w http.ResponseWriter, req *http.Request) {
 	glog.V(LINFO).Infof("[http2] %s - %s", req.RemoteAddr, req.Host)
@@ -296,7 +302,6 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 	n, err = fw.w.Write(p)
 	if err != nil {
 		glog.V(LWARNING).Infoln("flush writer:", err)
-		return
 	}
 	if f, ok := fw.w.(http.Flusher); ok {
 		f.Flush()

@@ -52,13 +52,10 @@ func listenAndServe(arg Args) error {
 	case "wss": // websocket security connection
 		return NewWs(arg).listenAndServeTLS()
 	case "tls": // tls connection
-		if arg.Protocol == "http2" { // only support http2 over TLS
-			return listenAndServeHttp2(arg, http.HandlerFunc(handlerHttp2Request))
-		}
 		ln, err = tls.Listen("tcp", arg.Addr,
 			&tls.Config{Certificates: []tls.Certificate{arg.Cert}})
 	case "http2": // http2 connetction
-		return listenAndServeHttp2(arg, http.HandlerFunc(handleHttp2Transport))
+		return listenAndServeHttp2(arg, http.HandlerFunc(handlerHttp2Request))
 	case "tcp": // Local TCP port forwarding
 		return listenAndServeTcpForward(arg)
 	case "udp": // Local UDP port forwarding
@@ -378,45 +375,15 @@ func (r *reqReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func Connect(addr string) (conn net.Conn, err error) {
-	if len(forwardArgs) > 0 {
-		last := forwardArgs[len(forwardArgs)-1]
-		if http2Client != nil && last.Protocol == "http2" {
-			return connectHttp2(http2Client, addr)
-		}
-	}
-	return connectWithChain(addr, forwardArgs...)
-}
-
-func connectHttp2(client *http.Client, host string) (net.Conn, error) {
-	pr, pw := io.Pipe()
-	u := url.URL{Scheme: "https", Host: host}
-	req, err := http.NewRequest(http.MethodConnect, u.String(), ioutil.NopCloser(pr))
-	if err != nil {
-		return nil, err
-	}
-	req.ContentLength = -1
-	if glog.V(LDEBUG) {
-		dump, _ := httputil.DumpRequest(req, false)
-		glog.Infoln(string(dump))
-	}
-	resp, err := http2Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, errors.New(resp.Status)
-	}
-	conn := &Http2ClientConn{r: resp.Body, w: pw}
-	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", host)
-	return conn, nil
-}
-
-func connectWithChain(addr string, chain ...Args) (conn net.Conn, err error) {
+func connect(addr string, prot string, chain []Args) (conn net.Conn, err error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
+
+	if enabled, h2host := http2Enabled(); enabled {
+		return connectHttp2(http2Client, h2host, addr, prot)
+	}
+
 	if len(chain) == 0 {
 		return net.DialTimeout("tcp", addr, time.Second*90)
 	}
@@ -430,6 +397,49 @@ func connectWithChain(addr string, chain ...Args) (conn net.Conn, err error) {
 		conn.Close()
 		return nil, err
 	}
+	return conn, nil
+}
+
+func http2Enabled() (enabled bool, host string) {
+	length := len(forwardArgs)
+	if http2Client == nil || length == 0 || forwardArgs[length-1].Transport != "http2" {
+		return
+	}
+	return true, forwardArgs[length-1].Addr
+}
+
+func connectHttp2(client *http.Client, host, target string, prot string) (net.Conn, error) {
+	pr, pw := io.Pipe()
+	req := http.Request{
+		Method:        http.MethodConnect,
+		URL:           &url.URL{Scheme: "https", Host: host},
+		Header:        make(http.Header),
+		Proto:         "HTTP/2.0",
+		ProtoMajor:    2,
+		ProtoMinor:    0,
+		Body:          ioutil.NopCloser(pr),
+		Host:          host,
+		ContentLength: -1,
+	}
+	req.Header.Set("gost-target-addr", target)
+	if prot != "" {
+		req.Header.Set("gost-prot", prot)
+	}
+
+	if glog.V(LDEBUG) {
+		dump, _ := httputil.DumpRequest(&req, false)
+		glog.Infoln(string(dump))
+	}
+	resp, err := client.Do(&req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, errors.New(resp.Status)
+	}
+	conn := &Http2ClientConn{r: resp.Body, w: pw}
+	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", target)
 	return conn, nil
 }
 

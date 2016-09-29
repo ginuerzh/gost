@@ -79,7 +79,7 @@ func parseArgs(ss []string) (args []Args) {
 			arg.Protocol = "http"
 			arg.Transport = "tls"
 		case "http2":
-			arg.Protocol = ""
+			arg.Protocol = "http2"
 		case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
 			arg.Remote = strings.Trim(u.EscapedPath(), "/")
 		case "rtcp", "rudp": // started from v2.1, rtcp and rudp are for remote port forwarding
@@ -89,9 +89,7 @@ func parseArgs(ss []string) (args []Args) {
 		}
 
 		switch arg.Protocol {
-		case "http", "socks", "socks5", "ss":
-		case "http2":
-			arg.Transport = "tls" // standard http2 proxy, only support http2 over tls
+		case "http", "http2", "socks", "socks5", "ss":
 		default:
 			arg.Protocol = ""
 		}
@@ -112,14 +110,11 @@ func processForwardChain(chain ...Args) {
 
 	// http2 restrict: only last proxy can enable http2
 	for i, _ := range c {
-		if c[i].Protocol == "http2" {
-			c[i].Protocol = "http"
-		}
 		if c[i].Transport == "http2" {
 			c[i].Transport = ""
 		}
 	}
-	if last.Protocol == "http2" || last.Transport == "http2" {
+	if last.Transport == "http2" {
 		initHttp2Client(last.Addr, c...)
 	}
 }
