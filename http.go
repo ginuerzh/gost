@@ -56,7 +56,7 @@ func handleHttpRequest(req *http.Request, conn net.Conn, arg Args) {
 		}
 	}
 
-	c, err := connect(req.Host, "http")
+	c, err := connect(req.Host, "http", forwardArgs...)
 	if err != nil {
 		glog.V(LWARNING).Infof("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 
@@ -167,7 +167,7 @@ func initHttp2Client(host string, chain ...Args) {
 		},
 		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
 			// replace the default dialer with our forward chain.
-			conn, err := connectWithChain(host, chain...)
+			conn, err := connect(host, "http2", chain...)
 			if err != nil {
 				return conn, err
 			}
@@ -178,7 +178,7 @@ func initHttp2Client(host string, chain ...Args) {
 }
 
 func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
-	target := req.Header.Get("gost-target-addr")
+	target := req.Header.Get("gost-target")
 	if target == "" {
 		target = req.Host
 	}
@@ -189,7 +189,7 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 		glog.Infoln(string(dump))
 	}
 
-	c, err := connect(target, req.Header.Get("gost-prot"))
+	c, err := connect(target, req.Header.Get("gost-protocol"), forwardArgs...)
 	if err != nil {
 		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 		w.Header().Set("Proxy-Agent", "gost/"+Version)

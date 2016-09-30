@@ -13,7 +13,7 @@ func handleTcpForward(conn net.Conn, raddr net.Addr) {
 	defer conn.Close()
 
 	glog.V(LINFO).Infof("[tcp] %s - %s", conn.RemoteAddr(), raddr)
-	c, err := connect(raddr.String(), "")
+	c, err := connect(raddr.String(), "", forwardArgs...)
 	if err != nil {
 		glog.V(LWARNING).Infof("[tcp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
 		return

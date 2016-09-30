@@ -375,7 +375,7 @@ func (r *reqReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func connect(addr string, prot string, chain []Args) (conn net.Conn, err error) {
+func connect(addr string, prot string, chain ...Args) (conn net.Conn, err error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
@@ -421,9 +421,9 @@ func connectHttp2(client *http.Client, host, target string, prot string) (net.Co
 		Host:          host,
 		ContentLength: -1,
 	}
-	req.Header.Set("gost-target-addr", target)
+	req.Header.Set("gost-target", target)
 	if prot != "" {
-		req.Header.Set("gost-prot", prot)
+		req.Header.Set("gost-protocol", prot)
 	}
 
 	if glog.V(LDEBUG) {

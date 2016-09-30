@@ -31,7 +31,7 @@ func handleShadow(conn net.Conn, arg Args) {
 	}
 	glog.V(LINFO).Infof("[ss] %s -> %s", conn.RemoteAddr(), addr.String())
 
-	sconn, err := connect(addr.String(), "ss")
+	sconn, err := connect(addr.String(), "ss", forwardArgs...)
 	if err != nil {
 		glog.V(LWARNING).Infof("[ss] %s -> %s : %s", conn.RemoteAddr(), addr.String(), err)
 		return
