@@ -1,13 +1,13 @@
-package gost
+package main
 
 import (
 	//"github.com/ginuerzh/gosocks5"
 	"crypto/tls"
-	//"github.com/golang/glog"
+	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 	"net"
-	//"net/http"
-	//"net/http/httputil"
+	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"time"
 )
@@ -19,8 +19,8 @@ type wsConn struct {
 
 func wsClient(scheme string, conn net.Conn, host string) (*wsConn, error) {
 	dialer := websocket.Dialer{
-		ReadBufferSize:   1024,
-		WriteBufferSize:  1024,
+		ReadBufferSize:   4096,
+		WriteBufferSize:  4096,
 		TLSClientConfig:  &tls.Config{InsecureSkipVerify: true},
 		HandshakeTimeout: time.Second * 90,
 		NetDial: func(net, addr string) (net.Conn, error) {
@@ -87,4 +87,55 @@ func (c *wsConn) SetReadDeadline(t time.Time) error {
 
 func (c *wsConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
+}
+
+type ws struct {
+	upgrader websocket.Upgrader
+	arg      Args
+}
+
+func NewWs(arg Args) *ws {
+	return &ws{
+		arg: arg,
+		upgrader: websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin:     func(r *http.Request) bool { return true },
+		},
+	}
+}
+
+func (s *ws) handle(w http.ResponseWriter, r *http.Request) {
+	glog.V(LINFO).Infof("[ws] %s - %s", r.RemoteAddr, s.arg.Addr)
+	if glog.V(LDEBUG) {
+		dump, err := httputil.DumpRequest(r, false)
+		if err != nil {
+			glog.V(LWARNING).Infof("[ws] %s - %s : %s", r.RemoteAddr, s.arg.Addr, err)
+		} else {
+			glog.V(LDEBUG).Infof("[ws] %s - %s\n%s", r.RemoteAddr, s.arg.Addr, string(dump))
+		}
+	}
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		glog.V(LERROR).Infoln(err)
+		return
+	}
+	handleConn(wsServer(conn), s.arg)
+}
+
+func (s *ws) ListenAndServe() error {
+	sm := http.NewServeMux()
+	sm.HandleFunc("/ws", s.handle)
+	return http.ListenAndServe(s.arg.Addr, sm)
+}
+
+func (s *ws) listenAndServeTLS() error {
+	sm := http.NewServeMux()
+	sm.HandleFunc("/ws", s.handle)
+	server := &http.Server{
+		Addr:      s.arg.Addr,
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.arg.Cert}},
+		Handler:   sm,
+	}
+	return server.ListenAndServeTLS("", "")
 }
