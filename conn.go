@@ -20,7 +20,7 @@ import (
 
 type ProxyConn struct {
 	conn           net.Conn
-	node           ProxyNode
+	Node           ProxyNode
 	handshaked     bool
 	handshakeMutex sync.Mutex
 	handshakeErr   error
@@ -29,13 +29,13 @@ type ProxyConn struct {
 func NewProxyConn(conn net.Conn, node ProxyNode) *ProxyConn {
 	return &ProxyConn{
 		conn: conn,
-		node: node,
+		Node: node,
 	}
 }
 
-// Handshake based on the proxy node info: transport, protocol, authentication, etc.
+// Handshake handshake with this proxy node based on the proxy node info: transport, protocol, authentication, etc.
 //
-// NOTE: http2 will be downgrade to http (for protocol) and tls (for transport).
+// NOTE: any HTTP2 scheme will be treated as http (for protocol) or tls (for transport).
 func (c *ProxyConn) Handshake() error {
 	c.handshakeMutex.Lock()
 	defer c.handshakeMutex.Unlock()
@@ -53,16 +53,22 @@ func (c *ProxyConn) Handshake() error {
 func (c *ProxyConn) handshake() error {
 	var tlsUsed bool
 
-	switch c.node.Transport {
+	switch c.Node.Transport {
 	case "ws": // websocket connection
-		conn, err := wsClient("ws", c.conn, c.node.Addr)
+		u := url.URL{Scheme: "ws", Host: c.Node.Addr, Path: "/ws"}
+		conn, err := WebsocketClientConn(u.String(), c.conn, nil)
 		if err != nil {
 			return err
 		}
 		c.conn = conn
 	case "wss": // websocket security
 		tlsUsed = true
-		conn, err := wsClient("wss", c.conn, c.node.Addr)
+		u := url.URL{Scheme: "wss", Host: c.Node.Addr, Path: "/ws"}
+		config := &tls.Config{
+			InsecureSkipVerify: c.Node.insecureSkipVerify(),
+			ServerName:         c.Node.serverName,
+		}
+		conn, err := WebsocketClientConn(u.String(), c.conn, config)
 		if err != nil {
 			return err
 		}
@@ -70,14 +76,14 @@ func (c *ProxyConn) handshake() error {
 	case "tls", "http2": // tls connection
 		tlsUsed = true
 		cfg := &tls.Config{
-			InsecureSkipVerify: c.node.insecureSkipVerify(),
-			ServerName:         c.node.serverName,
+			InsecureSkipVerify: c.Node.insecureSkipVerify(),
+			ServerName:         c.Node.serverName,
 		}
 		c.conn = tls.Client(c.conn, cfg)
 	default:
 	}
 
-	switch c.node.Protocol {
+	switch c.Node.Protocol {
 	case "socks", "socks5": // socks5 handshake with auth and tls supported
 		selector := &clientSelector{
 			methods: []uint8{
@@ -85,11 +91,15 @@ func (c *ProxyConn) handshake() error {
 				gosocks5.MethodUserPass,
 				//MethodTLS,
 			},
-			user: c.node.User,
+			user: c.Node.User,
 		}
 
 		if !tlsUsed { // if transport is not security, enable security socks5
 			selector.methods = append(selector.methods, MethodTLS)
+			selector.tlsConfig = &tls.Config{
+				InsecureSkipVerify: c.Node.insecureSkipVerify(),
+				ServerName:         c.Node.serverName,
+			}
 		}
 
 		conn := gosocks5.ClientConn(c.conn, selector)
@@ -98,9 +108,9 @@ func (c *ProxyConn) handshake() error {
 		}
 		c.conn = conn
 	case "ss": // shadowsocks
-		if c.node.User != nil {
-			method := c.node.User.Username()
-			password, _ := c.node.User.Password()
+		if c.Node.User != nil {
+			method := c.Node.User.Username()
+			password, _ := c.Node.User.Password()
 			cipher, err := shadowsocks.NewCipher(method, password)
 			if err != nil {
 				return err
@@ -117,9 +127,9 @@ func (c *ProxyConn) handshake() error {
 	return nil
 }
 
-// Connect to addr through this proxy node
+// Connect connect to addr through this proxy node
 func (c *ProxyConn) Connect(addr string) error {
-	switch c.node.Protocol {
+	switch c.Node.Protocol {
 	case "ss": // shadowsocks
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
@@ -177,9 +187,9 @@ func (c *ProxyConn) Connect(addr string) error {
 			Header:     make(http.Header),
 		}
 		req.Header.Set("Proxy-Connection", "keep-alive")
-		if c.node.User != nil {
+		if c.Node.User != nil {
 			req.Header.Set("Proxy-Authorization",
-				"Basic "+base64.StdEncoding.EncodeToString([]byte(c.node.User.String())))
+				"Basic "+base64.StdEncoding.EncodeToString([]byte(c.Node.User.String())))
 		}
 		if err := req.Write(c); err != nil {
 			return err

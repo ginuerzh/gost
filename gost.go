@@ -2,24 +2,38 @@ package gost
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"github.com/golang/glog"
 	"net"
+	"strings"
 	"time"
 )
 
+const (
+	Version = "2.2-dev"
+)
+
+// Log level for glog
 const (
 	LFATAL = iota
 	LERROR
 	LWARNING
 	LINFO
 	LDEBUG
-	LVDEBUG // verbose debug for http2
 )
 
 var (
-	DialTimeout   = 30 * time.Second
 	KeepAliveTime = 180 * time.Second
+	DialTimeout   = 30 * time.Second
+	ReadTimeout   = 90 * time.Second
+	WriteTimeout  = 90 * time.Second
+)
+
+var (
+	SmallBufferSize  = 1 * 1024  // 1KB small buffer
+	MediumBufferSize = 8 * 1024  // 8KB medium buffer
+	LargeBufferSize  = 16 * 1024 // 16KB large buffer
 )
 
 var (
@@ -27,7 +41,7 @@ var (
 	DefaultKeyFile  = "key.pem"
 
 	// This is the default cert and key data for convenience, providing your own cert is recommended.
-	DefaultRawCert = `-----BEGIN CERTIFICATE-----
+	defaultRawCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIC5jCCAdCgAwIBAgIBADALBgkqhkiG9w0BAQUwEjEQMA4GA1UEChMHQWNtZSBD
 bzAeFw0xNDAzMTcwNjIwNTFaFw0xNTAzMTcwNjIwNTFaMBIxEDAOBgNVBAoTB0Fj
 bWUgQ28wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDccNO1xmd4lWSf
@@ -44,8 +58,8 @@ UBrrrDbKRNibApBHCapPf6gC5sXcjOwx7P2/kiHDgY7YH47jfcRhtAPNsM4gjsEO
 RmwENY+hRUFHIRfQTyalqND+x6PWhRo3K6hpHs4DQEYPq4P2kFPqUqSBymH+Ny5/
 BcQ3wdMNmC6Bm/oiL1QV0M+/InOsAgQk/EDd0kmoU1ZT2lYHQduGmP099bOlHNpS
 uqO3vXF3q8SPPr/A9TqSs7BKkBQbe0+cdsA=
------END CERTIFICATE-----`
-	DefaultRawKey = `-----BEGIN RSA PRIVATE KEY-----
+-----END CERTIFICATE-----`)
+	defaultRawKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA3HDTtcZneJVkn3f9P0EtxPd3GCFh8PN9YvyCsYoHUQ/1zGaJ
 y3RB8sFupTol2s2j/Hugqjxkpp5dMeZP93bxgjI9iQlcTOvs+zaS/gIsL15r5I/0
 znIgoMKrLAsGEtgolcI32s0Y8dWVCVQwuaoskbH5LUNn1R66ZyRlUkWoJokIMBlg
@@ -71,7 +85,11 @@ kE3XzN56Ks+/avHfdYPO+UHMenw5V28nh+hv5pdoZrlmanQTz3pkaOC8o3WNQZEB
 nh/BAoGBAMY5z2f1pmMhrvtPDSlEVjgjELbaInxFaxPLR4Pdyzn83gtIIU14+R8X
 2LPs6PPwrNjWnIgrUSVXncIFL3pa45B+Mx1pYCpOAB1+nCZjIBQmpeo4Y0dwA/XH
 85EthKPvoszm+OPbyI16OcePV5ocX7lupRYuAo0pek7bomhmHWHz
------END RSA PRIVATE KEY-----`
+-----END RSA PRIVATE KEY-----`)
+)
+
+var (
+	ErrEmptyChain = errors.New("empty chain")
 )
 
 func setKeepAlive(conn net.Conn, d time.Duration) error {
@@ -88,11 +106,39 @@ func setKeepAlive(conn net.Conn, d time.Duration) error {
 	return nil
 }
 
-func loadCertificate(certFile, keyFile string) (tls.Certificate, error) {
+// Load the certificate from cert and key files, will use the default certificate if the provided info are invalid.
+func LoadCertificate(certFile, keyFile string) (tls.Certificate, error) {
 	tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err == nil {
 		return tlsCert, nil
 	}
 	glog.V(LWARNING).Infoln(err)
-	return tls.X509KeyPair([]byte(DefaultRawCert), []byte(DefaultRawKey))
+	return tls.X509KeyPair(defaultRawCert, defaultRawKey)
+}
+
+// Replace the default certificate by your own
+func SetDefaultCertificate(rawCert, rawKey []byte) {
+	defaultRawCert = rawCert
+	defaultRawKey = rawKey
+}
+
+func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
+	if proxyAuth == "" {
+		return
+	}
+
+	if !strings.HasPrefix(proxyAuth, "Basic ") {
+		return
+	}
+	c, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(proxyAuth, "Basic "))
+	if err != nil {
+		return
+	}
+	cs := string(c)
+	s := strings.IndexByte(cs, ':')
+	if s < 0 {
+		return
+	}
+
+	return cs[:s], cs[s+1:], true
 }

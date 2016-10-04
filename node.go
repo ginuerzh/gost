@@ -9,9 +9,9 @@ import (
 
 // Proxy node represent a proxy
 type ProxyNode struct {
-	Addr       string        // host:port
-	Protocol   string        // protocol: http/http2/socks5/ss
-	Transport  string        // transport: ws/wss/tls/tcp/udp/rtcp/rudp
+	Addr       string        // [host]:port
+	Protocol   string        // protocol: http/socks5/ss
+	Transport  string        // transport: ws/wss/tls/http2/tcp/udp/rtcp/rudp
 	Remote     string        // remote address, used by tcp/udp port forwarding
 	User       *url.Userinfo // authentication for proxy
 	values     url.Values
@@ -19,8 +19,10 @@ type ProxyNode struct {
 	conn       net.Conn
 }
 
-// the format is [scheme://][user:pass@host]:port
-func ParseProxyNode(s string) (node *ProxyNode, err error) {
+// The proxy node string pattern is [scheme://][user:pass@host]:port.
+//
+// Scheme can be devided into two parts by character '+', such as: http+tls.
+func ParseProxyNode(s string) (node ProxyNode, err error) {
 	if !strings.Contains(s, "://") {
 		s = "gost://" + s
 	}
@@ -29,7 +31,7 @@ func ParseProxyNode(s string) (node *ProxyNode, err error) {
 		return
 	}
 
-	node = &ProxyNode{
+	node = ProxyNode{
 		Addr:       u.Host,
 		User:       u.User,
 		values:     u.Query(),
@@ -38,6 +40,9 @@ func ParseProxyNode(s string) (node *ProxyNode, err error) {
 
 	if strings.Contains(u.Host, ":") {
 		node.serverName, _, _ = net.SplitHostPort(u.Host)
+		if node.serverName == "" {
+			node.serverName = "localhost" // default server name
+		}
 	}
 
 	schemes := strings.Split(u.Scheme, "+")
@@ -66,7 +71,7 @@ func ParseProxyNode(s string) (node *ProxyNode, err error) {
 	}
 
 	switch node.Protocol {
-	case "http", "http2", "socks", "socks5", "ss":
+	case "http", "socks", "socks5", "ss", "http2":
 	default:
 		node.Protocol = ""
 	}
@@ -74,8 +79,17 @@ func ParseProxyNode(s string) (node *ProxyNode, err error) {
 	return
 }
 
+// Get get node parameter by key
+func (node *ProxyNode) Get(key string) string {
+	return node.values.Get(key)
+}
+
+func (node *ProxyNode) Set(key, value string) {
+	node.values.Set(key, value)
+}
+
 func (node *ProxyNode) insecureSkipVerify() bool {
-	s := node.values.Get("secure")
+	s := node.Get("secure")
 	if secure, _ := strconv.ParseBool(s); secure {
 		return !secure
 	}
@@ -86,14 +100,14 @@ func (node *ProxyNode) insecureSkipVerify() bool {
 }
 
 func (node *ProxyNode) certFile() string {
-	if cert := node.values.Get("cert"); cert != "" {
+	if cert := node.Get("cert"); cert != "" {
 		return cert
 	}
 	return DefaultCertFile
 }
 
 func (node *ProxyNode) keyFile() string {
-	if key := node.values.Get("key"); key != "" {
+	if key := node.Get("key"); key != "" {
 		return key
 	}
 	return DefaultKeyFile

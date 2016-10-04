@@ -263,8 +263,6 @@ func handlerHttp2Request(w http.ResponseWriter, req *http.Request) {
 	glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, target)
 }
 
-//func processSocks5OverHttp2()
-
 func handleHttp2Transport(w http.ResponseWriter, req *http.Request) {
 	glog.V(LINFO).Infof("[http2] %s - %s", req.RemoteAddr, req.Host)
 	if glog.V(LDEBUG) {

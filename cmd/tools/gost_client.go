@@ -25,7 +25,7 @@ func init() {
 		log.Fatal("please specific at least one request URL")
 	}
 	urls = flag.Args()
-	if glog.V(gost.LVDEBUG) {
+	if glog.V(5) {
 		http2.VerboseLogs = true
 	}
 }
@@ -42,14 +42,10 @@ func (list *stringlist) Set(value string) error {
 
 func main() {
 	chain := gost.NewProxyChain()
-	for _, s := range proxyNodes {
-		node, err := gost.ParseProxyNode(s)
-		if err != nil {
-			log.Fatal(err)
-		}
-		chain.AddProxyNode(*node)
+	if err := chain.AddProxyNodeString(proxyNodes...); err != nil {
+		log.Fatal(err)
 	}
-	chain.Init()
+	chain.TryEnableHttp2()
 
 	for _, u := range urls {
 		url, err := url.Parse(u)
