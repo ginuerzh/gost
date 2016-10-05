@@ -1,134 +1,237 @@
 package gost
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
-	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
-	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
 	"net"
+	"strconv"
+	"time"
+)
+
+const (
+	idType  = 0 // address type index
+	idIP0   = 1 // ip addres start index
+	idDmLen = 1 // domain address length index
+	idDm0   = 2 // domain address start index
+
+	typeIPv4 = 1 // type is ipv4 address
+	typeDm   = 3 // type is domain address
+	typeIPv6 = 4 // type is ipv6 address
+
+	lenIPv4     = net.IPv4len + 2 // ipv4 + 2port
+	lenIPv6     = net.IPv6len + 2 // ipv6 + 2port
+	lenDmBase   = 2               // 1addrLen + 2port, plus addrLen
+	lenHmacSha1 = 10
 )
 
 type ShadowServer struct {
-	conn net.Conn
+	conn *ss.Conn
 	Base *ProxyServer
+	OTA  bool // one time auth
 }
 
-func NewShadowServer(conn net.Conn, base *ProxyServer) *ShadowServer {
+func NewShadowServer(conn *ss.Conn, base *ProxyServer) *ShadowServer {
 	return &ShadowServer{conn: conn, Base: base}
 }
 
 func (s *ShadowServer) Serve() {
-	glog.V(LINFO).Infof("[ss] %s -> %s", s.conn.RemoteAddr(), s.conn.LocalAddr())
+	glog.V(LINFO).Infof("[ss] %s - %s", s.conn.RemoteAddr(), s.conn.LocalAddr())
 
-	var conn net.Conn
-
-	if s.Base.Node.User != nil {
-		method := s.Base.Node.User.Username()
-		password, _ := s.Base.Node.User.Password()
-		cipher, err := shadowsocks.NewCipher(method, password)
-		if err != nil {
-			glog.V(LWARNING).Infof("[ss] %s - %s : %s", s.conn.RemoteAddr(), s.conn.LocalAddr(), err)
-			return
-		}
-		conn = shadowsocks.NewConn(s.conn, cipher)
-	}
-
-	addr, extra, err := getShadowRequest(conn)
+	addr, ota, err := s.getRequest()
 	if err != nil {
-		glog.V(LWARNING).Infof("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+		glog.V(LWARNING).Infof("[ss] %s - %s : %s", s.conn.RemoteAddr(), s.conn.LocalAddr(), err)
 		return
 	}
-	glog.V(LINFO).Infof("[ss] %s -> %s", conn.RemoteAddr(), addr.String())
+	glog.V(LINFO).Infof("[ss] %s -> %s, ota: %v", s.conn.RemoteAddr(), addr, ota)
 
-	cc, err := s.Base.Chain.Dial(addr.String())
+	cc, err := s.Base.Chain.Dial(addr)
 	if err != nil {
-		glog.V(LWARNING).Infof("[ss] %s -> %s : %s", conn.RemoteAddr(), addr.String(), err)
+		glog.V(LWARNING).Infof("[ss] %s -> %s : %s", s.conn.RemoteAddr(), addr, err)
 		return
 	}
 	defer cc.Close()
 
-	if extra != nil {
-		if _, err := cc.Write(extra); err != nil {
-			glog.V(LWARNING).Infof("[ss] %s - %s : %s", conn.RemoteAddr(), addr.String(), err)
-			return
-		}
+	glog.V(LINFO).Infof("[ss] %s <-> %s", s.conn.RemoteAddr(), addr)
+	if ota {
+		s.transportOTA(s.conn, cc)
+	} else {
+		s.Base.transport(&shadowConn{conn: s.conn}, cc)
 	}
-
-	glog.V(LINFO).Infof("[ss] %s <-> %s", conn.RemoteAddr(), addr.String())
-	s.Base.transport(conn, cc)
-	glog.V(LINFO).Infof("[ss] %s >-< %s", conn.RemoteAddr(), addr.String())
+	glog.V(LINFO).Infof("[ss] %s >-< %s", s.conn.RemoteAddr(), addr)
 }
 
-func getShadowRequest(conn net.Conn) (addr *gosocks5.Addr, extra []byte, err error) {
-	const (
-		idType  = 0 // address type index
-		idIP0   = 1 // ip addres start index
-		idDmLen = 1 // domain address length index
-		idDm0   = 2 // domain address start index
-
-		typeIPv4 = 1 // type is ipv4 address
-		typeDm   = 3 // type is domain address
-		typeIPv6 = 4 // type is ipv6 address
-
-		lenIPv4   = 1 + net.IPv4len + 2 // 1addrType + ipv4 + 2port
-		lenIPv6   = 1 + net.IPv6len + 2 // 1addrType + ipv6 + 2port
-		lenDmBase = 1 + 1 + 2           // 1addrType + 1addrLen + 2port, plus addrLen
-	)
-
+// This func are copied from shadowsocks library with some modification.
+func (s *ShadowServer) getRequest() (host string, ota bool, err error) {
 	// buf size should at least have the same size with the largest possible
 	// request size (when addrType is 3, domain name has at most 256 bytes)
 	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
 	buf := make([]byte, SmallBufferSize)
 
-	var n int
 	// read till we get possible domain length field
-	//shadowsocks.SetReadTimeout(conn)
-	if n, err = io.ReadAtLeast(conn, buf, idDmLen+1); err != nil {
+	s.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	if _, err = io.ReadFull(s.conn, buf[:idType+1]); err != nil {
 		return
 	}
 
-	addr = &gosocks5.Addr{
-		Type: buf[idType],
-	}
-
-	reqLen := -1
-	switch buf[idType] {
+	var reqStart, reqEnd int
+	addrType := buf[idType]
+	switch addrType & ss.AddrMask {
 	case typeIPv4:
-		reqLen = lenIPv4
+		reqStart, reqEnd = idIP0, idIP0+lenIPv4
 	case typeIPv6:
-		reqLen = lenIPv6
+		reqStart, reqEnd = idIP0, idIP0+lenIPv6
 	case typeDm:
-		reqLen = int(buf[idDmLen]) + lenDmBase
-	default:
-		err = fmt.Errorf("addr type %d not supported", buf[idType])
-		return
-	}
-
-	if n < reqLen { // rare case
-		//ss.SetReadTimeout(conn)
-		if _, err = io.ReadFull(conn, buf[n:reqLen]); err != nil {
+		if _, err = io.ReadFull(s.conn, buf[idType+1:idDmLen+1]); err != nil {
 			return
 		}
-	} else if n > reqLen {
-		// it's possible to read more than just the request head
-		extra = buf[reqLen:n]
+		reqStart, reqEnd = idDm0, int(idDm0+buf[idDmLen]+lenDmBase)
+	default:
+		err = fmt.Errorf("addr type %d not supported", addrType&ss.AddrMask)
+		return
+	}
+
+	if _, err = io.ReadFull(s.conn, buf[reqStart:reqEnd]); err != nil {
+		return
 	}
 
 	// Return string for typeIP is not most efficient, but browsers (Chrome,
 	// Safari, Firefox) all seems using typeDm exclusively. So this is not a
 	// big problem.
-	switch buf[idType] {
+	switch addrType & ss.AddrMask {
 	case typeIPv4:
-		addr.Host = net.IP(buf[idIP0 : idIP0+net.IPv4len]).String()
+		host = net.IP(buf[idIP0 : idIP0+net.IPv4len]).String()
 	case typeIPv6:
-		addr.Host = net.IP(buf[idIP0 : idIP0+net.IPv6len]).String()
+		host = net.IP(buf[idIP0 : idIP0+net.IPv6len]).String()
 	case typeDm:
-		addr.Host = string(buf[idDm0 : idDm0+buf[idDmLen]])
+		host = string(buf[idDm0 : idDm0+buf[idDmLen]])
 	}
 	// parse port
-	addr.Port = binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])
+	port := binary.BigEndian.Uint16(buf[reqEnd-2 : reqEnd])
+	host = net.JoinHostPort(host, strconv.Itoa(int(port)))
+	// if specified one time auth enabled, we should verify this
+	if s.OTA || addrType&ss.OneTimeAuthMask > 0 {
+		ota = true
+		if _, err = io.ReadFull(s.conn, buf[reqEnd:reqEnd+lenHmacSha1]); err != nil {
+			return
+		}
+		iv := s.conn.GetIv()
+		key := s.conn.GetKey()
+		actualHmacSha1Buf := ss.HmacSha1(append(iv, key...), buf[:reqEnd])
+		if !bytes.Equal(buf[reqEnd:reqEnd+lenHmacSha1], actualHmacSha1Buf) {
+			err = fmt.Errorf("verify one time auth failed, iv=%v key=%v data=%v", iv, key, buf[:reqEnd])
+			return
+		}
+	}
+	return
+}
+
+const (
+	dataLenLen  = 2
+	hmacSha1Len = 10
+	idxData0    = dataLenLen + hmacSha1Len
+)
+
+// copyOta copies data from src to dst with ota verification.
+//
+// This func are copied from shadowsocks library with some modification.
+func (s *ShadowServer) copyOta(dst net.Conn, src *ss.Conn) (int64, error) {
+	// sometimes it have to fill large block
+	buf := make([]byte, LargeBufferSize)
+	for {
+		src.SetReadDeadline(time.Now().Add(ReadTimeout))
+		if n, err := io.ReadFull(src, buf[:dataLenLen+hmacSha1Len]); err != nil {
+			return int64(n), err
+		}
+		src.SetReadDeadline(time.Time{})
+
+		dataLen := binary.BigEndian.Uint16(buf[:dataLenLen])
+		expectedHmacSha1 := buf[dataLenLen:idxData0]
+
+		var dataBuf []byte
+		if len(buf) < int(idxData0+dataLen) {
+			dataBuf = make([]byte, dataLen)
+		} else {
+			dataBuf = buf[idxData0 : idxData0+dataLen]
+		}
+		if n, err := io.ReadFull(src, dataBuf); err != nil {
+			return int64(n), err
+		}
+		chunkIdBytes := make([]byte, 4)
+		chunkId := src.GetAndIncrChunkId()
+		binary.BigEndian.PutUint32(chunkIdBytes, chunkId)
+		actualHmacSha1 := ss.HmacSha1(append(src.GetIv(), chunkIdBytes...), dataBuf)
+		if !bytes.Equal(expectedHmacSha1, actualHmacSha1) {
+			return 0, errors.New("ota error: mismatch")
+		}
+
+		if n, err := dst.Write(dataBuf); err != nil {
+			return int64(n), err
+		}
+	}
+}
+
+func (s *ShadowServer) transportOTA(sc *ss.Conn, cc net.Conn) (err error) {
+	errc := make(chan error, 2)
+
+	go func() {
+		_, err := io.Copy(&shadowConn{conn: sc}, cc)
+		errc <- err
+	}()
+
+	go func() {
+		_, err := s.copyOta(cc, sc)
+		errc <- err
+	}()
+
+	select {
+	case err = <-errc:
+		//glog.V(LWARNING).Infoln("transport exit", err)
+	}
 
 	return
+}
+
+// Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
+// we wrap around it to make io.Copy happy
+type shadowConn struct {
+	conn *ss.Conn
+}
+
+func (c *shadowConn) Read(b []byte) (n int, err error) {
+	return c.conn.Read(b)
+}
+
+func (c *shadowConn) Write(b []byte) (n int, err error) {
+	n = len(b) // force byte length consistent
+	_, err = c.conn.Write(b)
+	return
+}
+
+func (c *shadowConn) Close() error {
+	return c.conn.Close()
+}
+
+func (c *shadowConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+func (c *shadowConn) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
+}
+
+func (c *shadowConn) SetDeadline(t time.Time) error {
+	return c.conn.SetDeadline(t)
+}
+
+func (c *shadowConn) SetReadDeadline(t time.Time) error {
+	return c.conn.SetReadDeadline(t)
+}
+
+func (c *shadowConn) SetWriteDeadline(t time.Time) error {
+	return c.conn.SetWriteDeadline(t)
 }

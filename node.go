@@ -56,12 +56,10 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 	}
 
 	switch node.Transport {
-	case "ws", "wss", "tls":
+	case "ws", "wss", "tls", "http2":
 	case "https":
 		node.Protocol = "http"
 		node.Transport = "tls"
-	case "http2":
-		node.Protocol = "http2"
 	case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
 		node.Remote = strings.Trim(u.EscapedPath(), "/")
 	case "rtcp", "rudp": // started from v2.1, rtcp and rudp are for remote port forwarding
@@ -71,7 +69,7 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 	}
 
 	switch node.Protocol {
-	case "http", "socks", "socks5", "ss", "http2":
+	case "http", "socks", "socks5", "ss":
 	default:
 		node.Protocol = ""
 	}
@@ -84,19 +82,21 @@ func (node *ProxyNode) Get(key string) string {
 	return node.values.Get(key)
 }
 
+func (node *ProxyNode) getBool(key string) bool {
+	s := node.Get(key)
+	if b, _ := strconv.ParseBool(s); b {
+		return b
+	}
+	n, _ := strconv.Atoi(s)
+	return n > 0
+}
+
 func (node *ProxyNode) Set(key, value string) {
 	node.values.Set(key, value)
 }
 
 func (node *ProxyNode) insecureSkipVerify() bool {
-	s := node.Get("secure")
-	if secure, _ := strconv.ParseBool(s); secure {
-		return !secure
-	}
-	if n, _ := strconv.Atoi(s); n > 0 {
-		return false
-	}
-	return true
+	return !node.getBool("secure")
 }
 
 func (node *ProxyNode) certFile() string {

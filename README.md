@@ -10,8 +10,9 @@ gost - GO Simple Tunnel
 * 兼容标准http(s)/socks5代理协议
 * socks5代理支持tls协商加密
 * Tunnel UDP over TCP
-* 兼容shadowsocks协议
+* 兼容shadowsocks协议，支持OTA(OTA功能需2.2及以上版本)
 * 支持端口转发(2.1及以上版本)
+* 支持HTTP2.0(2.2及以上版本)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 

@@ -148,6 +148,7 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 			glog.V(LINFO).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 			return
 		}
+		glog.V(LINFO).Infof("[http2] %s - %s : switch to HTTP2 transport mode OK", req.RemoteAddr, target)
 		s.Base.handleConn(conn)
 		return
 	}
@@ -257,13 +258,18 @@ func (s *Http2Server) Upgrade(w http.ResponseWriter, r *http.Request) (net.Conn,
 		fw.Flush()
 	}
 
-	return &http2Conn{r: r.Body, w: flushWriter{w}}, nil
+	conn := &http2Conn{r: r.Body, w: flushWriter{w}}
+	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", r.RemoteAddr)
+	conn.localAddr, _ = net.ResolveTCPAddr("tcp", r.Host)
+	return conn, nil
 }
 
 // HTTP2 client connection, wrapped up just like a net.Conn
 type http2Conn struct {
-	r io.Reader
-	w io.Writer
+	r          io.Reader
+	w          io.Writer
+	remoteAddr net.Addr
+	localAddr  net.Addr
 }
 
 func (c *http2Conn) Read(b []byte) (n int, err error) {
@@ -282,23 +288,23 @@ func (c *http2Conn) Close() error {
 }
 
 func (c *http2Conn) LocalAddr() net.Addr {
-	return nil
+	return c.localAddr
 }
 
 func (c *http2Conn) RemoteAddr() net.Addr {
-	return nil
+	return c.remoteAddr
 }
 
 func (c *http2Conn) SetDeadline(t time.Time) error {
-	return nil
+	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 func (c *http2Conn) SetReadDeadline(t time.Time) error {
-	return nil
+	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 func (c *http2Conn) SetWriteDeadline(t time.Time) error {
-	return nil
+	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 type flushWriter struct {

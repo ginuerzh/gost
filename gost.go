@@ -33,7 +33,7 @@ var (
 var (
 	SmallBufferSize  = 1 * 1024  // 1KB small buffer
 	MediumBufferSize = 8 * 1024  // 8KB medium buffer
-	LargeBufferSize  = 16 * 1024 // 16KB large buffer
+	LargeBufferSize  = 32 * 1024 // 32KB large buffer
 )
 
 var (

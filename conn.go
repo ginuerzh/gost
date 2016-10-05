@@ -73,13 +73,15 @@ func (c *ProxyConn) handshake() error {
 			return err
 		}
 		c.conn = conn
-	case "tls", "http2": // tls connection
+	case "tls": // tls connection
 		tlsUsed = true
 		cfg := &tls.Config{
 			InsecureSkipVerify: c.Node.insecureSkipVerify(),
 			ServerName:         c.Node.serverName,
 		}
 		c.conn = tls.Client(c.conn, cfg)
+	case "http2":
+		tlsUsed = true
 	default:
 	}
 
@@ -115,9 +117,9 @@ func (c *ProxyConn) handshake() error {
 			if err != nil {
 				return err
 			}
-			c.conn = shadowsocks.NewConn(c.conn, cipher)
+			c.conn = &shadowConn{conn: shadowsocks.NewConn(c.conn, cipher)}
 		}
-	case "http", "http2":
+	case "http":
 		fallthrough
 	default:
 	}
@@ -150,7 +152,7 @@ func (c *ProxyConn) Connect(addr string) error {
 			return err
 		}
 
-		glog.V(LDEBUG).Infoln(req)
+		glog.V(LDEBUG).Infoln("[ss]", req)
 	case "socks", "socks5":
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
@@ -165,17 +167,17 @@ func (c *ProxyConn) Connect(addr string) error {
 		if err := req.Write(c); err != nil {
 			return err
 		}
-		glog.V(LDEBUG).Infoln(req)
+		glog.V(LDEBUG).Infoln("[socks5]", req)
 
-		rep, err := gosocks5.ReadReply(c)
+		reply, err := gosocks5.ReadReply(c)
 		if err != nil {
 			return err
 		}
-		glog.V(LDEBUG).Infoln(rep)
-		if rep.Rep != gosocks5.Succeeded {
+		glog.V(LDEBUG).Infoln("[socks5]", reply)
+		if reply.Rep != gosocks5.Succeeded {
 			return errors.New("Service unavailable")
 		}
-	case "http", "http2":
+	case "http":
 		fallthrough
 	default:
 		req := &http.Request{

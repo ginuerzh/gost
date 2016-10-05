@@ -2,6 +2,7 @@ package gost
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
@@ -114,7 +115,22 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 	if c.Http2Enabled() {
 		nodes = nodes[c.http2NodeIndex+1:]
 		if len(nodes) == 0 {
-			return c.getHttp2Conn()
+			header := make(http.Header)
+			header.Set("Proxy-Switch", "gost") // Flag header to indicate server to switch to HTTP2 transport mode
+			conn, err := c.getHttp2Conn(header)
+			if err != nil {
+				return nil, err
+			}
+			http2Node := c.nodes[c.http2NodeIndex]
+			if http2Node.Protocol == "" {
+				http2Node.Protocol = "socks5" // assume it as socks5 protocol
+			}
+			pc := NewProxyConn(conn, http2Node)
+			if err := pc.Handshake(); err != nil {
+				conn.Close()
+				return nil, err
+			}
+			return pc, nil
 		}
 	}
 	return c.travelNodes(nodes...)
@@ -183,17 +199,21 @@ func (c *ProxyChain) travelNodes(nodes ...ProxyNode) (conn *ProxyConn, err error
 }
 
 // Initialize an HTTP2 transport if HTTP2 is enabled.
-func (c *ProxyChain) getHttp2Conn() (net.Conn, error) {
+func (c *ProxyChain) getHttp2Conn(header http.Header) (net.Conn, error) {
 	if !c.Http2Enabled() {
 		return nil, errors.New("HTTP2 not enabled")
 	}
 	http2Node := c.nodes[c.http2NodeIndex]
 	pr, pw := io.Pipe()
 
+	if header == nil {
+		header = make(http.Header)
+	}
+
 	req := http.Request{
 		Method:        http.MethodConnect,
 		URL:           &url.URL{Scheme: "https", Host: http2Node.Addr},
-		Header:        make(http.Header),
+		Header:        header,
 		Proto:         "HTTP/2.0",
 		ProtoMajor:    2,
 		ProtoMinor:    0,
@@ -201,7 +221,6 @@ func (c *ProxyChain) getHttp2Conn() (net.Conn, error) {
 		Host:          http2Node.Addr,
 		ContentLength: -1,
 	}
-	req.Header.Set("Proxy-Switch", "gost") // Flag header to indicate server to switch to HTTP2 transport mode
 	if glog.V(LDEBUG) {
 		dump, _ := httputil.DumpRequest(&req, false)
 		glog.Infoln(string(dump))
@@ -214,19 +233,23 @@ func (c *ProxyChain) getHttp2Conn() (net.Conn, error) {
 		resp.Body.Close()
 		return nil, errors.New(resp.Status)
 	}
-	return &http2Conn{r: resp.Body, w: pw}, nil
+	conn := &http2Conn{r: resp.Body, w: pw}
+	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", http2Node.Addr)
+	return conn, nil
 }
 
 // Use HTTP2 as transport to connect target addr
 func (c *ProxyChain) http2Connect(addr string) (net.Conn, error) {
-	conn, err := c.getHttp2Conn()
-	if err != nil {
-		return nil, err
+	if !c.Http2Enabled() {
+		return nil, errors.New("HTTP2 not enabled")
 	}
-	pc := NewProxyConn(conn, c.nodes[c.http2NodeIndex])
-	if err = pc.Connect(addr); err != nil {
-		pc.Close()
-		return nil, err
+	http2Node := c.nodes[c.http2NodeIndex]
+
+	header := make(http.Header)
+	header.Set("Gost-Target", addr) // Flag header to indicate the address that server connected to
+	if http2Node.User != nil {
+		header.Set("Proxy-Authorization",
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(http2Node.User.String())))
 	}
-	return conn, nil
+	return c.getHttp2Conn(header)
 }

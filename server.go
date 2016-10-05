@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ type ProxyServer struct {
 	Chain     *ProxyChain
 	TLSConfig *tls.Config
 	selector  *serverSelector
+	cipher    *ss.Cipher
 }
 
 func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *ProxyServer {
@@ -23,6 +25,17 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 	}
 	if config == nil {
 		config = &tls.Config{}
+	}
+
+	var cipher *ss.Cipher
+	if node.Protocol == "ss" && node.User != nil {
+		var err error
+		method := node.User.Username()
+		password, _ := node.User.Password()
+		cipher, err = ss.NewCipher(method, password)
+		if err != nil {
+			glog.Fatal(err)
+		}
 	}
 	return &ProxyServer{
 		Node:      node,
@@ -39,6 +52,7 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 			user:      node.User,
 			tlsConfig: config,
 		},
+		cipher: cipher,
 	}
 }
 
@@ -59,13 +73,13 @@ func (s *ProxyServer) Serve() error {
 		server.Handler = http.HandlerFunc(server.HandleRequest)
 		return server.ListenAndServeTLS(s.TLSConfig)
 	case "tcp": // Local TCP port forwarding
-	//	return listenAndServeTcpForward(arg)
+		return NewTcpForwardServer(s).ListenAndServe()
 	case "udp": // Local UDP port forwarding
-	//	return listenAndServeUdpForward(arg)
+		return NewUdpForwardServer(s).ListenAndServe()
 	case "rtcp": // Remote TCP port forwarding
-	//	return serveRTcpForward(arg)
+		return NewRTcpForwardServer(s).Serve()
 	case "rudp": // Remote UDP port forwarding
-	//	return serveRUdpForward(arg)
+		return NewRUdpForwardServer(s).Serve()
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}
@@ -94,7 +108,9 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 
 	switch s.Node.Protocol {
 	case "ss": // shadowsocks
-		NewShadowServer(conn, s).Serve()
+		server := NewShadowServer(ss.NewConn(conn, s.cipher.Copy()), s)
+		server.OTA = s.Node.getBool("ota")
+		server.Serve()
 		return
 	case "http":
 		req, err := http.ReadRequest(bufio.NewReader(conn))
@@ -166,7 +182,7 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 	NewHttpServer(conn, s).HandleRequest(req)
 }
 
-func (s *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
+func (_ *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
 	errc := make(chan error, 2)
 
 	go func() {

@@ -467,6 +467,7 @@ func (s *Socks5Server) bind(addr string) (net.Conn, error) {
 			pconn = c
 			lnChan = nil
 			ln = nil
+			// TODO: implement deadline
 			s.conn.SetReadDeadline(time.Now()) // timeout right now ,so we can break out of blocking
 		case err := <-peerChan:
 			if err != nil || pconn == nil {
