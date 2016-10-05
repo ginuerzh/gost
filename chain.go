@@ -48,6 +48,19 @@ func (c *ProxyChain) Nodes() []ProxyNode {
 	return c.nodes
 }
 
+func (c *ProxyChain) GetNode(index int) *ProxyNode {
+	if index < len(c.nodes) {
+		return &c.nodes[index]
+	}
+	return nil
+}
+
+func (c *ProxyChain) SetNode(index int, node ProxyNode) {
+	if index < len(c.nodes) {
+		c.nodes[index] = node
+	}
+}
+
 // TryEnableHttp2 initialize HTTP2 if available.
 // HTTP2 will be enabled when at least one HTTP2 proxy node (scheme == http2) is present.
 //
@@ -63,7 +76,7 @@ func (c *ProxyChain) TryEnableHttp2() {
 	// HTTP2 restrict: HTTP2 will be enabled when at least one HTTP2 proxy node is present.
 	for i, node := range c.nodes {
 		if node.Transport == "http2" {
-			glog.V(LINFO).Infoln("http2 enabled")
+			glog.V(LINFO).Infoln("HTTP2 enabled")
 			cfg := &tls.Config{
 				InsecureSkipVerify: node.insecureSkipVerify(),
 				ServerName:         node.serverName,

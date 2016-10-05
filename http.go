@@ -3,13 +3,13 @@ package gost
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
-	//"encoding/base64"
 	//"strings"
 	"errors"
 	"time"
@@ -62,15 +62,11 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 	}
 
 	// TODO: forward http request
-	/*
-		if len(forwardArgs) > 0 {
-			last := forwardArgs[len(forwardArgs)-1]
-			if last.Protocol == "http" || last.Protocol == "" {
-				forwardHttpRequest(req, conn, arg)
-				return
-			}
-		}
-	*/
+	lastNode := s.Base.Chain.lastNode
+	if lastNode != nil && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
+		s.forwardRequest(req)
+		return
+	}
 
 	c, err := s.Base.Chain.Dial(req.Host)
 	if err != nil {
@@ -102,6 +98,41 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 	glog.V(LINFO).Infof("[http] %s <-> %s", s.conn.RemoteAddr(), req.Host)
 	s.Base.transport(s.conn, c)
 	glog.V(LINFO).Infof("[http] %s >-< %s", s.conn.RemoteAddr(), req.Host)
+}
+
+func (s *HttpServer) forwardRequest(req *http.Request) {
+	last := s.Base.Chain.lastNode
+	if last == nil {
+		return
+	}
+	cc, err := s.Base.Chain.GetConn()
+	if err != nil {
+		glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), last.Addr, err)
+
+		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", s.conn.RemoteAddr(), last.Addr, string(b))
+		s.conn.Write(b)
+		return
+	}
+	defer cc.Close()
+
+	if last.User != nil {
+		req.Header.Set("Proxy-Authorization",
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(last.User.String())))
+	}
+
+	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	if err = req.WriteProxy(cc); err != nil {
+		glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), req.Host, err)
+		return
+	}
+	cc.SetWriteDeadline(time.Time{})
+
+	glog.V(LINFO).Infof("[http] %s <-> %s", s.conn.RemoteAddr(), req.Host)
+	s.Base.transport(s.conn, cc)
+	glog.V(LINFO).Infof("[http] %s >-< %s", s.conn.RemoteAddr(), req.Host)
+	return
 }
 
 type Http2Server struct {

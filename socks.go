@@ -316,54 +316,63 @@ func (s *Socks5Server) handleUDPRelay(req *gosocks5.Request) {
 	cc, err := s.Base.Chain.GetConn()
 	// connection error
 	if err != nil && err != ErrEmptyChain {
-		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), socksAddr, err)
 		return
 	}
 
-	// serve as standard socks5 udp relay
+	// serve as standard socks5 udp relay local <-> remote
 	if err == ErrEmptyChain {
-		peer, err := net.ListenUDP("udp", nil)
-		if err != nil {
-			glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		peer, er := net.ListenUDP("udp", nil)
+		if er != nil {
+			glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), socksAddr, er)
 			return
 		}
 		defer peer.Close()
+
 		go s.transportUDP(relay, peer)
 	}
 
+	// forward udp local <-> tunnel
 	if err == nil {
 		defer cc.Close()
 
 		cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
-		if err := gosocks5.NewRequest(CmdUdpTun, nil).Write(cc); err != nil {
-			glog.V(LWARNING).Infoln("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		req := gosocks5.NewRequest(CmdUdpTun, nil)
+		if err := req.Write(cc); err != nil {
+			glog.V(LWARNING).Infoln("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), cc.RemoteAddr(), err)
 			return
 		}
 		cc.SetWriteDeadline(time.Time{})
+		glog.V(LDEBUG).Infof("[socks5-udp] %s -> %s\n%s", s.conn.RemoteAddr(), cc.RemoteAddr(), req)
 
 		cc.SetReadDeadline(time.Now().Add(ReadTimeout))
 		reply, err = gosocks5.ReadReply(cc)
 		if err != nil {
-			glog.V(LWARNING).Infoln("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+			glog.V(LWARNING).Infoln("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), cc.RemoteAddr(), err)
 			return
 		}
+		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), cc.RemoteAddr(), reply)
+
 		if reply.Rep != gosocks5.Succeeded {
-			glog.V(LWARNING).Infoln("[socks5-udp] %s -> %s : udp associate error", s.conn.RemoteAddr(), req.Addr)
+			glog.V(LWARNING).Infoln("[socks5-udp] %s <- %s : udp associate failed", s.conn.RemoteAddr(), cc.RemoteAddr())
 			return
 		}
 		cc.SetReadDeadline(time.Time{})
+		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s [tun: %s]", s.conn.RemoteAddr(), socksAddr, reply.Addr)
+
 		go s.tunnelUDP(relay, cc, true)
 	}
 
-	glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), req.Addr)
+	glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), socksAddr)
 	b := make([]byte, SmallBufferSize)
 	for {
 		_, err := s.conn.Read(b) // discard any data from tcp connection
 		if err != nil {
+			glog.V(LWARNING).Infof("[socks5-udp] %s - %s : %s", s.conn.RemoteAddr(), socksAddr, err)
 			break // client disconnected
 		}
 	}
-	glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", s.conn.RemoteAddr(), req.Addr)
+	glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", s.conn.RemoteAddr(), socksAddr)
 }
 
 func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
@@ -371,10 +380,10 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 
 	// connection error
 	if err != nil && err != ErrEmptyChain {
-		glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
 		reply.Write(s.conn)
-		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
+		glog.V(LDEBUG).Infof("[socks5-udp] %s -> %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
 		return
 	}
 
@@ -383,7 +392,7 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 		bindAddr, _ := net.ResolveUDPAddr("udp", req.Addr.String())
 		uc, err := net.ListenUDP("udp", bindAddr)
 		if err != nil {
-			glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+			glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 			return
 		}
 		defer uc.Close()
@@ -392,14 +401,14 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 		socksAddr.Host, _, _ = net.SplitHostPort(s.conn.LocalAddr().String())
 		reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 		if err := reply.Write(s.conn); err != nil {
-			glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+			glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), socksAddr, err)
 			return
 		}
-		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), uc.LocalAddr(), reply)
+		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), socksAddr, reply)
 
-		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), uc.LocalAddr())
+		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), socksAddr)
 		s.tunnelUDP(uc, s.conn, false)
-		glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", s.conn.RemoteAddr(), uc.LocalAddr())
+		glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", s.conn.RemoteAddr(), socksAddr)
 		return
 	}
 
@@ -408,9 +417,9 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 	// tunnel <-> tunnel, direct forwarding
 	req.Write(cc)
 
-	glog.V(LINFO).Infof("[socks5-udp] %s <-> %s[tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
+	glog.V(LINFO).Infof("[socks5-udp] %s <-> %s [tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
 	s.Base.transport(s.conn, cc)
-	glog.V(LINFO).Infof("[socks5-udp] %s >-< %s[tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
+	glog.V(LINFO).Infof("[socks5-udp] %s >-< %s [tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
 }
 
 func (s *Socks5Server) bind(addr string) (net.Conn, error) {
