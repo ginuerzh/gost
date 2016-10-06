@@ -61,7 +61,7 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 		return
 	}
 
-	// TODO: forward http request
+	// forward http request
 	lastNode := s.Base.Chain.lastNode
 	if lastNode != nil && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
 		s.forwardRequest(req)
