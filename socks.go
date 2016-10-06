@@ -494,7 +494,7 @@ func (s *Socks5Server) bindOn(addr string) {
 			glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", s.conn.RemoteAddr(), pconn.RemoteAddr())
 			return
 		case err := <-pipe():
-			glog.V(LWARNING).Infof("[socks5-bind] %s -> %s : %s", s.conn.RemoteAddr(), addr, err)
+			glog.V(LWARNING).Infof("[socks5-bind] %s -> %s : %v", s.conn.RemoteAddr(), addr, err)
 			ln.Close()
 			return
 		}

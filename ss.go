@@ -65,7 +65,7 @@ func (s *ShadowServer) Serve() {
 	glog.V(LINFO).Infof("[ss] %s >-< %s", s.conn.RemoteAddr(), addr)
 }
 
-// This func are copied from shadowsocks library with some modification.
+// This function is copied from shadowsocks library with some modification.
 func (s *ShadowServer) getRequest() (host string, ota bool, err error) {
 	// buf size should at least have the same size with the largest possible
 	// request size (when addrType is 3, domain name has at most 256 bytes)
@@ -138,7 +138,7 @@ const (
 
 // copyOta copies data from src to dst with ota verification.
 //
-// This func are copied from shadowsocks library with some modification.
+// This function is copied from shadowsocks library with some modification.
 func (s *ShadowServer) copyOta(dst net.Conn, src *ss.Conn) (int64, error) {
 	// sometimes it have to fill large block
 	buf := make([]byte, LargeBufferSize)
