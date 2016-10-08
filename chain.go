@@ -140,6 +140,9 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 				return nil, err
 			}
 			http2Node := c.nodes[c.http2NodeIndex]
+			if http2Node.Transport == "http2" {
+				http2Node.Transport = "h2"
+			}
 			if http2Node.Protocol == "http2" {
 				http2Node.Protocol = "socks5" // assume it as socks5 protocol, so we can do much more things.
 			}

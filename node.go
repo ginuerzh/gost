@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -111,4 +112,8 @@ func (node *ProxyNode) keyFile() string {
 		return key
 	}
 	return DefaultKeyFile
+}
+
+func (node ProxyNode) String() string {
+	return fmt.Sprintf("transport: %s, protocol: %s, addr: %s", node.Transport, node.Protocol, node.Addr)
 }

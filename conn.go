@@ -73,14 +73,14 @@ func (c *ProxyConn) handshake() error {
 			return err
 		}
 		c.conn = conn
-	case "tls": // tls connection
+	case "tls", "http2": // tls connection
 		tlsUsed = true
 		cfg := &tls.Config{
 			InsecureSkipVerify: c.Node.insecureSkipVerify(),
 			ServerName:         c.Node.serverName,
 		}
 		c.conn = tls.Client(c.conn, cfg)
-	case "http2":
+	case "h2": // same as http2, but just set a flag for later using.
 		tlsUsed = true
 	default:
 	}
