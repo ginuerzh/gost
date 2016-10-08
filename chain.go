@@ -75,14 +75,14 @@ func (c *ProxyChain) TryEnableHttp2() {
 
 	// HTTP2 restrict: HTTP2 will be enabled when at least one HTTP2 proxy node is present.
 	for i, node := range c.nodes {
-		if node.Transport == "http2" {
-			glog.V(LINFO).Infoln("HTTP2 enabled")
+		if node.Transport == "http2" || node.Protocol == "http2" {
+			glog.V(LINFO).Infoln("HTTP2 is enabled")
 			cfg := &tls.Config{
 				InsecureSkipVerify: node.insecureSkipVerify(),
 				ServerName:         node.serverName,
 			}
-			c.initHttp2Client(node.Addr, cfg, c.nodes[:i]...)
 			c.http2NodeIndex = i
+			c.initHttp2Client(cfg, c.nodes[:i]...)
 			break // shortest chain for HTTP2
 		}
 	}
@@ -92,12 +92,17 @@ func (c *ProxyChain) Http2Enabled() bool {
 	return c.http2Enabled
 }
 
-func (c *ProxyChain) initHttp2Client(addr string, config *tls.Config, nodes ...ProxyNode) {
+func (c *ProxyChain) initHttp2Client(config *tls.Config, nodes ...ProxyNode) {
+	if c.http2NodeIndex < 0 || c.http2NodeIndex >= len(c.nodes) {
+		return
+	}
+	http2Node := c.nodes[c.http2NodeIndex]
+
 	tr := http2.Transport{
 		TLSClientConfig: config,
 		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
 			// replace the default dialer with our proxy chain.
-			conn, err := c.dialWithNodes(addr, nodes...)
+			conn, err := c.dialWithNodes(false, http2Node.Addr, nodes...)
 			if err != nil {
 				return conn, err
 			}
@@ -114,7 +119,7 @@ func (c *ProxyChain) Dial(addr string) (net.Conn, error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":80"
 	}
-	return c.dialWithNodes(addr, c.nodes...)
+	return c.dialWithNodes(true, addr, c.nodes...)
 }
 
 // GetConn initializes a proxy chain connection,
@@ -135,8 +140,8 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 				return nil, err
 			}
 			http2Node := c.nodes[c.http2NodeIndex]
-			if http2Node.Protocol == "" {
-				http2Node.Protocol = "socks5" // assume it as socks5 protocol
+			if http2Node.Protocol == "http2" {
+				http2Node.Protocol = "socks5" // assume it as socks5 protocol, so we can do much more things.
 			}
 			pc := NewProxyConn(conn, http2Node)
 			if err := pc.Handshake(); err != nil {
@@ -146,21 +151,21 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 			return pc, nil
 		}
 	}
-	return c.travelNodes(nodes...)
+	return c.travelNodes(true, nodes...)
 }
 
-func (c *ProxyChain) dialWithNodes(addr string, nodes ...ProxyNode) (conn net.Conn, err error) {
+func (c *ProxyChain) dialWithNodes(withHttp2 bool, addr string, nodes ...ProxyNode) (conn net.Conn, err error) {
 	if len(nodes) == 0 {
 		return net.DialTimeout("tcp", addr, DialTimeout)
 	}
 
-	if c.Http2Enabled() {
+	if withHttp2 && c.Http2Enabled() {
 		nodes = nodes[c.http2NodeIndex+1:]
 		if len(nodes) == 0 {
 			return c.http2Connect(addr)
 		}
 	}
-	pc, err := c.travelNodes(nodes...)
+	pc, err := c.travelNodes(withHttp2, nodes...)
 	if err != nil {
 		return
 	}
@@ -172,7 +177,7 @@ func (c *ProxyChain) dialWithNodes(addr string, nodes ...ProxyNode) (conn net.Co
 	return
 }
 
-func (c *ProxyChain) travelNodes(nodes ...ProxyNode) (conn *ProxyConn, err error) {
+func (c *ProxyChain) travelNodes(withHttp2 bool, nodes ...ProxyNode) (conn *ProxyConn, err error) {
 	defer func() {
 		if err != nil && conn != nil {
 			conn.Close()
@@ -183,7 +188,7 @@ func (c *ProxyChain) travelNodes(nodes ...ProxyNode) (conn *ProxyConn, err error
 	var cc net.Conn
 	node := nodes[0]
 
-	if c.Http2Enabled() {
+	if withHttp2 && c.Http2Enabled() {
 		cc, err = c.http2Connect(node.Addr)
 	} else {
 		cc, err = net.DialTimeout("tcp", node.Addr, DialTimeout)
@@ -214,7 +219,7 @@ func (c *ProxyChain) travelNodes(nodes ...ProxyNode) (conn *ProxyConn, err error
 // Initialize an HTTP2 transport if HTTP2 is enabled.
 func (c *ProxyChain) getHttp2Conn(header http.Header) (net.Conn, error) {
 	if !c.Http2Enabled() {
-		return nil, errors.New("HTTP2 not enabled")
+		return nil, errors.New("HTTP2 is not enabled")
 	}
 	http2Node := c.nodes[c.http2NodeIndex]
 	pr, pw := io.Pipe()
@@ -242,6 +247,10 @@ func (c *ProxyChain) getHttp2Conn(header http.Header) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	if glog.V(LDEBUG) {
+		dump, _ := httputil.DumpResponse(resp, false)
+		glog.Infoln(string(dump))
+	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
 		return nil, errors.New(resp.Status)
@@ -254,7 +263,7 @@ func (c *ProxyChain) getHttp2Conn(header http.Header) (net.Conn, error) {
 // Use HTTP2 as transport to connect target addr
 func (c *ProxyChain) http2Connect(addr string) (net.Conn, error) {
 	if !c.Http2Enabled() {
-		return nil, errors.New("HTTP2 not enabled")
+		return nil, errors.New("HTTP2 is not enabled")
 	}
 	http2Node := c.nodes[c.http2NodeIndex]
 

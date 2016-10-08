@@ -119,7 +119,7 @@ func (c *ProxyConn) handshake() error {
 			}
 			c.conn = &shadowConn{conn: shadowsocks.NewConn(c.conn, cipher)}
 		}
-	case "http":
+	case "http", "http2":
 		fallthrough
 	default:
 	}

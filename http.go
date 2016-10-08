@@ -343,9 +343,19 @@ type flushWriter struct {
 }
 
 func (fw flushWriter) Write(p []byte) (n int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if s, ok := r.(string); ok {
+				err = errors.New(s)
+				return
+			}
+			err = r.(error)
+		}
+	}()
+
 	n, err = fw.w.Write(p)
 	if err != nil {
-		glog.V(LWARNING).Infoln("flush writer:", err)
+		// glog.V(LWARNING).Infoln("flush writer:", err)
 		return
 	}
 	if f, ok := fw.w.(http.Flusher); ok {
