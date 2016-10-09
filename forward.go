@@ -347,7 +347,7 @@ func (s *RTcpForwardServer) connectRTcpForward(conn net.Conn, laddr, raddr net.A
 
 		lconn, err := net.DialTimeout("tcp", raddr.String(), time.Second*180)
 		if err != nil {
-			glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", rep.Addr, lconn.RemoteAddr(), err)
+			glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", rep.Addr, raddr, err)
 			return
 		}
 		defer lconn.Close()
