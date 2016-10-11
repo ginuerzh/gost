@@ -75,7 +75,7 @@ func (c *ProxyChain) TryEnableHttp2() {
 
 	// HTTP2 restrict: HTTP2 will be enabled when at least one HTTP2 proxy node is present.
 	for i, node := range c.nodes {
-		if node.Transport == "http2" || node.Protocol == "http2" {
+		if node.Transport == "http2" {
 			glog.V(LINFO).Infoln("HTTP2 is enabled")
 			cfg := &tls.Config{
 				InsecureSkipVerify: node.insecureSkipVerify(),
