@@ -7,7 +7,7 @@ import (
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io"
-	"io/ioutil"
+	//"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -238,7 +238,7 @@ func (c *ProxyChain) getHttp2Conn(header http.Header) (net.Conn, error) {
 		Proto:         "HTTP/2.0",
 		ProtoMajor:    2,
 		ProtoMinor:    0,
-		Body:          ioutil.NopCloser(pr),
+		Body:          pr,
 		Host:          http2Node.Addr,
 		ContentLength: -1,
 	}

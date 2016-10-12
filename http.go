@@ -311,11 +311,14 @@ func (c *http2Conn) Write(b []byte) (n int, err error) {
 	return c.w.Write(b)
 }
 
-func (c *http2Conn) Close() error {
-	if rc, ok := c.r.(io.ReadCloser); ok {
-		return rc.Close()
+func (c *http2Conn) Close() (err error) {
+	if rc, ok := c.r.(io.Closer); ok {
+		err = rc.Close()
 	}
-	return nil
+	if w, ok := c.w.(io.Closer); ok {
+		err = w.Close()
+	}
+	return
 }
 
 func (c *http2Conn) LocalAddr() net.Addr {
