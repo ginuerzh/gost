@@ -80,6 +80,10 @@ func (s *ProxyServer) Serve() error {
 		return NewRTcpForwardServer(s).Serve()
 	case "rudp": // Remote UDP port forwarding
 		return NewRUdpForwardServer(s).Serve()
+	case "ssu": // shadowsocks udp relay
+		return NewShadowUdpServer(s).ListenAndServe()
+	case "quic":
+		return NewQuicServer(s).ListenAndServeTLS(s.TLSConfig)
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}
