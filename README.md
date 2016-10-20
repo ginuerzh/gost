@@ -10,9 +10,10 @@ gost - GO Simple Tunnel
 * 支持标准HTTP/HTTPS/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议，支持OTA (OTA功能需2.2及以上版本)
-* 支持端口转发 (2.1及以上版本)
-* 支持HTTP2.0 (2.2及以上版本)
+* 支持Shadowsocks协议，支持OTA (OTA: >=2.2)
+* 支持端口转发 (>=2.1)
+* 支持HTTP2.0 (>=2.2)
+* 实验性支持QUIC (>=2.3)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -31,7 +32,7 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2), 二者可以任意组合，或单独使用:
+protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic), 二者可以任意组合，或单独使用:
 
 > http - 作为HTTP代理: http://:8080
 
@@ -46,6 +47,8 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 > tls - 作为HTTPS/SOCKS5代理，使用tls传输数据: tls://:8080
 
 > ss - 作为Shadowsocks服务，ss://aes-256-cfb:123456@:8080
+
+> quic - 作为QUIC代理，quic://:6121
 
 #### 端口转发
 
@@ -149,6 +152,21 @@ gost的HTTP2支持两种模式并自适应：
 
 **注：gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。**
 
+#### QUIC
+gost对QUIC的支持是基于[quic-go](https://github.com/lucas-clemente/quic-go)库。
+
+服务端:
+```bash
+gost -L=quic://:6121
+```
+
+客户端(Chrome):
+```bash
+chrome --enable-quic --proxy-server=quic://server_ip:6121
+```
+
+**注：由于Chrome自身的限制，目前只能通过QUIC访问HTTP网站，无法访问HTTPS网站。**
+
 加密机制
 ------
 #### HTTP
@@ -192,7 +210,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 注：如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
 
 #### Shadowsocks
-gost对Shadowsocks加密方法的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
+gost对Shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
 服务端(可以通过ota参数开启OTA模式):
 ```bash
