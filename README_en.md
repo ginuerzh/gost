@@ -3,6 +3,8 @@ gost - GO Simple Tunnel
 
 ### A simple security tunnel written in Golang
 
+[中文文档](README.md)
+
 Features
 ------
 * Listening on multiple ports
@@ -11,7 +13,7 @@ Features
 * TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
 * Shadowsocks protocol with OTA supported (OTA: >=2.2)
-* Local/Remote port forwarding (>=2.1)
+* Local/remote port forwarding (>=2.1)
 * HTTP2.0 (>=2.2)
 * Experimental QUIC support (>=2.3)
 
@@ -19,7 +21,8 @@ Binary file download：https://github.com/ginuerzh/gost/releases
 
 Google group: https://groups.google.com/d/forum/go-gost
 
-Gost and other proxy services are considered to be proxy nodes, gost can handle the request itself, or forward the request to any one or more proxy nodes.
+Gost and other proxy services are considered to be proxy nodes, 
+gost can handle the request itself, or forward the request to any one or more proxy nodes.
 
 Parameter Description
 ------
@@ -32,23 +35,24 @@ Effective for the -L and -F parameters
 ```
 scheme can be divided into two parts: protocol+transport
 
-protocol: proxy protocol types(http, socks5, shadowsocks), transport: data transmission mode(ws, wss, tls, http2, quic), may be used in any combination or individually:
+protocol: proxy protocol types(http, socks5, shadowsocks), 
+transport: data transmission mode(ws, wss, tls, http2, quic), may be used in any combination or individually:
 
 > http - standard HTTP proxy: http://:8080
 
 > http+tls - standard HTTPS proxy(may need to provide a trusted certificate): http+tls://:443
 
-> http2 - HTTP2 proxy and downwards compatible HTTPS proxy: http2://:443
+> http2 - HTTP2 proxy and backwards-compatible with HTTPS proxy: http2://:443
 
 > socks - standard SOCKS5 proxy: socks://:1080
 
-> socks+ws - SOCKS5 protocol over websocket: socks+ws://:1080
+> socks+wss - SOCKS5 over websocket: socks+wss://:1080
 
 > tls - HTTPS/SOCKS5 over tls: tls://:443
 
-> ss - shadowsocks proxy, ss://aes-256-cfb:123456@:8338
+> ss - standard shadowsocks proxy, ss://aes-256-cfb:123456@:8338
 
-> quic - QUIC proxy, quic://:6121
+> quic - standard QUIC proxy, quic://:6121
 
 #### Port forwarding
 
@@ -63,14 +67,13 @@ scheme://[bind_address]:port/[host]:hostport
 
 > host:hostport - target address
 
-#### 开启日志
+#### Logging
 
 > -logtostderr : log to console
 
 > -v=4 : log level(1-5)，The higher the level, the more detailed the log (level 5 will enable HTTP2 debug)
 
-> -log_dir=. : log to dir
-
+> -log_dir=/log/dir/path : log to directory /log/dir/path
 
 Usage
 ------
@@ -111,132 +114,138 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 ```bash
 gost -L=:8080 -F=http+tls://192.168.1.1:443 -F=socks+ws://192.168.1.2:1080 -F=ss://aes-128-cfb:123456@192.168.1.3:8338 -F=a.b.c.d:NNNN
 ```
-gost按照-F设置顺序通过代理链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
+Gost forwards the request to a.b.c.d:NNNN through the proxy chain in the order set by -F, 
+each forward proxy can be any HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks type.
 
-#### 本地端口转发(TCP)
+#### Local TCP port forwarding
 
 ```bash
 gost -L=tcp://:2222/192.168.1.1:22 -F=...
 ```
-将本地TCP端口2222上的数据(通过代理链)转发到192.168.1.1:22上。
+The data on the local TCP port 2222 is forwarded to 192.168.1.1:22 (through the proxy chain).
 
-#### 本地端口转发(UDP)
+#### Local UDP port forwarding
 
 ```bash
 gost -L=udp://:5353/192.168.1.1:53 -F=...
 ```
-将本地UDP端口5353上的数据(通过代理链)转发到192.168.1.1:53上。
+The data on the local UDP port 5353 is forwarded to 192.168.1.1:53 (through the proxy chain).
 
-**注: 转发UDP数据时，如果有代理链，则代理链的末端(最后一个-F参数)必须支持gost SOCKS5类型代理。**
+**NOTE:** When forwarding UDP data, if there is a proxy chain, the end of the chain (the last -F parameter) must be gost SOCKS5 proxy.
 
-#### 远程端口转发(TCP)
+#### Remote TCP port forwarding
 
 ```bash
 gost -L=rtcp://:2222/192.168.1.1:22 -F=... -F=socks://172.24.10.1:1080
 ```
-将172.24.10.1:2222上的数据(通过代理链)转发到192.168.1.1:22上。
+The data on 172.24.10.1:2222 is forwarded to 192.168.1.1:22 (through the proxy chain).
 
-#### 远程端口转发(UDP)
+#### Remote UDP port forwarding
 
 ```bash
 gost -L=rudp://:5353/192.168.1.1:53 -F=... -F=socks://172.24.10.1:1080
 ```
-将172.24.10.1:5353上的数据(通过代理链)转发到192.168.1.1:53上。
+The data on 172.24.10.1:5353 is forwarded to 192.168.1.1:53 (through the proxy chain).
 
-**注: 若要使用远程端口转发功能，代理链不能为空(至少要设置一个-F参数)，且代理链的末端(最后一个-F参数)必须支持gost SOCKS5类型代理。**
+**NOTE:** To use the remote port forwarding feature, the proxy chain can not be empty (at least one -F parameter is set) 
+and the end of the chain (last -F parameter) must be gost SOCKS5 proxy.
 
 #### HTTP2
-gost的HTTP2支持两种模式并自适应：
-* 作为标准的HTTP2代理，并向下兼容HTTPS代理。
-* 作为transport(类似于wss)，传输其他协议。
+Gost HTTP2 supports two modes and self-adapting:
+* As a standard HTTP2 proxy, and backwards-compatible with the HTTPS proxy.
+* As transport (similar to wss), tunnel other protocol.
 
-**注：gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。**
 
-加密机制
+**NOTE:** The proxy chain of gost supports only one HTTP2 proxy node and the nearest rule applies, 
+the first HTTP2 proxy node is treated as an HTTP2 proxy, and the other HTTP2 proxy nodes are treated as HTTPS proxies.
+
+Encryption Mechanism
 ------
 #### HTTP
-对于HTTP可以使用TLS加密整个通讯过程，即HTTPS代理：
+For HTTP, you can use TLS to encrypt the entire communication process, the HTTPS proxy:
 
-服务端:
+Server:
 ```bash
 gost -L=http+tls://:443
 ```
-客户端:
+Client:
 ```bash
 gost -L=:8080 -F=http+tls://server_ip:443
 ```
 
 #### HTTP2
-gost仅支持使用TLS加密的HTTP2协议，不支持明文HTTP2传输。
+Gost supports only the HTTP2 protocol that uses TLS encryption (h2) and does not support plaintext HTTP2 (h2c) transport.
 
-服务端:
+Server:
 ```bash
 gost -L=http2://:443
 ```
-客户端:
+Client:
 ```bash
 gost -L=:8080 -F=http2://server_ip:443
 ```
 
 #### SOCKS5
-gost支持标准SOCKS5协议的no-auth(0x00)和user/pass(0x02)方法，并在此基础上扩展了两个：tls(0x80)和tls-auth(0x82)，用于数据加密。
+Gost supports the standard SOCKS5 protocol methods: no-auth (0x00) and user/pass (0x02), 
+and extends two methods for data encryption: tls(0x80)和tls-auth(0x82).
 
-服务端:
+Server:
 ```bash
 gost -L=socks://:1080
 ```
-客户端:
+Client:
 ```bash
 gost -L=:8080 -F=socks://server_ip:1080
 ```
 
-如果两端都是gost(如上)则数据传输会被加密(协商使用tls或tls-auth方法)，否则使用标准SOCKS5进行通讯(no-auth或user/pass方法)。
+If both ends are gosts (as example above), the data transfer will be encrypted (using tls or tls-auth). 
+Otherwise, use standard SOCKS5 for communication (no-auth or user/pass).
 
-注：如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
+**NOTE:** If transport already supports encryption (wss, tls, http2), SOCKS5 will no longer use the encryption method to prevent unnecessary double encryption.
 
 #### Shadowsocks
-gost对Shadowsocks加密方法的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
+Support for shadowsocks is based on library [shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go).
 
-服务端(可以通过ota参数开启OTA模式):
+Server (The OTA mode can be enabled with the ota parameter):
 ```bash
 gost -L=ss://aes-128-cfb:123456@:8338?ota=1
 ```
-客户端:
+Client:
 ```bash
 gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
 ```
 
 #### TLS
-gost内置了TLS证书，如果需要使用其他TLS证书，有两种方法：
-* 在gost运行目录放置cert.pem(公钥)和key.pem(私钥)两个文件即可，gost会自动加载运行目录下的cert.pem和key.pem文件。
-* 使用参数指定证书文件路径：
+There is built-in TLS certificate in gost, if you need to use other TLS certificate, there are two ways:
+* Place two files cert.pem (public key) and key.pem (private key) in the current working directory, gost will automatically load them.
+* Use the parameter to specify the path to the certificate file：
 ```bash
 gost -L="http2://:443?cert=/path/to/my/cert/file&key=/path/to/my/key/file"
 ```
 
-SOCKS5 UDP数据处理
+SOCKS5 UDP Data Processing
 ------
-#### 不设置转发代理
+#### No forward proxy
 
 <img src="https://ginuerzh.github.io/images/udp01.png" height=100 />
 
-gost作为标准SOCKS5代理处理UDP数据
+Gost acts as the standard SOCKS5 proxy for UDP relay.
 
-#### 设置转发代理
+#### Forward proxy
 
 <img src="https://ginuerzh.github.io/images/udp02.png" height=100 />
 
-#### 设置多个转发代理(代理链)
+#### Multi-level forward proxy
 
 <img src="https://ginuerzh.github.io/images/udp03.png" height=200 />
 
-当设置转发代理时，gost会使用UDP-over-TCP方式转发UDP数据。proxy1 - proxyN可以为任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
+When forward proxies are set, gost uses UDP-over-TCP to forward UDP data, proxy1 to proxyN can be any HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks type.
 
-限制条件
+Limitation
 ------
-代理链中的HTTP代理节点必须支持CONNECT方法。
+The HTTP proxy node in the proxy chain must support the CONNECT method.
 
-如果要转发SOCKS5的BIND和UDP请求，代理链的末端(最后一个-F参数)必须支持gost SOCKS5类型代理。
+If the BIND and UDP requests for SOCKS5 are to be forwarded, the end of the chain (the last -F parameter) must be the gost SOCKS5 proxy.
 
 
 

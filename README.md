@@ -3,6 +3,8 @@ gost - GO Simple Tunnel
 
 ### GO语言实现的安全隧道
 
+[English README](README_en.md)
+
 特性
 ------
 * 可同时监听多端口
@@ -42,7 +44,7 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 
 > socks - 作为标准SOCKS5代理(支持tls协商加密): socks://:1080
 
-> socks+ws - 作为SOCKS5代理，使用websocket传输数据: socks+ws://:1080
+> socks+wss - 作为SOCKS5代理，使用websocket传输数据: socks+wss://:1080
 
 > tls - 作为HTTPS/SOCKS5代理，使用tls传输数据: tls://:443
 
@@ -69,7 +71,7 @@ scheme://[bind_address]:port/[host]:hostport
 
 > -v=4 : 日志级别(1-5)，级别越高，日志越详细(级别5将开启http2 debug)
 
-> -log_dir=. : 输出到目录
+> -log_dir=/log/dir/path : 输出到目录/log/dir/path
 
 
 使用方法
@@ -111,7 +113,7 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 ```bash
 gost -L=:8080 -F=http+tls://192.168.1.1:443 -F=socks+ws://192.168.1.2:1080 -F=ss://aes-128-cfb:123456@192.168.1.3:8338 -F=a.b.c.d:NNNN
 ```
-gost按照-F设置顺序通过代理链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
+gost按照-F设置的顺序通过代理链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
 
 #### 本地端口转发(TCP)
 
@@ -127,7 +129,7 @@ gost -L=udp://:5353/192.168.1.1:53 -F=...
 ```
 将本地UDP端口5353上的数据(通过代理链)转发到192.168.1.1:53上。
 
-**注: 转发UDP数据时，如果有代理链，则代理链的末端(最后一个-F参数)必须支持gost SOCKS5类型代理。**
+**注:** 转发UDP数据时，如果有代理链，则代理链的末端(最后一个-F参数)必须是gost SOCKS5类型代理。
 
 #### 远程端口转发(TCP)
 
@@ -143,14 +145,14 @@ gost -L=rudp://:5353/192.168.1.1:53 -F=... -F=socks://172.24.10.1:1080
 ```
 将172.24.10.1:5353上的数据(通过代理链)转发到192.168.1.1:53上。
 
-**注: 若要使用远程端口转发功能，代理链不能为空(至少要设置一个-F参数)，且代理链的末端(最后一个-F参数)必须支持gost SOCKS5类型代理。**
+**注：** 若要使用远程端口转发功能，代理链不能为空(至少要设置一个-F参数)，且代理链的末端(最后一个-F参数)必须是gost SOCKS5类型代理。
 
 #### HTTP2
 gost的HTTP2支持两种模式并自适应：
 * 作为标准的HTTP2代理，并向下兼容HTTPS代理。
 * 作为transport(类似于wss)，传输其他协议。
 
-**注：gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。**
+**注：** gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。
 
 #### QUIC
 gost对QUIC的支持是基于[quic-go](https://github.com/lucas-clemente/quic-go)库。
@@ -165,7 +167,7 @@ gost -L=quic://:6121
 chrome --enable-quic --proxy-server=quic://server_ip:6121
 ```
 
-**注：由于Chrome自身的限制，目前只能通过QUIC访问HTTP网站，无法访问HTTPS网站。**
+**注：** 由于Chrome自身的限制，目前只能通过QUIC访问HTTP网站，无法访问HTTPS网站。
 
 加密机制
 ------
@@ -207,7 +209,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 
 如果两端都是gost(如上)则数据传输会被加密(协商使用tls或tls-auth方法)，否则使用标准SOCKS5进行通讯(no-auth或user/pass方法)。
 
-注：如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
+**注：** 如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
 
 #### Shadowsocks
 gost对Shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
