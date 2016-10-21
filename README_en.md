@@ -1,111 +1,111 @@
 gost - GO Simple Tunnel
 ======
 
-### GO语言实现的安全隧道
+### A simple security tunnel written in Golang
 
-特性
+Features
 ------
-* 可同时监听多端口
-* 可设置转发代理，支持多级转发(代理链)
-* 支持标准HTTP/HTTPS/SOCKS5代理协议
-* SOCKS5代理支持TLS协商加密
+* Listening on multiple ports
+* Multi-level forward proxy - proxy chain
+* Standard HTTP/HTTPS/SOCKS5 proxy protocols
+* TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议，支持OTA (OTA: >=2.2)
-* 支持端口转发 (>=2.1)
-* 支持HTTP2.0 (>=2.2)
-* 实验性支持QUIC (>=2.3)
+* Shadowsocks protocol with OTA supported (OTA: >=2.2)
+* Local/Remote port forwarding (>=2.1)
+* HTTP2.0 (>=2.2)
+* Experimental QUIC support (>=2.3)
 
-二进制文件下载：https://github.com/ginuerzh/gost/releases
+Binary file download：https://github.com/ginuerzh/gost/releases
 
-Google讨论组: https://groups.google.com/d/forum/go-gost
+Google group: https://groups.google.com/d/forum/go-gost
 
-在gost中，gost与其他代理服务都被看作是代理节点，gost可以自己处理请求，或者将请求转发给任意一个或多个代理节点。
+Gost and other proxy services are considered to be proxy nodes, gost can handle the request itself, or forward the request to any one or more proxy nodes.
 
-参数说明
+Parameter Description
 ------
-#### 代理及代理链
+#### Proxy and proxy chain
 
-适用于-L和-F参数
+Effective for the -L and -F parameters
 
 ```bash
 [scheme://][user:pass@host]:port
 ```
-scheme分为两部分: protocol+transport
+scheme can be divided into two parts: protocol+transport
 
-protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic), 二者可以任意组合，或单独使用:
+protocol: proxy protocol types(http, socks5, shadowsocks), transport: data transmission mode(ws, wss, tls, http2, quic), may be used in any combination or individually:
 
-> http - 作为HTTP代理: http://:8080
+> http - standard HTTP proxy: http://:8080
 
-> http+tls - 作为HTTPS代理(可能需要提供受信任的证书): http+tls://:443
+> http+tls - standard HTTPS proxy(may need to provide a trusted certificate): http+tls://:443
 
-> http2 - 作为HTTP2代理并向下兼容HTTPS代理: http2://:443
+> http2 - HTTP2 proxy and downwards compatible HTTPS proxy: http2://:443
 
-> socks - 作为标准SOCKS5代理(支持tls协商加密): socks://:1080
+> socks - standard SOCKS5 proxy: socks://:1080
 
-> socks+ws - 作为SOCKS5代理，使用websocket传输数据: socks+ws://:1080
+> socks+ws - SOCKS5 protocol over websocket: socks+ws://:1080
 
-> tls - 作为HTTPS/SOCKS5代理，使用tls传输数据: tls://:443
+> tls - HTTPS/SOCKS5 over tls: tls://:443
 
-> ss - 作为Shadowsocks服务，ss://aes-256-cfb:123456@:8338
+> ss - shadowsocks proxy, ss://aes-256-cfb:123456@:8338
 
-> quic - 作为QUIC代理，quic://:6121
+> quic - QUIC proxy, quic://:6121
 
-#### 端口转发
+#### Port forwarding
 
-适用于-L参数
+Effective for the -L parameter
 
 ```bash
 scheme://[bind_address]:port/[host]:hostport
 ```	
-> scheme - 端口转发模式, 本地端口转发: tcp, udp; 远程端口转发: rtcp, rudp
+> scheme - forward mode, local: tcp, udp; remote: rtcp, rudp
 
-> bind_address:port - 本地/远程绑定地址
+> bind_address:port - local/remote binding address
 
-> host:hostport - 目标访问地址
+> host:hostport - target address
 
 #### 开启日志
 
-> -logtostderr : 输出到控制台
+> -logtostderr : log to console
 
-> -v=4 : 日志级别(1-5)，级别越高，日志越详细(级别5将开启http2 debug)
+> -v=4 : log level(1-5)，The higher the level, the more detailed the log (level 5 will enable HTTP2 debug)
 
-> -log_dir=. : 输出到目录
+> -log_dir=. : log to dir
 
 
-使用方法
+Usage
 ------
-#### 不设置转发代理
+#### No forward proxy
 
 <img src="https://ginuerzh.github.io/images/gost_01.png" />
 
-* 作为标准HTTP/SOCKS5代理
+* Standard HTTP/SOCKS5 proxy
 ```bash
 gost -L=:8080
 ```
 
-* 设置代理认证信息
+* Proxy authentication
 ```bash
 gost -L=admin:123456@localhost:8080
 ```
 
-* 多端口监听
+* Listen on multiple ports
 ```bash
 gost -L=http2://:443 -L=socks://:1080 -L=ss://aes-128-cfb:123456@:8338
 ```
 
-#### 设置转发代理
+#### Forward proxy
 
 <img src="https://ginuerzh.github.io/images/gost_02.png" />
 ```bash
 gost -L=:8080 -F=192.168.1.1:8081
 ```
 
-* 转发代理认证
+* Forward proxy authentication
 ```bash
 gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 ```
 
-#### 设置多级转发代理(代理链)
+#### Multi-level forward proxy
 
 <img src="https://ginuerzh.github.io/images/gost_03.png" />
 ```bash
@@ -152,21 +152,6 @@ gost的HTTP2支持两种模式并自适应：
 
 **注：gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。**
 
-#### QUIC
-gost对QUIC的支持是基于[quic-go](https://github.com/lucas-clemente/quic-go)库。
-
-服务端:
-```bash
-gost -L=quic://:6121
-```
-
-客户端(Chrome):
-```bash
-chrome --enable-quic --proxy-server=quic://server_ip:6121
-```
-
-**注：由于Chrome自身的限制，目前只能通过QUIC访问HTTP网站，无法访问HTTPS网站。**
-
 加密机制
 ------
 #### HTTP
@@ -210,7 +195,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 注：如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
 
 #### Shadowsocks
-gost对Shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
+gost对Shadowsocks加密方法的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
 服务端(可以通过ota参数开启OTA模式):
 ```bash
