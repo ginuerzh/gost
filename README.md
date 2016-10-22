@@ -212,7 +212,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 **注：** 如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
 
 #### Shadowsocks
-gost对Shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
+gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
 服务端(可以通过ota参数开启OTA模式):
 ```bash

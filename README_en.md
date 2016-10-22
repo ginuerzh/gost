@@ -3,8 +3,6 @@ gost - GO Simple Tunnel
 
 ### A simple security tunnel written in Golang
 
-[中文文档](README.md)
-
 Features
 ------
 * Listening on multiple ports
@@ -155,9 +153,23 @@ Gost HTTP2 supports two modes and self-adapting:
 * As a standard HTTP2 proxy, and backwards-compatible with the HTTPS proxy.
 * As transport (similar to wss), tunnel other protocol.
 
-
 **NOTE:** The proxy chain of gost supports only one HTTP2 proxy node and the nearest rule applies, 
 the first HTTP2 proxy node is treated as an HTTP2 proxy, and the other HTTP2 proxy nodes are treated as HTTPS proxies.
+
+#### QUIC
+Support for QUIC is based on library [quic-go](https://github.com/lucas-clemente/quic-go).
+
+Server:
+```bash
+gost -L=quic://:6121
+```
+
+Client(Chrome):
+```bash
+chrome --enable-quic --proxy-server=quic://server_ip:6121
+```
+
+**NOTE:** Due to Chrome's limitations, it is currently only possible to access the HTTP (but not HTTPS) site through QUIC.
 
 Encryption Mechanism
 ------
@@ -206,7 +218,7 @@ Otherwise, use standard SOCKS5 for communication (no-auth or user/pass).
 #### Shadowsocks
 Support for shadowsocks is based on library [shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go).
 
-Server (The OTA mode can be enabled with the ota parameter):
+Server (The OTA mode can be enabled by the ota parameter):
 ```bash
 gost -L=ss://aes-128-cfb:123456@:8338?ota=1
 ```
