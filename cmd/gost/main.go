@@ -43,8 +43,7 @@ func main() {
 	if err := chain.AddProxyNodeString(chainNodes...); err != nil {
 		glog.Fatal(err)
 	}
-	// enable HTTP2
-	chain.TryEnableHttp2()
+	chain.Init()
 
 	var wg sync.WaitGroup
 	for _, ns := range serverNodes {

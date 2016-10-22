@@ -84,6 +84,12 @@ func (s *ProxyServer) Serve() error {
 		return NewShadowUdpServer(s).ListenAndServe()
 	case "quic":
 		return NewQuicServer(s).ListenAndServeTLS(s.TLSConfig)
+	case "kcp":
+		config, err := ParseKCPConfig(s.Node.Get("c"))
+		if err != nil {
+			glog.V(LWARNING).Infoln("[kcp]", err)
+		}
+		return NewKCPServer(s, config).ListenAndServe()
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}
@@ -135,7 +141,6 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 		return
 	}
 
-	glog.V(LINFO).Infof("%s - %s", conn.RemoteAddr(), s.Node.Addr)
 	// http or socks5
 	b := make([]byte, MediumBufferSize)
 

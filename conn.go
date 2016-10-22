@@ -82,6 +82,8 @@ func (c *ProxyConn) handshake() error {
 		c.conn = tls.Client(c.conn, cfg)
 	case "h2": // same as http2, but just set a flag for later using.
 		tlsUsed = true
+	case "kcp": // kcp connection
+		tlsUsed = true
 	default:
 	}
 

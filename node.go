@@ -57,7 +57,7 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 	}
 
 	switch node.Transport {
-	case "ws", "wss", "tls", "http2", "ssu", "quic":
+	case "ws", "wss", "tls", "http2", "ssu", "quic", "kcp":
 	case "https":
 		node.Protocol = "http"
 		node.Transport = "tls"

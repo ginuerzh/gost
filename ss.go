@@ -101,6 +101,7 @@ func (s *ShadowUdpServer) ListenAndServe() error {
 	}
 }
 
+// TODO: shadowsocks udp relay handler
 func (s *ShadowUdpServer) HandleConn(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
 
 }
