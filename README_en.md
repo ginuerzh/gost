@@ -7,13 +7,14 @@ Features
 ------
 * Listening on multiple ports
 * Multi-level forward proxy - proxy chain
-* Standard HTTP/HTTPS/SOCKS5 proxy protocols
+* Standard HTTP/HTTPS/SOCKS5 proxy protocols support
 * TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
-* Shadowsocks protocol with OTA supported (OTA: >=2.2)
+* Shadowsocks protocol support with OTA option (OTA: >=2.2)
 * Local/remote port forwarding (>=2.1)
 * HTTP2.0 (>=2.2)
 * Experimental QUIC support (>=2.3)
+* KCP (>=2.3)
 
 Binary file download：https://github.com/ginuerzh/gost/releases
 
@@ -33,12 +34,12 @@ Effective for the -L and -F parameters
 ```
 scheme can be divided into two parts: protocol+transport
 
-protocol: proxy protocol types(http, socks5, shadowsocks), 
-transport: data transmission mode(ws, wss, tls, http2, quic), may be used in any combination or individually:
+protocol: proxy protocol types (http, socks5, shadowsocks), 
+transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used in any combination or individually:
 
 > http - standard HTTP proxy: http://:8080
 
-> http+tls - standard HTTPS proxy(may need to provide a trusted certificate): http+tls://:443
+> http+tls - standard HTTPS proxy (may need to provide a trusted certificate): http+tls://:443
 
 > http2 - HTTP2 proxy and backwards-compatible with HTTPS proxy: http2://:443
 
@@ -51,6 +52,8 @@ transport: data transmission mode(ws, wss, tls, http2, quic), may be used in any
 > ss - standard shadowsocks proxy, ss://aes-256-cfb:123456@:8338
 
 > quic - standard QUIC proxy, quic://:6121
+
+> kcp - standard KCP tunnel，kcp://:8388
 
 #### Port forwarding
 
@@ -69,7 +72,7 @@ scheme://[bind_address]:port/[host]:hostport
 
 > -logtostderr : log to console
 
-> -v=4 : log level(1-5)，The higher the level, the more detailed the log (level 5 will enable HTTP2 debug)
+> -v=4 : log level (1-5)，The higher the level, the more detailed the log (level 5 will enable HTTP2 debug)
 
 > -log_dir=/log/dir/path : log to directory /log/dir/path
 
@@ -163,13 +166,27 @@ Server:
 ```bash
 gost -L=quic://:6121
 ```
-
 Client(Chrome):
 ```bash
 chrome --enable-quic --proxy-server=quic://server_ip:6121
 ```
 
 **NOTE:** Due to Chrome's limitations, it is currently only possible to access the HTTP (but not HTTPS) site through QUIC.
+
+#### KCP
+Support for KCP is based on libraries [kcp-go](https://github.com/xtaci/kcp-go) and [kcptun](https://github.com/xtaci/kcptun).
+
+Server:
+```bash
+gost -L=kcp://:8388
+```
+Client:
+```bash
+gost -L=:8080 -F=kcp://server_ip:8388
+```
+
+**NOTE:** KCP will be enabled if and only if the proxy chain is not empty and the first proxy node (the first -F parameter) is of type KCP.
+When KCP is enabled, other proxy nodes are ignored.
 
 Encryption Mechanism
 ------
@@ -199,7 +216,7 @@ gost -L=:8080 -F=http2://server_ip:443
 
 #### SOCKS5
 Gost supports the standard SOCKS5 protocol methods: no-auth (0x00) and user/pass (0x02), 
-and extends two methods for data encryption: tls(0x80)和tls-auth(0x82).
+and extends two methods for data encryption: tls(0x80) and tls-auth(0x82).
 
 Server:
 ```bash
