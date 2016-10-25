@@ -65,6 +65,47 @@ func (s *ShadowServer) Serve() {
 	glog.V(LINFO).Infof("[ss] %s >-< %s", s.conn.RemoteAddr(), addr)
 }
 
+type ShadowUdpServer struct {
+	Base    *ProxyServer
+	Handler func(conn *net.UDPConn, addr *net.UDPAddr, data []byte)
+}
+
+func NewShadowUdpServer(base *ProxyServer) *ShadowUdpServer {
+	return &ShadowUdpServer{Base: base}
+}
+
+func (s *ShadowUdpServer) ListenAndServe() error {
+	laddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Addr)
+	if err != nil {
+		return err
+	}
+	lconn, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		return err
+	}
+	defer lconn.Close()
+
+	if s.Handler == nil {
+		s.Handler = s.HandleConn
+	}
+
+	for {
+		b := make([]byte, LargeBufferSize)
+		n, addr, err := lconn.ReadFromUDP(b)
+		if err != nil {
+			glog.V(LWARNING).Infoln(err)
+			continue
+		}
+
+		go s.Handler(lconn, addr, b[:n])
+	}
+}
+
+// TODO: shadowsocks udp relay handler
+func (s *ShadowUdpServer) HandleConn(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
+
+}
+
 // This function is copied from shadowsocks library with some modification.
 func (s *ShadowServer) getRequest() (host string, ota bool, err error) {
 	// buf size should at least have the same size with the largest possible

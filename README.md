@@ -16,6 +16,7 @@ gost - GO Simple Tunnel
 * 支持端口转发 (>=2.1)
 * 支持HTTP2.0 (>=2.2)
 * 实验性支持QUIC (>=2.3)
+* KCP (>=2.3)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -34,7 +35,7 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic), 二者可以任意组合，或单独使用:
+protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic, kcp), 二者可以任意组合，或单独使用:
 
 > http - 作为HTTP代理: http://:8080
 
@@ -51,6 +52,8 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 > ss - 作为Shadowsocks服务，ss://aes-256-cfb:123456@:8338
 
 > quic - 作为QUIC代理，quic://:6121
+
+> kcp - 作为KCP代理，kcp://:8388
 
 #### 端口转发
 
@@ -69,7 +72,7 @@ scheme://[bind_address]:port/[host]:hostport
 
 > -logtostderr : 输出到控制台
 
-> -v=4 : 日志级别(1-5)，级别越高，日志越详细(级别5将开启http2 debug)
+> -v=3 : 日志级别(1-5)，级别越高，日志越详细(级别5将开启http2 debug)
 
 > -log_dir=/log/dir/path : 输出到目录/log/dir/path
 
@@ -168,6 +171,22 @@ chrome --enable-quic --proxy-server=quic://server_ip:6121
 ```
 
 **注：** 由于Chrome自身的限制，目前只能通过QUIC访问HTTP网站，无法访问HTTPS网站。
+
+#### KCP
+gost对KCP的支持是基于[kcp-go](https://github.com/xtaci/kcp-go)和[kcptun](https://github.com/xtaci/kcptun)库。
+
+服务端:
+```bash
+gost -L=kcp://:8388
+```
+
+客户端:
+```bash
+gost -L=:8080 -F=kcp://server_ip:8388
+```
+
+**注：** 客户端若要开启KCP转发，当且仅当代理链不为空且首个代理节点(第一个-F参数)为kcp类型。
+当KCP转发开启，代理链中的其他代理节点将被忽略。
 
 加密机制
 ------

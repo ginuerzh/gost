@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 // Proxy chain holds a list of proxy nodes
@@ -22,6 +23,10 @@ type ProxyChain struct {
 	http2NodeIndex int
 	http2Enabled   bool
 	http2Client    *http.Client
+	kcpEnabled     bool
+	kcpConfig      *KCPConfig
+	kcpSession     *KCPSession
+	kcpMutex       sync.Mutex
 }
 
 func NewProxyChain(nodes ...ProxyNode) *ProxyChain {
@@ -61,17 +66,29 @@ func (c *ProxyChain) SetNode(index int, node ProxyNode) {
 	}
 }
 
-// TryEnableHttp2 initialize HTTP2 if available.
+// Init initialize the proxy chain.
+// KCP will be enabled if the first proxy node is KCP proxy (transport == kcp), the remaining nodes are ignored.
 // HTTP2 will be enabled when at least one HTTP2 proxy node (scheme == http2) is present.
 //
-// NOTE: Should be called immediately when proxy nodes are ready, HTTP2 will not be enabled if this function not be called.
-func (c *ProxyChain) TryEnableHttp2() {
+// NOTE: Should be called immediately when proxy nodes are ready.
+func (c *ProxyChain) Init() {
 	length := len(c.nodes)
 	if length == 0 {
 		return
 	}
 
 	c.lastNode = &c.nodes[length-1]
+
+	if c.nodes[0].Transport == "kcp" {
+		glog.V(LINFO).Infoln("KCP is enabled")
+		c.kcpEnabled = true
+		config, err := ParseKCPConfig(c.nodes[0].Get("c"))
+		if err != nil {
+			glog.V(LWARNING).Infoln("[kcp]", err)
+		}
+		c.kcpConfig = config
+		return
+	}
 
 	// HTTP2 restrict: HTTP2 will be enabled when at least one HTTP2 proxy node is present.
 	for i, node := range c.nodes {
@@ -86,6 +103,10 @@ func (c *ProxyChain) TryEnableHttp2() {
 			break // shortest chain for HTTP2
 		}
 	}
+}
+
+func (c *ProxyChain) KCPEnabled() bool {
+	return c.kcpEnabled
 }
 
 func (c *ProxyChain) Http2Enabled() bool {
@@ -130,6 +151,19 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 		return nil, ErrEmptyChain
 	}
 
+	if c.KCPEnabled() {
+		kcpConn, err := c.getKCPConn()
+		if err != nil {
+			return nil, err
+		}
+		pc := NewProxyConn(kcpConn, c.nodes[0])
+		if err := pc.Handshake(); err != nil {
+			pc.Close()
+			return nil, err
+		}
+		return pc, nil
+	}
+
 	if c.Http2Enabled() {
 		nodes = nodes[c.http2NodeIndex+1:]
 		if len(nodes) == 0 {
@@ -160,6 +194,23 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 func (c *ProxyChain) dialWithNodes(withHttp2 bool, addr string, nodes ...ProxyNode) (conn net.Conn, err error) {
 	if len(nodes) == 0 {
 		return net.DialTimeout("tcp", addr, DialTimeout)
+	}
+
+	if c.KCPEnabled() {
+		kcpConn, err := c.getKCPConn()
+		if err != nil {
+			return nil, err
+		}
+		pc := NewProxyConn(kcpConn, nodes[0])
+		if err := pc.Handshake(); err != nil {
+			pc.Close()
+			return nil, err
+		}
+		if err := pc.Connect(addr); err != nil {
+			pc.Close()
+			return nil, err
+		}
+		return pc, nil
 	}
 
 	if withHttp2 && c.Http2Enabled() {
@@ -217,6 +268,28 @@ func (c *ProxyChain) travelNodes(withHttp2 bool, nodes ...ProxyNode) (conn *Prox
 		conn = pc
 	}
 	return
+}
+
+func (c *ProxyChain) initKCPSession() (err error) {
+	c.kcpMutex.Lock()
+	defer c.kcpMutex.Unlock()
+
+	if c.kcpSession == nil || c.kcpSession.IsClosed() {
+		glog.V(LINFO).Infoln("[kcp] new kcp session")
+		c.kcpSession, err = DialKCP(c.nodes[0].Addr, c.kcpConfig)
+	}
+	return
+}
+
+func (c *ProxyChain) getKCPConn() (conn net.Conn, err error) {
+	if !c.KCPEnabled() {
+		return nil, errors.New("KCP is not enabled")
+	}
+
+	if err = c.initKCPSession(); err != nil {
+		return nil, err
+	}
+	return c.kcpSession.GetConn()
 }
 
 // Initialize an HTTP2 transport if HTTP2 is enabled.
