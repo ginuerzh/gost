@@ -80,7 +80,7 @@ func (s *ProxyServer) Serve() error {
 		return NewRTcpForwardServer(s).Serve()
 	case "rudp": // Remote UDP port forwarding
 		return NewRUdpForwardServer(s).Serve()
-	case "ssu": // shadowsocks udp relay
+	case "ssu": // TODO: shadowsocks udp relay
 		return NewShadowUdpServer(s).ListenAndServe()
 	case "quic":
 		return NewQuicServer(s).ListenAndServeTLS(s.TLSConfig)
@@ -88,6 +88,11 @@ func (s *ProxyServer) Serve() error {
 		config, err := ParseKCPConfig(s.Node.Get("c"))
 		if err != nil {
 			glog.V(LWARNING).Infoln("[kcp]", err)
+		}
+		// override crypt and key if specified explicitly
+		if s.Node.User != nil {
+			config.Crypt = s.Node.User.Username()
+			config.Key, _ = s.Node.User.Password()
 		}
 		return NewKCPServer(s, config).ListenAndServe()
 	default:

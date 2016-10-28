@@ -12,11 +12,11 @@ gost - GO Simple Tunnel
 * 支持标准HTTP/HTTPS/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议，支持OTA (OTA: >=2.2)
-* 支持端口转发 (>=2.1)
-* 支持HTTP2.0 (>=2.2)
-* 实验性支持QUIC (>=2.3)
-* KCP (>=2.3)
+* 支持Shadowsocks协议 (OTA: 2.2+)
+* 支持本地/远程端口转发 (2.1+)
+* 支持HTTP 2.0 (2.2+)
+* 实验性支持QUIC (2.3+)
+* 支持KCP协议 (2.3+)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -53,7 +53,7 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 
 > quic - 作为QUIC代理，quic://:6121
 
-> kcp - 作为KCP代理，kcp://:8388
+> kcp - 作为KCP代理，kcp://:8388或kcp://aes:123456@:8388
 
 #### 端口转发
 
@@ -183,6 +183,23 @@ gost -L=kcp://:8388
 客户端:
 ```bash
 gost -L=:8080 -F=kcp://server_ip:8388
+```
+
+或者手动指定加密方法和密码(手动指定的加密方法和密码会覆盖配置文件中的相应值)
+
+服务端:
+```bash
+gost -L=kcp://aes:123456@:8388
+```
+
+客户端:
+```bash
+gost -L=:8080 -F=kcp://aes:123456@server_ip:8388
+```
+
+gost会自动加载当前工作目录中的kcp.json(如果存在)配置文件，或者可以手动通过参数指定配置文件路径：
+```bash
+gost -L=kcp://:8388?c=/path/to/conf/file
 ```
 
 **注：** 客户端若要开启KCP转发，当且仅当代理链不为空且首个代理节点(第一个-F参数)为kcp类型。

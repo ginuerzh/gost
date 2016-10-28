@@ -10,11 +10,11 @@ Features
 * Standard HTTP/HTTPS/SOCKS5 proxy protocols support
 * TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
-* Shadowsocks protocol support with OTA option (OTA: >=2.2)
-* Local/remote port forwarding (>=2.1)
-* HTTP2.0 (>=2.2)
-* Experimental QUIC support (>=2.3)
-* KCP (>=2.3)
+* Shadowsocks protocol support (OTA: 2.2+)
+* Local/remote port forwarding (2.1+)
+* HTTP 2.0 support (2.2+)
+* Experimental QUIC support (2.3+)
+* KCP protocol support (2.3+)
 
 Binary file download：https://github.com/ginuerzh/gost/releases
 
@@ -53,7 +53,7 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used 
 
 > quic - standard QUIC proxy, quic://:6121
 
-> kcp - standard KCP tunnel，kcp://:8388
+> kcp - standard KCP tunnel，kcp://:8388 or kcp://aes:123456@:8388
 
 #### Port forwarding
 
@@ -183,6 +183,24 @@ gost -L=kcp://:8388
 Client:
 ```bash
 gost -L=:8080 -F=kcp://server_ip:8388
+```
+
+Or manually specify the encryption method and password (Manually specifying the encryption method and password overwrites the corresponding value in the configuration file)
+
+Server:
+```bash
+gost -L=kcp://aes:123456@:8388
+```
+
+Client:
+```bash
+gost -L=:8080 -F=kcp://aes:123456@server_ip:8388
+```
+
+Gost will automatically load kcp.json configuration file from current working directory if exists, 
+or you can use the parameter to specify the path to the file.
+```bash
+gost -L=kcp://:8388?c=/path/to/conf/file
 ```
 
 **NOTE:** KCP will be enabled if and only if the proxy chain is not empty and the first proxy node (the first -F parameter) is of type KCP.

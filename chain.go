@@ -86,6 +86,10 @@ func (c *ProxyChain) Init() {
 		if err != nil {
 			glog.V(LWARNING).Infoln("[kcp]", err)
 		}
+		if c.nodes[0].User != nil {
+			config.Crypt = c.nodes[0].User.Username()
+			config.Key, _ = c.nodes[0].User.Password()
+		}
 		c.kcpConfig = config
 		return
 	}
