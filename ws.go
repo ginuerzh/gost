@@ -1,14 +1,12 @@
 package gost
 
 import (
-	//"github.com/ginuerzh/gosocks5"
 	"crypto/tls"
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 	"net"
 	"net/http"
 	"net/http/httputil"
-	//"net/url"
 	"time"
 )
 
@@ -28,6 +26,7 @@ func NewWebsocketServer(base *ProxyServer) *WebsocketServer {
 			WriteBufferSize: 1024,
 			CheckOrigin:     func(r *http.Request) bool { return true },
 		},
+		CompressionSupported: true,
 	}
 }
 
@@ -83,6 +82,7 @@ func WebsocketClientConn(url string, conn net.Conn, config *tls.Config) (*Websoc
 		NetDial: func(net, addr string) (net.Conn, error) {
 			return conn, nil
 		},
+		CompressionSupported: true,
 	}
 
 	c, resp, err := dialer.Dial(url, nil)
@@ -90,7 +90,7 @@ func WebsocketClientConn(url string, conn net.Conn, config *tls.Config) (*Websoc
 		return nil, err
 	}
 	resp.Body.Close()
-
+	c.EnableWriteCompression(true)
 	return &WebsocketConn{conn: c}, nil
 }
 
