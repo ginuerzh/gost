@@ -22,11 +22,11 @@ func NewWebsocketServer(base *ProxyServer) *WebsocketServer {
 		Addr: base.Node.Addr,
 		Base: base,
 		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin:     func(r *http.Request) bool { return true },
+			ReadBufferSize:    1024,
+			WriteBufferSize:   1024,
+			CheckOrigin:       func(r *http.Request) bool { return true },
+			EnableCompression: true,
 		},
-		CompressionSupported: true,
 	}
 }
 
@@ -75,14 +75,14 @@ type WebsocketConn struct {
 
 func WebsocketClientConn(url string, conn net.Conn, config *tls.Config) (*WebsocketConn, error) {
 	dialer := websocket.Dialer{
-		ReadBufferSize:   1024,
-		WriteBufferSize:  1024,
-		TLSClientConfig:  config,
-		HandshakeTimeout: DialTimeout,
+		ReadBufferSize:    1024,
+		WriteBufferSize:   1024,
+		TLSClientConfig:   config,
+		HandshakeTimeout:  DialTimeout,
+		EnableCompression: true,
 		NetDial: func(net, addr string) (net.Conn, error) {
 			return conn, nil
 		},
-		CompressionSupported: true,
 	}
 
 	c, resp, err := dialer.Dial(url, nil)
@@ -90,11 +90,11 @@ func WebsocketClientConn(url string, conn net.Conn, config *tls.Config) (*Websoc
 		return nil, err
 	}
 	resp.Body.Close()
-	c.EnableWriteCompression(true)
 	return &WebsocketConn{conn: c}, nil
 }
 
 func WebsocketServerConn(conn *websocket.Conn) *WebsocketConn {
+	conn.EnableWriteCompression(true)
 	return &WebsocketConn{
 		conn: conn,
 	}
@@ -106,17 +106,12 @@ func (c *WebsocketConn) Read(b []byte) (n int, err error) {
 	}
 	n = copy(b, c.rb)
 	c.rb = c.rb[n:]
-
-	//log.Println("ws r:", n)
-
 	return
 }
 
 func (c *WebsocketConn) Write(b []byte) (n int, err error) {
 	err = c.conn.WriteMessage(websocket.BinaryMessage, b)
 	n = len(b)
-	//log.Println("ws w:", n)
-
 	return
 }
 
