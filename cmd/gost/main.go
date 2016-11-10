@@ -1,11 +1,11 @@
 package main
 
 import (
+	"../.."
 	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/ginuerzh/gost"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io/ioutil"
@@ -42,12 +42,12 @@ func init() {
 
 	if flag.NFlag() == 0 {
 		flag.PrintDefaults()
-		return
+		os.Exit(0)
 	}
 
 	if printVersion {
 		fmt.Fprintf(os.Stderr, "GOST %s (%s)\n", gost.Version, runtime.Version())
-		return
+		os.Exit(0)
 	}
 }
 
