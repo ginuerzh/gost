@@ -42,12 +42,12 @@ func init() {
 
 	if flag.NFlag() == 0 {
 		flag.PrintDefaults()
-		return
+		os.Exit(0)
 	}
 
 	if printVersion {
 		fmt.Fprintf(os.Stderr, "GOST %s (%s)\n", gost.Version, runtime.Version())
-		return
+		os.Exit(0)
 	}
 }
 
