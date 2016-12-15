@@ -68,6 +68,26 @@ scheme://[bind_address]:port/[host]:hostport
 
 > host:hostport - 目标访问地址
 
+#### 配置文件
+
+> -C : 指定配置文件路径
+
+配置文件为标准json格式：
+```json
+{
+    "ServeNodes": [
+        ":8080",
+        "ss://chacha20:12345678@:8338"
+    ],
+    "ChainNodes": [
+        "http://192.168.1.1:8080",
+        "https://10.0.2.1:443"
+    ]
+}
+```
+
+ServeNodes等同于-L参数，ChainNodes等同于-F参数
+
 #### 开启日志
 
 > -logtostderr : 输出到控制台
@@ -91,6 +111,19 @@ gost -L=:8080
 * 设置代理认证信息
 ```bash
 gost -L=admin:123456@localhost:8080
+```
+
+* 多组认证信息
+```bash
+gost -L=localhost:8080?secrets=secrets.txt
+```
+
+通过secrets参数可以为HTTP/SOCKS5代理设置多组认证信息，格式为：
+```plain
+# username password
+
+test001 123456
+test002 12345678
 ```
 
 * 多端口监听
