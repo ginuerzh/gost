@@ -46,7 +46,7 @@ func init() {
 	}
 
 	if printVersion {
-		fmt.Fprintf(os.Stderr, "GOST %s (%s)\n", gost.Version, runtime.Version())
+		fmt.Fprintf(os.Stderr, "gost %s (%s)\n", gost.Version, runtime.Version())
 		return
 	}
 }

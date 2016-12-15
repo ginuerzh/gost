@@ -86,9 +86,9 @@ func (c *ProxyChain) Init() {
 		if err != nil {
 			glog.V(LWARNING).Infoln("[kcp]", err)
 		}
-		if c.nodes[0].User != nil {
-			config.Crypt = c.nodes[0].User.Username()
-			config.Key, _ = c.nodes[0].User.Password()
+		if c.nodes[0].Users != nil {
+			config.Crypt = c.nodes[0].Users[0].Username()
+			config.Key, _ = c.nodes[0].Users[0].Password()
 		}
 		c.kcpConfig = config
 		return
@@ -349,9 +349,9 @@ func (c *ProxyChain) http2Connect(addr string) (net.Conn, error) {
 
 	header := make(http.Header)
 	header.Set("Gost-Target", addr) // Flag header to indicate the address that server connected to
-	if http2Node.User != nil {
+	if http2Node.Users != nil {
 		header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(http2Node.User.String())))
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(http2Node.Users[0].String())))
 	}
 	return c.getHttp2Conn(header)
 }

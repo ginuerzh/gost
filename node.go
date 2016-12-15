@@ -1,20 +1,23 @@
 package gost
 
 import (
+	"bufio"
 	"fmt"
+	"github.com/golang/glog"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 )
 
 // Proxy node represent a proxy
 type ProxyNode struct {
-	Addr       string        // [host]:port
-	Protocol   string        // protocol: http/socks5/ss
-	Transport  string        // transport: ws/wss/tls/http2/tcp/udp/rtcp/rudp
-	Remote     string        // remote address, used by tcp/udp port forwarding
-	User       *url.Userinfo // authentication for proxy
+	Addr       string          // [host]:port
+	Protocol   string          // protocol: http/socks5/ss
+	Transport  string          // transport: ws/wss/tls/http2/tcp/udp/rtcp/rudp
+	Remote     string          // remote address, used by tcp/udp port forwarding
+	Users      []*url.Userinfo // authentication for proxy
 	values     url.Values
 	serverName string
 	conn       net.Conn
@@ -34,9 +37,20 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 
 	node = ProxyNode{
 		Addr:       u.Host,
-		User:       u.User,
 		values:     u.Query(),
 		serverName: u.Host,
+	}
+
+	if u.User != nil {
+		node.Users = append(node.Users, u.User)
+	}
+
+	users, er := parseUsers(node.Get("secrets"))
+	if users != nil {
+		node.Users = append(node.Users, users...)
+	}
+	if er != nil {
+		glog.V(LWARNING).Infoln("secrets:", er)
 	}
 
 	if strings.Contains(u.Host, ":") {
@@ -75,6 +89,34 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 		node.Protocol = ""
 	}
 
+	return
+}
+
+func parseUsers(authFile string) (users []*url.Userinfo, err error) {
+	if authFile == "" {
+		return
+	}
+
+	file, err := os.Open(authFile)
+	if err != nil {
+		return
+	}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		s := strings.SplitN(line, " ", 2)
+		if len(s) == 1 {
+			users = append(users, url.User(strings.TrimSpace(s[0])))
+		} else if len(s) == 2 {
+			users = append(users, url.UserPassword(strings.TrimSpace(s[0]), strings.TrimSpace(s[1])))
+		}
+	}
+
+	err = scanner.Err()
 	return
 }
 

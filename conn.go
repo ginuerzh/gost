@@ -95,7 +95,10 @@ func (c *ProxyConn) handshake() error {
 				gosocks5.MethodUserPass,
 				//MethodTLS,
 			},
-			user: c.Node.User,
+		}
+
+		if len(c.Node.Users) > 0 {
+			selector.user = c.Node.Users[0]
 		}
 
 		if !tlsUsed { // if transport is not security, enable security socks5
@@ -112,9 +115,9 @@ func (c *ProxyConn) handshake() error {
 		}
 		c.conn = conn
 	case "ss": // shadowsocks
-		if c.Node.User != nil {
-			method := c.Node.User.Username()
-			password, _ := c.Node.User.Password()
+		if len(c.Node.Users) > 0 {
+			method := c.Node.Users[0].Username()
+			password, _ := c.Node.Users[0].Password()
 			cipher, err := shadowsocks.NewCipher(method, password)
 			if err != nil {
 				return err
@@ -191,9 +194,14 @@ func (c *ProxyConn) Connect(addr string) error {
 			Header:     make(http.Header),
 		}
 		req.Header.Set("Proxy-Connection", "keep-alive")
-		if c.Node.User != nil {
+		if len(c.Node.Users) > 0 {
+			user := c.Node.Users[0]
+			s := user.String()
+			if _, set := user.Password(); !set {
+				s += ":"
+			}
 			req.Header.Set("Proxy-Authorization",
-				"Basic "+base64.StdEncoding.EncodeToString([]byte(c.Node.User.String())))
+				"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
 		}
 		if err := req.Write(c); err != nil {
 			return err

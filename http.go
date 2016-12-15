@@ -44,15 +44,21 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 		return
 	}
 
-	var username, password string
-	if s.Base.Node.User != nil {
-		username = s.Base.Node.User.Username()
-		password, _ = s.Base.Node.User.Password()
+	valid := false
+	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
+	glog.V(LINFO).Infoln(u, p)
+	for _, user := range s.Base.Node.Users {
+		username := user.Username()
+		password, _ := user.Password()
+		if (u == username && p == password) ||
+			(u == username && password == "") ||
+			(username == "" && p == password) {
+			valid = true
+			break
+		}
 	}
 
-	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	req.Header.Del("Proxy-Authorization")
-	if (username != "" && u != username) || (password != "" && p != password) {
+	if len(s.Base.Node.Users) > 0 && !valid {
 		glog.V(LWARNING).Infof("[http] %s <- %s : proxy authentication required", s.conn.RemoteAddr(), req.Host)
 		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
 			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
@@ -60,6 +66,8 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 		s.conn.Write([]byte(resp))
 		return
 	}
+
+	req.Header.Del("Proxy-Authorization")
 
 	// forward http request
 	lastNode := s.Base.Chain.lastNode
@@ -117,9 +125,14 @@ func (s *HttpServer) forwardRequest(req *http.Request) {
 	}
 	defer cc.Close()
 
-	if last.User != nil {
+	if len(last.Users) > 0 {
+		user := last.Users[0]
+		s := user.String()
+		if _, set := user.Password(); !set {
+			s += ":"
+		}
 		req.Header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(last.User.String())))
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
 	}
 
 	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
@@ -184,19 +197,25 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var username, password string
-	if s.Base.Node.User != nil {
-		username = s.Base.Node.User.Username()
-		password, _ = s.Base.Node.User.Password()
-	}
-
+	valid := false
 	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	req.Header.Del("Proxy-Authorization")
-	if (username != "" && u != username) || (password != "" && p != password) {
+	for _, user := range s.Base.Node.Users {
+		username := user.Username()
+		password, _ := user.Password()
+		if (u == username && p == password) ||
+			(u == username && password == "") ||
+			(username == "" && p == password) {
+			valid = true
+			break
+		}
+	}
+	if len(s.Base.Node.Users) > 0 && !valid {
 		glog.V(LWARNING).Infof("[http2] %s <- %s : proxy authentication required", req.RemoteAddr, target)
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}
+
+	req.Header.Del("Proxy-Authorization")
 
 	c, err := s.Base.Chain.Dial(target)
 	if err != nil {

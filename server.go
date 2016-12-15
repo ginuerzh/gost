@@ -28,10 +28,10 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 	}
 
 	var cipher *ss.Cipher
-	if node.Protocol == "ss" && node.User != nil {
+	if node.Protocol == "ss" && node.Users != nil {
 		var err error
-		method := node.User.Username()
-		password, _ := node.User.Password()
+		method := node.Users[0].Username()
+		password, _ := node.Users[0].Password()
 		cipher, err = ss.NewCipher(method, password)
 		if err != nil {
 			glog.Fatal(err)
@@ -49,7 +49,7 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 				MethodTLS,
 				MethodTLSAuth,
 			},
-			user:      node.User,
+			users:     node.Users,
 			tlsConfig: config,
 		},
 		cipher: cipher,
@@ -90,9 +90,9 @@ func (s *ProxyServer) Serve() error {
 			glog.V(LWARNING).Infoln("[kcp]", err)
 		}
 		// override crypt and key if specified explicitly
-		if s.Node.User != nil {
-			config.Crypt = s.Node.User.Username()
-			config.Key, _ = s.Node.User.Password()
+		if s.Node.Users != nil {
+			config.Crypt = s.Node.Users[0].Username()
+			config.Key, _ = s.Node.Users[0].Password()
 		}
 		return NewKCPServer(s, config).ListenAndServe()
 	default:

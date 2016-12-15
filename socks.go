@@ -81,7 +81,7 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 
 type serverSelector struct {
 	methods   []uint8
-	user      *url.Userinfo
+	users     []*url.Userinfo
 	tlsConfig *tls.Config
 }
 
@@ -101,7 +101,7 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 	}
 
 	// when user/pass is set, auth is mandatory
-	if selector.user != nil {
+	if selector.users != nil {
 		if method == gosocks5.MethodNoAuth {
 			method = gosocks5.MethodUserPass
 		}
@@ -132,13 +132,18 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		}
 		glog.V(LDEBUG).Infoln("[socks5]", req.String())
 
-		var username, password string
-		if selector.user != nil {
-			username = selector.user.Username()
-			password, _ = selector.user.Password()
+		valid := false
+		for _, user := range selector.users {
+			username := user.Username()
+			password, _ := user.Password()
+			if (req.Username == username && req.Password == password) ||
+				(req.Username == username && password == "") ||
+				(username == "" && req.Password == password) {
+				valid = true
+				break
+			}
 		}
-
-		if (username != "" && req.Username != username) || (password != "" && req.Password != password) {
+		if len(selector.users) > 0 && !valid {
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
 				glog.V(LWARNING).Infoln("[socks5-auth]", err)
