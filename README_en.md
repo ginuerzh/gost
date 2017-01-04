@@ -265,7 +265,7 @@ gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
 #### TLS
 There is built-in TLS certificate in gost, if you need to use other TLS certificate, there are two ways:
 * Place two files cert.pem (public key) and key.pem (private key) in the current working directory, gost will automatically load them.
-* Use the parameter to specify the path to the certificate file：
+* Use the parameter to specify the path to the certificate file:
 ```bash
 gost -L="http2://:443?cert=/path/to/my/cert/file&key=/path/to/my/key/file"
 ```

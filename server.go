@@ -95,6 +95,8 @@ func (s *ProxyServer) Serve() error {
 			config.Key, _ = s.Node.Users[0].Password()
 		}
 		return NewKCPServer(s, config).ListenAndServe()
+	case "redirect":
+		return NewRedsocksTCPServer(s).ListenAndServe()
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}
