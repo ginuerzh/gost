@@ -21,8 +21,7 @@ const (
 )
 
 const (
-	CmdUdpConnect uint8 = 0xF1 // extended method for udp local port forwarding
-	CmdUdpTun     uint8 = 0xF3 // extended method for udp over tcp
+	CmdUdpTun uint8 = 0xF3 // extended method for udp over tcp
 )
 
 type clientSelector struct {
@@ -190,10 +189,6 @@ func (s *Socks5Server) HandleRequest(req *gosocks5.Request) {
 		glog.V(LINFO).Infof("[socks5-bind] %s - %s", s.conn.RemoteAddr(), req.Addr)
 		s.handleBind(req)
 
-	case CmdUdpConnect:
-		glog.V(LINFO).Infof("[udp] %s - %s", s.conn.RemoteAddr(), req.Addr)
-		s.handleUDPConnect(req)
-
 	case gosocks5.CmdUdp:
 		glog.V(LINFO).Infof("[socks5-udp] %s - %s", s.conn.RemoteAddr(), req.Addr)
 		s.handleUDPRelay(req)
@@ -255,38 +250,6 @@ func (s *Socks5Server) handleBind(req *gosocks5.Request) {
 	glog.V(LINFO).Infof("[socks5-bind] %s <-> %s", s.conn.RemoteAddr(), cc.RemoteAddr())
 	s.Base.transport(s.conn, cc)
 	glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", s.conn.RemoteAddr(), cc.RemoteAddr())
-}
-
-func (s *Socks5Server) handleUDPConnect(req *gosocks5.Request) {
-	cc, err := s.Base.Chain.GetConn()
-
-	// connection error
-	if err != nil && err != ErrEmptyChain {
-		glog.V(LWARNING).Infof("[udp] %s <- %s : %s", s.conn.RemoteAddr(), req.Addr, err)
-		reply := gosocks5.NewReply(gosocks5.Failure, nil)
-		reply.Write(s.conn)
-		glog.V(LDEBUG).Infof("[udp] %s <- %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
-		return
-	}
-
-	// serve udp connect
-	if err == ErrEmptyChain {
-		s.udpConnect(req.Addr.String())
-		return
-	}
-
-	defer cc.Close()
-
-	// forward request
-	if err := req.Write(cc); err != nil {
-		glog.V(LINFO).Infof("[udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
-		gosocks5.NewReply(gosocks5.Failure, nil).Write(s.conn)
-		return
-	}
-
-	glog.V(LINFO).Infof("[udp] %s <-> %s", s.conn.RemoteAddr(), req.Addr)
-	s.Base.transport(s.conn, cc)
-	glog.V(LINFO).Infof("[udp] %s >-< %s", s.conn.RemoteAddr(), req.Addr)
 }
 
 func (s *Socks5Server) handleUDPRelay(req *gosocks5.Request) {
@@ -503,65 +466,6 @@ func (s *Socks5Server) bindOn(addr string) {
 			ln.Close()
 			return
 		}
-	}
-}
-
-func (s *Socks5Server) udpConnect(addr string) {
-	raddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		glog.V(LINFO).Infof("[udp] %s -> %s : %s", s.conn.RemoteAddr(), addr, err)
-		gosocks5.NewReply(gosocks5.Failure, nil).Write(s.conn)
-		return
-	}
-
-	if err := gosocks5.NewReply(gosocks5.Succeeded, nil).Write(s.conn); err != nil {
-		glog.V(LINFO).Infof("[udp] %s <- %s : %s", s.conn.RemoteAddr(), addr, err)
-		return
-	}
-
-	glog.V(LINFO).Infof("[udp] %s <-> %s", s.conn.RemoteAddr(), raddr)
-	defer glog.V(LINFO).Infof("[udp] %s >-< %s", s.conn.RemoteAddr(), raddr)
-
-	for {
-		dgram, err := gosocks5.ReadUDPDatagram(s.conn)
-		if err != nil {
-			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", s.conn.RemoteAddr(), addr, err)
-			return
-		}
-
-		go func() {
-			b := make([]byte, LargeBufferSize)
-
-			relay, err := net.DialUDP("udp", nil, raddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", s.conn.RemoteAddr(), raddr, err)
-				return
-			}
-			defer relay.Close()
-
-			if _, err := relay.Write(dgram.Data); err != nil {
-				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", s.conn.RemoteAddr(), raddr, err)
-				return
-			}
-			glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", s.conn.RemoteAddr(), raddr, len(dgram.Data))
-
-			relay.SetReadDeadline(time.Now().Add(time.Second * 60))
-			n, err := relay.Read(b)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", s.conn.RemoteAddr(), raddr, err)
-				return
-			}
-			relay.SetReadDeadline(time.Time{})
-
-			glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", s.conn.RemoteAddr(), raddr, n)
-
-			s.conn.SetWriteDeadline(time.Now().Add(time.Second * 90))
-			if err := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, dgram.Header.Addr), b[:n]).Write(s.conn); err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", s.conn.RemoteAddr(), raddr, err)
-				return
-			}
-			s.conn.SetWriteDeadline(time.Time{})
-		}()
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 )
 
 type ProxyServer struct {
@@ -75,7 +76,11 @@ func (s *ProxyServer) Serve() error {
 	case "tcp": // Local TCP port forwarding
 		return NewTcpForwardServer(s).ListenAndServe()
 	case "udp": // Local UDP port forwarding
-		return NewUdpForwardServer(s).ListenAndServe()
+		ttl, _ := strconv.Atoi(s.Node.Get("ttl"))
+		if ttl <= 0 {
+			ttl = DefaultTTL
+		}
+		return NewUdpForwardServer(s, ttl).ListenAndServe()
 	case "rtcp": // Remote TCP port forwarding
 		return NewRTcpForwardServer(s).Serve()
 	case "rudp": // Remote UDP port forwarding

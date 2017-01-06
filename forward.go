@@ -62,12 +62,164 @@ func (s *TcpForwardServer) handleTcpForward(conn net.Conn, raddr net.Addr) {
 	glog.V(LINFO).Infof("[tcp] %s >-< %s", conn.RemoteAddr(), raddr)
 }
 
-type UdpForwardServer struct {
-	Base *ProxyServer
+type packet struct {
+	srcAddr *net.UDPAddr // src address
+	dstAddr *net.UDPAddr // dest address
+	data    []byte
 }
 
-func NewUdpForwardServer(base *ProxyServer) *UdpForwardServer {
-	return &UdpForwardServer{Base: base}
+type cnode struct {
+	chain            *ProxyChain
+	conn             net.Conn
+	srcAddr, dstAddr *net.UDPAddr
+	rChan, wChan     chan *packet
+	err              error
+	ttl              time.Duration
+}
+
+func (node *cnode) getUDPTunnel() (net.Conn, error) {
+	conn, err := node.chain.GetConn()
+	if err != nil {
+		return nil, err
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	if err = gosocks5.NewRequest(CmdUdpTun, nil).Write(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn.SetWriteDeadline(time.Time{})
+
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	reply, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	if reply.Rep != gosocks5.Succeeded {
+		conn.Close()
+		return nil, errors.New("UDP tunnel failure")
+	}
+
+	return conn, nil
+}
+
+func (node *cnode) run() {
+	if len(node.chain.Nodes()) == 0 {
+		lconn, err := net.ListenUDP("udp", nil)
+		if err != nil {
+			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", node.srcAddr, node.dstAddr, err)
+			return
+		}
+		node.conn = lconn
+	} else {
+		tc, err := node.getUDPTunnel()
+		if err != nil {
+			glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", node.srcAddr, node.dstAddr, err)
+			return
+		}
+		node.conn = tc
+	}
+
+	defer node.conn.Close()
+
+	timer := time.NewTimer(node.ttl)
+	errChan := make(chan error, 2)
+
+	go func() {
+		for {
+			switch c := node.conn.(type) {
+			case *net.UDPConn:
+				b := make([]byte, MediumBufferSize)
+				n, addr, err := c.ReadFromUDP(b)
+				if err != nil {
+					glog.V(LWARNING).Infof("[udp] %s <- %s : %s", node.srcAddr, node.dstAddr, err)
+					node.err = err
+					errChan <- err
+					return
+				}
+
+				timer.Reset(node.ttl)
+				glog.V(LDEBUG).Infof("[udp] %s <<< %s : length %d", node.srcAddr, addr, n)
+
+				if node.dstAddr.String() != addr.String() {
+					glog.V(LWARNING).Infof("[udp] %s <- %s : dst-addr mismatch (%s)", node.srcAddr, node.dstAddr, addr)
+					break
+				}
+				select {
+				// swap srcAddr with dstAddr
+				case node.rChan <- &packet{srcAddr: node.dstAddr, dstAddr: node.srcAddr, data: b[:n]}:
+				case <-time.After(time.Second * 3):
+					glog.V(LWARNING).Infof("[udp] %s <- %s : %s", node.srcAddr, node.dstAddr, "recv queue is full, discard")
+				}
+
+			default:
+				dgram, err := gosocks5.ReadUDPDatagram(c)
+				if err != nil {
+					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", node.srcAddr, node.dstAddr, err)
+					node.err = err
+					errChan <- err
+					return
+				}
+
+				timer.Reset(node.ttl)
+				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s : length %d", node.srcAddr, dgram.Header.Addr.String(), len(dgram.Data))
+
+				if dgram.Header.Addr.String() != node.dstAddr.String() {
+					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : dst-addr mismatch (%s)", node.srcAddr, node.dstAddr, dgram.Header.Addr)
+					break
+				}
+				select {
+				// swap srcAddr with dstAddr
+				case node.rChan <- &packet{srcAddr: node.dstAddr, dstAddr: node.srcAddr, data: dgram.Data}:
+				case <-time.After(time.Second * 3):
+					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", node.srcAddr, node.dstAddr, "recv queue is full, discard")
+				}
+			}
+		}
+	}()
+
+	go func() {
+		for pkt := range node.wChan {
+			glog.V(LDEBUG).Infof("[udp] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
+			timer.Reset(node.ttl)
+
+			switch c := node.conn.(type) {
+			case *net.UDPConn:
+				if _, err := c.WriteToUDP(pkt.data, pkt.dstAddr); err != nil {
+					glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
+					node.err = err
+					errChan <- err
+					return
+				}
+
+			default:
+				dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(pkt.data)), 0, ToSocksAddr(pkt.dstAddr)), pkt.data)
+				if err := dgram.Write(c); err != nil {
+					glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
+					node.err = err
+					errChan <- err
+					return
+				}
+			}
+		}
+	}()
+
+	select {
+	case <-errChan:
+	case <-timer.C:
+	}
+}
+
+type UdpForwardServer struct {
+	Base *ProxyServer
+	TTL  int
+}
+
+func NewUdpForwardServer(base *ProxyServer, ttl int) *UdpForwardServer {
+	return &UdpForwardServer{Base: base, TTL: ttl}
 }
 
 func (s *UdpForwardServer) ListenAndServe() error {
@@ -88,7 +240,9 @@ func (s *UdpForwardServer) ListenAndServe() error {
 	}
 	defer conn.Close()
 
-	if len(s.Base.Chain.nodes) == 0 {
+	rChan, wChan := make(chan *packet, 128), make(chan *packet, 128)
+	// start send queue
+	go func(ch chan<- *packet) {
 		for {
 			b := make([]byte, MediumBufferSize)
 			n, addr, err := conn.ReadFromUDP(b)
@@ -96,172 +250,61 @@ func (s *UdpForwardServer) ListenAndServe() error {
 				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
 				continue
 			}
-			go func() {
-				s.handleUdpForwardLocal(conn, addr, raddr, b[:n])
-			}()
-		}
-	}
-
-	rChan, wChan := make(chan *gosocks5.UDPDatagram, 32), make(chan *gosocks5.UDPDatagram, 32)
-
-	go func() {
-		for {
-			b := make([]byte, MediumBufferSize)
-			n, addr, err := conn.ReadFromUDP(b)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-				return
-			}
 
 			select {
-			case rChan <- gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n]):
-			default:
-				// glog.V(LWARNING).Infof("[udp-connect] %s -> %s : rbuf is full", laddr, raddr)
+			case ch <- &packet{srcAddr: addr, dstAddr: raddr, data: b[:n]}:
+			case <-time.After(time.Second * 3):
+				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", addr, raddr, "send queue is full, discard")
 			}
 		}
-	}()
-
-	go func() {
-		for {
-			dgram := <-wChan
-			addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
-				continue // drop silently
-			}
-			if _, err = conn.WriteToUDP(dgram.Data, addr); err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
+	}(wChan)
+	// start recv queue
+	go func(ch <-chan *packet) {
+		for pkt := range ch {
+			if _, err := conn.WriteToUDP(pkt.data, pkt.dstAddr); err != nil {
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
 				return
 			}
 		}
-	}()
+	}(rChan)
 
-	for {
-		s.handleUdpForwardTunnel(laddr, raddr, rChan, wChan)
-	}
-}
+	// mapping client to node
+	m := make(map[string]*cnode)
 
-func (s *UdpForwardServer) handleUdpForwardLocal(conn *net.UDPConn, laddr, raddr *net.UDPAddr, data []byte) {
-	lconn, err := net.ListenUDP("udp", nil)
-	if err != nil {
-		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-		return
-	}
-	defer lconn.Close()
-
-	if _, err := lconn.WriteToUDP(data, raddr); err != nil {
-		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-		return
-	}
-	glog.V(LDEBUG).Infof("[udp] %s >>> %s length %d", laddr, raddr, len(data))
-
-	b := make([]byte, MediumBufferSize)
-	lconn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	n, addr, err := lconn.ReadFromUDP(b)
-	if err != nil {
-		glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
-		return
-	}
-	glog.V(LDEBUG).Infof("[udp] %s <<< %s length %d", laddr, addr, n)
-
-	if _, err := conn.WriteToUDP(b[:n], laddr); err != nil {
-		glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
-	}
-	return
-}
-
-func (s *UdpForwardServer) handleUdpForwardTunnel(laddr, raddr *net.UDPAddr, rChan, wChan chan *gosocks5.UDPDatagram) {
-	var cc net.Conn
-	var err error
-	retry := 0
-
-	for {
-		cc, err = s.prepareUdpConnectTunnel(raddr)
-		if err != nil {
-			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-			time.Sleep((1 << uint(retry)) * time.Second)
-			if retry < 5 {
-				retry++
-			}
-			continue
-		}
-		break
-	}
-	defer cc.Close()
-
-	glog.V(LINFO).Infof("[udp] %s <-> %s", laddr, raddr)
-
-	rExit := make(chan interface{})
-	errc := make(chan error, 2)
-
-	go func() {
-		for {
-			select {
-			case dgram := <-rChan:
-				if err := dgram.Write(cc); err != nil {
-					glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-					errc <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", laddr, raddr, len(dgram.Data))
-			case <-rExit:
-				// glog.V(LDEBUG).Infof("[udp-connect] %s -> %s : exited", laddr, raddr)
-				return
+	// start dispatcher
+	for pkt := range wChan {
+		// clear obsolete nodes
+		for k, node := range m {
+			if node != nil && node.err != nil {
+				close(node.wChan)
+				delete(m, k)
+				glog.V(LINFO).Infof("[udp] clear node %s", k)
 			}
 		}
-	}()
-	go func() {
-		for {
-			dgram, err := gosocks5.ReadUDPDatagram(cc)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", laddr, raddr, err)
-				close(rExit)
-				errc <- err
-				return
-			}
 
-			select {
-			case wChan <- dgram:
-				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", laddr, raddr, len(dgram.Data))
-			default:
+		node, ok := m[pkt.srcAddr.String()]
+		if !ok {
+			node = &cnode{
+				chain:   s.Base.Chain,
+				srcAddr: pkt.srcAddr,
+				dstAddr: pkt.dstAddr,
+				rChan:   rChan,
+				wChan:   make(chan *packet, 32),
+				ttl:     time.Duration(s.TTL) * time.Second,
 			}
+			m[pkt.srcAddr.String()] = node
+			go node.run()
+			glog.V(LDEBUG).Infof("[udp] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
 		}
-	}()
 
-	select {
-	case <-errc:
-		//log.Println("w exit", err)
-	}
-	glog.V(LINFO).Infof("[udp] %s >-< %s", laddr, raddr)
-}
-
-func (s *UdpForwardServer) prepareUdpConnectTunnel(addr net.Addr) (net.Conn, error) {
-	conn, err := s.Base.Chain.GetConn()
-	if err != nil {
-		return nil, err
+		select {
+		case node.wChan <- pkt:
+		case <-time.After(time.Second * 3):
+			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, "node send queue is full, discard")
+		}
 	}
 
-	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	if err = gosocks5.NewRequest(CmdUdpConnect, ToSocksAddr(addr)).Write(conn); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn.SetWriteDeadline(time.Time{})
-
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	reply, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn.SetReadDeadline(time.Time{})
-
-	if reply.Rep != gosocks5.Succeeded {
-		conn.Close()
-		return nil, errors.New("failure")
-	}
-
-	return conn, nil
+	return nil
 }
 
 type RTcpForwardServer struct {

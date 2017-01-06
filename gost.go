@@ -28,6 +28,8 @@ var (
 	DialTimeout   = 30 * time.Second
 	ReadTimeout   = 90 * time.Second
 	WriteTimeout  = 90 * time.Second
+
+	DefaultTTL = 60 // default udp node TTL in second for udp port forwarding
 )
 
 var (
