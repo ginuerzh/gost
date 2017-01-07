@@ -15,6 +15,7 @@ Features
 * HTTP 2.0 support (2.2+)
 * Experimental QUIC support (2.3+)
 * KCP protocol support (2.3+)
+* Transparent proxy (2.3+)
 
 Binary file download：https://github.com/ginuerzh/gost/releases
 
@@ -55,6 +56,8 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used 
 
 > kcp - standard KCP tunnel，kcp://:8388 or kcp://aes:123456@:8388
 
+> redirect - transparent proxy，redirect://:12345
+
 #### Port forwarding
 
 Effective for the -L parameter
@@ -67,6 +70,26 @@ scheme://[bind_address]:port/[host]:hostport
 > bind_address:port - local/remote binding address
 
 > host:hostport - target address
+
+#### Configuration file
+
+> -C : specifies the configuration file path
+
+The configuration file is in standard JSON format:
+```json
+{
+    "ServeNodes": [
+        ":8080",
+        "ss://chacha20:12345678@:8338"
+    ],
+    "ChainNodes": [
+        "http://192.168.1.1:8080",
+        "https://10.0.2.1:443"
+    ]
+}
+```
+
+ServeNodes is equivalent to the -L parameter, ChainNodes is equivalent to the -F parameter.
 
 #### Logging
 
@@ -90,6 +113,19 @@ gost -L=:8080
 * Proxy authentication
 ```bash
 gost -L=admin:123456@localhost:8080
+```
+
+* Multiple sets of authentication information
+```bash
+gost -L=localhost:8080?secrets=secrets.txt
+```
+
+The secrets parameter allows you to set multiple authentication information for HTTP/SOCKS5 proxies, the format is:
+```plain
+# username password
+
+test001 123456
+test002 12345678
 ```
 
 * Listen on multiple ports
@@ -205,6 +241,13 @@ gost -L=kcp://:8388?c=/path/to/conf/file
 
 **NOTE:** KCP will be enabled if and only if the proxy chain is not empty and the first proxy node (the first -F parameter) is of type KCP.
 When KCP is enabled, other proxy nodes are ignored.
+
+#### Transparent proxy
+Iptables-based transparent proxy
+
+```bash
+gost -L=redirect://:12345 -F=http2://server_ip:443
+```
 
 Encryption Mechanism
 ------

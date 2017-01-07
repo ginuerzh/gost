@@ -17,6 +17,7 @@ gost - GO Simple Tunnel
 * 支持HTTP 2.0 (2.2+)
 * 实验性支持QUIC (2.3+)
 * 支持KCP协议 (2.3+)
+* 透明代理 (2.3+)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -54,6 +55,8 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 > quic - 作为QUIC代理，quic://:6121
 
 > kcp - 作为KCP代理，kcp://:8388或kcp://aes:123456@:8388
+
+> redirect - 作为透明代理，redirect://:12345
 
 #### 端口转发
 
@@ -237,6 +240,13 @@ gost -L=kcp://:8388?c=/path/to/conf/file
 
 **注：** 客户端若要开启KCP转发，当且仅当代理链不为空且首个代理节点(第一个-F参数)为kcp类型。
 当KCP转发开启，代理链中的其他代理节点将被忽略。
+
+#### 透明代理
+基于iptables的透明代理。
+
+```bash
+gost -L=redirect://:12345 -F=http2://server_ip:443
+```
 
 加密机制
 ------
