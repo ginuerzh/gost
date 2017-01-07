@@ -546,6 +546,7 @@ func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
 			if err != nil {
+				glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), addr, err)
 				errc <- err
 				return
 			}
@@ -570,6 +571,7 @@ func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err
 				dgram = gosocks5.NewUDPDatagram(
 					gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
 				if err := dgram.Write(cc); err != nil {
+					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), dgram.Header.Addr, err)
 					errc <- err
 					return
 				}
@@ -582,6 +584,7 @@ func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err
 		for {
 			dgram, err := gosocks5.ReadUDPDatagram(cc)
 			if err != nil {
+				glog.V(LWARNING).Infof("[udp-tun] %s -> 0 : %s", cc.RemoteAddr(), err)
 				errc <- err
 				return
 			}
@@ -605,6 +608,7 @@ func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err
 					continue // drop silently
 				}
 				if _, err := uc.WriteToUDP(dgram.Data, addr); err != nil {
+					glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", cc.RemoteAddr(), addr, err)
 					errc <- err
 					return
 				}

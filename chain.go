@@ -340,7 +340,9 @@ func (c *ProxyChain) getHttp2Conn(header http.Header) (net.Conn, error) {
 	return conn, nil
 }
 
-// Use HTTP2 as transport to connect target addr
+// Use HTTP2 as transport to connect target addr.
+//
+// BUG: SOCKS5 is ignored, only HTTP supported
 func (c *ProxyChain) http2Connect(addr string) (net.Conn, error) {
 	if !c.Http2Enabled() {
 		return nil, errors.New("HTTP2 is not enabled")

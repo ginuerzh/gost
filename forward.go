@@ -111,6 +111,7 @@ func (node *cnode) run() {
 		lconn, err := net.ListenUDP("udp", nil)
 		if err != nil {
 			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", node.srcAddr, node.dstAddr, err)
+			node.err = err
 			return
 		}
 		node.conn = lconn
@@ -118,6 +119,7 @@ func (node *cnode) run() {
 		tc, err := node.getUDPTunnel()
 		if err != nil {
 			glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", node.srcAddr, node.dstAddr, err)
+			node.err = err
 			return
 		}
 		node.conn = tc
@@ -294,7 +296,7 @@ func (s *UdpForwardServer) ListenAndServe() error {
 			}
 			m[pkt.srcAddr.String()] = node
 			go node.run()
-			glog.V(LDEBUG).Infof("[udp] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
+			glog.V(LINFO).Infof("[udp] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
 		}
 
 		select {
