@@ -3,7 +3,7 @@ package gost
 import (
 	"crypto/tls"
 	"github.com/golang/glog"
-	"github.com/gorilla/websocket"
+	"gopkg.in/gorilla/websocket.v1"
 	"net"
 	"net/http"
 	"net/http/httputil"
