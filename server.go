@@ -94,6 +94,9 @@ func (s *ProxyServer) Serve() error {
 		if err != nil {
 			glog.V(LWARNING).Infoln("[kcp]", err)
 		}
+		if config == nil {
+			config = DefaultKCPConfig
+		}
 		// override crypt and key if specified explicitly
 		if s.Node.Users != nil {
 			config.Crypt = s.Node.Users[0].Username()
