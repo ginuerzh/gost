@@ -1,19 +1,21 @@
 package gost
 
 import (
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io"
-	//"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Proxy chain holds a list of proxy nodes
@@ -134,12 +136,51 @@ func (c *ProxyChain) initHttp2Client(config *tls.Config, nodes ...ProxyNode) {
 			if err != nil {
 				return conn, err
 			}
-			return tls.Client(conn, cfg), nil
+			conn = tls.Client(conn, cfg)
+
+			// enable HTTP2 ping-pong
+			pingIntvl, _ := strconv.Atoi(http2Node.Get("ping"))
+			if pingIntvl > 0 {
+				enablePing(conn, time.Duration(pingIntvl)*time.Second)
+			}
+
+			return conn, nil
 		},
 	}
 	c.http2Client = &http.Client{Transport: &tr}
 	c.http2Enabled = true
 
+}
+
+func enablePing(conn net.Conn, interval time.Duration) {
+	if conn == nil || interval == 0 {
+		return
+	}
+
+	glog.V(LINFO).Infoln("[http2] ping enabled, interval:", interval)
+	go func() {
+		t := time.NewTicker(interval)
+		var framer *http2.Framer
+		for {
+			select {
+			case <-t.C:
+				if framer == nil {
+					framer = http2.NewFramer(conn, conn)
+				}
+
+				var p [8]byte
+				rand.Read(p[:])
+				err := framer.WritePing(false, p)
+				if err != nil {
+					t.Stop()
+					framer = nil
+					glog.V(LWARNING).Infoln("[http2] ping:", err)
+					return
+				}
+				glog.V(LINFO).Infoln("[http2] ping OK")
+			}
+		}
+	}()
 }
 
 // Connect to addr through proxy chain

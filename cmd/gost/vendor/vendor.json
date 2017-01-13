@@ -15,10 +15,10 @@
 			"revisionTime": "2016-09-03T01:06:34Z"
 		},
 		{
-			"checksumSHA1": "QooLgOqsl0ivXxYygSepzSRAtjQ=",
+			"checksumSHA1": "omTjLIMmJwoaAJ99BOLRn7yWgtc=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "15a5d74b563e644a471fa42aab0a2876da6b1bb0",
-			"revisionTime": "2017-01-09T03:39:18Z"
+			"revision": "b244ce00c9cb4fa0051b5827b85e45241ab75935",
+			"revisionTime": "2017-01-13T07:27:51Z"
 		},
 		{
 			"checksumSHA1": "URsJa4y/sUUw/STmbeYx9EKqaYE=",
@@ -225,10 +225,10 @@
 			"revisionTime": "2016-10-24T22:38:16Z"
 		},
 		{
-			"checksumSHA1": "UovsbmfW33+DGfUh1geZpGzIoVo=",
+			"checksumSHA1": "N1akwAdrHVfPPrsFOhG2ouP21VA=",
 			"path": "golang.org/x/net/http2",
-			"revision": "65dfc08770ce66f74becfdff5f8ab01caef4e946",
-			"revisionTime": "2016-10-24T22:38:16Z"
+			"revision": "60c41d1de8da134c05b7b40154a9a82bf5b7edb9",
+			"revisionTime": "2017-01-10T03:16:11Z"
 		},
 		{
 			"checksumSHA1": "HzuGD7AwgC0p1az1WAQnEFnEk98=",
