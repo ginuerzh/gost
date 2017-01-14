@@ -2,18 +2,18 @@ package gost
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
-	"github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -115,15 +115,7 @@ func (c *ProxyConn) handshake() error {
 		}
 		c.conn = conn
 	case "ss": // shadowsocks
-		if len(c.Node.Users) > 0 {
-			method := c.Node.Users[0].Username()
-			password, _ := c.Node.Users[0].Password()
-			cipher, err := shadowsocks.NewCipher(method, password)
-			if err != nil {
-				return err
-			}
-			c.conn = &shadowConn{conn: shadowsocks.NewConn(c.conn, cipher)}
-		}
+		// nothing to do
 	case "http", "http2":
 		fallthrough
 	default:
@@ -138,26 +130,31 @@ func (c *ProxyConn) handshake() error {
 func (c *ProxyConn) Connect(addr string) error {
 	switch c.Node.Protocol {
 	case "ss": // shadowsocks
-		host, port, err := net.SplitHostPort(addr)
+		rawaddr, err := ss.RawAddr(addr)
 		if err != nil {
 			return err
 		}
-		p, _ := strconv.Atoi(port)
-		req := gosocks5.NewRequest(gosocks5.CmdConnect, &gosocks5.Addr{
-			Type: gosocks5.AddrDomain,
-			Host: host,
-			Port: uint16(p),
-		})
-		buf := bytes.Buffer{}
-		if err := req.Write(&buf); err != nil {
-			return err
+
+		var method, password string
+		if len(c.Node.Users) > 0 {
+			method = c.Node.Users[0].Username()
+			password, _ = c.Node.Users[0].Password()
 		}
-		b := buf.Bytes()
-		if _, err := c.Write(b[3:]); err != nil {
+		if c.Node.getBool("ota") && !strings.HasSuffix(method, "-auth") {
+			method += "-auth"
+		}
+
+		cipher, err := ss.NewCipher(method, password)
+		if err != nil {
 			return err
 		}
 
-		glog.V(LDEBUG).Infoln("[ss]", req)
+		ssc, err := ss.DialWithRawAddrConn(rawaddr, c.conn, cipher)
+		if err != nil {
+			return err
+		}
+		c.conn = &shadowConn{conn: ssc}
+		return nil
 	case "socks", "socks5":
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
