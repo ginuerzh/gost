@@ -78,13 +78,23 @@ var (
 
 type streamState int
 
+// HTTP/2 stream states.
+//
+// See http://tools.ietf.org/html/rfc7540#section-5.1.
+//
+// For simplicity, the server code merges "reserved (local)" into
+// "half-closed (remote)". This is one less state transition to track.
+// The only downside is that we send PUSH_PROMISEs slightly less
+// liberally than allowable. More discussion here:
+// https://lists.w3.org/Archives/Public/ietf-http-wg/2016JulSep/0599.html
+//
+// "reserved (remote)" is omitted since the client code does not
+// support server push.
 const (
 	stateIdle streamState = iota
 	stateOpen
 	stateHalfClosedLocal
 	stateHalfClosedRemote
-	stateResvLocal
-	stateResvRemote
 	stateClosed
 )
 
@@ -93,8 +103,6 @@ var stateName = [...]string{
 	stateOpen:             "Open",
 	stateHalfClosedLocal:  "HalfClosedLocal",
 	stateHalfClosedRemote: "HalfClosedRemote",
-	stateResvLocal:        "ResvLocal",
-	stateResvRemote:       "ResvRemote",
 	stateClosed:           "Closed",
 }
 
