@@ -185,7 +185,6 @@ func (node *cnode) run() {
 
 	go func() {
 		for pkt := range node.wChan {
-			glog.V(LDEBUG).Infof("[udp] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
 			timer.Reset(node.ttl)
 
 			switch c := node.conn.(type) {
@@ -196,6 +195,7 @@ func (node *cnode) run() {
 					errChan <- err
 					return
 				}
+				glog.V(LDEBUG).Infof("[udp] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
 
 			default:
 				dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(pkt.data)), 0, ToSocksAddr(pkt.dstAddr)), pkt.data)
@@ -205,6 +205,7 @@ func (node *cnode) run() {
 					errChan <- err
 					return
 				}
+				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
 			}
 		}
 	}()

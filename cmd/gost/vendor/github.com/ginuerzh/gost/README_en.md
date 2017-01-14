@@ -192,6 +192,18 @@ Gost HTTP2 supports two modes and self-adapting:
 * As a standard HTTP2 proxy, and backwards-compatible with the HTTPS proxy.
 * As transport (similar to wss), tunnel other protocol.
 
+Server:
+```bash
+gost -L=http2://:443
+```
+Client:
+```bash
+gost -L=:8080 -F=http2://server_ip:443?ping=30
+```
+
+The client supports the `ping` parameter to enable heartbeat detection (which is disabled by default). 
+Parameter value represents heartbeat interval seconds.
+
 **NOTE:** The proxy chain of gost supports only one HTTP2 proxy node and the nearest rule applies, 
 the first HTTP2 proxy node is treated as an HTTP2 proxy, and the other HTTP2 proxy nodes are treated as HTTPS proxies.
 
@@ -266,14 +278,6 @@ gost -L=:8080 -F=http+tls://server_ip:443
 #### HTTP2
 Gost supports only the HTTP2 protocol that uses TLS encryption (h2) and does not support plaintext HTTP2 (h2c) transport.
 
-Server:
-```bash
-gost -L=http2://:443
-```
-Client:
-```bash
-gost -L=:8080 -F=http2://server_ip:443
-```
 
 #### SOCKS5
 Gost supports the standard SOCKS5 protocol methods: no-auth (0x00) and user/pass (0x02), 
@@ -296,13 +300,13 @@ Otherwise, use standard SOCKS5 for communication (no-auth or user/pass).
 #### Shadowsocks
 Support for shadowsocks is based on library [shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go).
 
-Server (The OTA mode can be enabled by the ota parameter):
+Server (The OTA mode can be enabled by the ota parameter. When enabled, the client must use OTA mode):
 ```bash
 gost -L=ss://aes-128-cfb:123456@:8338?ota=1
 ```
-Client:
+Client (The OTA mode can be enabled by the ota parameter):
 ```bash
-gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
+gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338?ota=1
 ```
 
 #### TLS

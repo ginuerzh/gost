@@ -9,16 +9,16 @@
 			"revisionTime": "2015-11-07T02:50:05Z"
 		},
 		{
-			"checksumSHA1": "rcgVHpPL/iNmph28KP67c1UVmuM=",
+			"checksumSHA1": "8MJEwmyaAHcaQs6QdWRaNxPMeVU=",
 			"path": "github.com/ginuerzh/gosocks5",
-			"revision": "bc931b305d59cdf3d068eacff3c8d81536d3a39f",
-			"revisionTime": "2016-09-03T01:06:34Z"
+			"revision": "3d7715d71db0b8717afd7f07c326d6c88f2c3922",
+			"revisionTime": "2017-01-14T09:14:19Z"
 		},
 		{
-			"checksumSHA1": "wtL+WhNEsHwdX16Gqu8hyGpV/vY=",
+			"checksumSHA1": "v717b3fIhWDBx/Q4TQjkQ/qk+dg=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "14561f9ee2ac16c9bdded50281e0c86997183da9",
-			"revisionTime": "2017-01-14T05:51:16Z"
+			"revision": "cc241c845085694e0b75afaab9763c65a077e6df",
+			"revisionTime": "2017-01-14T06:13:31Z"
 		},
 		{
 			"checksumSHA1": "URsJa4y/sUUw/STmbeYx9EKqaYE=",

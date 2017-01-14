@@ -295,8 +295,6 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 
 // Upgrade upgrade an HTTP2 request to a bidirectional connection that preparing for tunneling other protocol, just like a websocket connection.
 func (s *Http2Server) Upgrade(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
-	w.Header().Set("Proxy-Agent", "gost/"+Version)
-
 	if r.Method != http.MethodConnect {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return nil, errors.New("Method not allowed")

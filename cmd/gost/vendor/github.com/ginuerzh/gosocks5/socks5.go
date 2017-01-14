@@ -4,12 +4,10 @@
 package gosocks5
 
 import (
-	//"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-	//"log"
 	"net"
 	"strconv"
 	"sync"
@@ -597,7 +595,10 @@ func ReadUDPDatagram(r io.Reader) (*UDPDatagram, error) {
 	b := lPool.Get().([]byte)
 	defer lPool.Put(b)
 
-	n, err := io.ReadAtLeast(r, b, 5)
+	// when r is a streaming (such as TCP connection), we may read more than the required data,
+	// but we don't know how to handle it. So we use io.ReadFull to instead of io.ReadAtLeast
+	// to make sure that no redundant data will be discarded.
+	n, err := io.ReadFull(r, b[:5])
 	if err != nil {
 		return nil, err
 	}
