@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type ProxyServer struct {
@@ -18,6 +19,7 @@ type ProxyServer struct {
 	TLSConfig *tls.Config
 	selector  *serverSelector
 	cipher    *ss.Cipher
+	ota       bool
 }
 
 func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *ProxyServer {
@@ -29,10 +31,20 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 	}
 
 	var cipher *ss.Cipher
-	if node.Protocol == "ss" && node.Users != nil {
+	var ota bool
+	if node.Protocol == "ss" {
 		var err error
-		method := node.Users[0].Username()
-		password, _ := node.Users[0].Password()
+		var method, password string
+
+		if len(node.Users) > 0 {
+			method = node.Users[0].Username()
+			password, _ = node.Users[0].Password()
+		}
+		ota = node.getBool("ota")
+		if strings.HasSuffix(method, "-auth") {
+			ota = true
+			method = strings.TrimSuffix(method, "-auth")
+		}
 		cipher, err = ss.NewCipher(method, password)
 		if err != nil {
 			glog.Fatal(err)
@@ -54,6 +66,7 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 			tlsConfig: config,
 		},
 		cipher: cipher,
+		ota:    ota,
 	}
 }
 
@@ -134,7 +147,7 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 	switch s.Node.Protocol {
 	case "ss": // shadowsocks
 		server := NewShadowServer(ss.NewConn(conn, s.cipher.Copy()), s)
-		server.OTA = s.Node.getBool("ota")
+		server.OTA = s.ota
 		server.Serve()
 		return
 	case "http":

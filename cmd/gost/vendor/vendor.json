@@ -15,10 +15,10 @@
 			"revisionTime": "2016-09-03T01:06:34Z"
 		},
 		{
-			"checksumSHA1": "QooLgOqsl0ivXxYygSepzSRAtjQ=",
+			"checksumSHA1": "t4O2pqbz2JHm0t6OGz7e7L28IRM=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "15a5d74b563e644a471fa42aab0a2876da6b1bb0",
-			"revisionTime": "2017-01-09T03:39:18Z"
+			"revision": "148d114c7366e1d15e807fe2e472f635fb6ed557",
+			"revisionTime": "2017-01-14T05:41:49Z"
 		},
 		{
 			"checksumSHA1": "URsJa4y/sUUw/STmbeYx9EKqaYE=",
@@ -153,7 +153,7 @@
 			"revisionTime": "2016-10-02T05:25:12Z"
 		},
 		{
-			"checksumSHA1": "VrDrpS/tpn8nfuFCY51U4eH/Jg0=",
+			"checksumSHA1": "o0WHRL8mNIhfsoWlzhdJ8du6+C8=",
 			"path": "github.com/shadowsocks/shadowsocks-go/shadowsocks",
 			"revision": "5c9897ecdf623f385ccb8c2c78e32c5256961b41",
 			"revisionTime": "2016-06-15T15:25:08Z"
