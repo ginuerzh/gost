@@ -177,7 +177,6 @@ func enablePing(conn net.Conn, interval time.Duration) {
 					glog.V(LWARNING).Infoln("[http2] ping:", err)
 					return
 				}
-				glog.V(LINFO).Infoln("[http2] ping OK")
 			}
 		}
 	}()
