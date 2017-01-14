@@ -191,6 +191,17 @@ gost的HTTP2支持两种模式并自适应：
 * 作为标准的HTTP2代理，并向下兼容HTTPS代理。
 * 作为transport(类似于wss)，传输其他协议。
 
+服务端:
+```bash
+gost -L=http2://:443
+```
+客户端:
+```bash
+gost -L=:8080 -F=http2://server_ip:443?ping=30
+```
+
+客户端支持`ping`参数开启心跳检测(默认不开启)，参数值代表心跳间隔秒数。
+
 **注：** gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。
 
 #### QUIC
@@ -265,14 +276,6 @@ gost -L=:8080 -F=http+tls://server_ip:443
 #### HTTP2
 gost仅支持使用TLS加密的HTTP2协议，不支持明文HTTP2传输。
 
-服务端:
-```bash
-gost -L=http2://:443
-```
-客户端:
-```bash
-gost -L=:8080 -F=http2://server_ip:443
-```
 
 #### SOCKS5
 gost支持标准SOCKS5协议的no-auth(0x00)和user/pass(0x02)方法，并在此基础上扩展了两个：tls(0x80)和tls-auth(0x82)，用于数据加密。
@@ -293,13 +296,13 @@ gost -L=:8080 -F=socks://server_ip:1080
 #### Shadowsocks
 gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
-服务端(可以通过ota参数开启OTA模式):
+服务端(可以通过ota参数开启OTA强制模式，开启后客户端必须使用OTA模式):
 ```bash
 gost -L=ss://aes-128-cfb:123456@:8338?ota=1
 ```
-客户端:
+客户端(可以通过ota参数开启OTA模式):
 ```bash
-gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338
+gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338?ota=1
 ```
 
 #### TLS
