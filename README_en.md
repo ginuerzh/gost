@@ -164,9 +164,10 @@ The data on the local TCP port 2222 is forwarded to 192.168.1.1:22 (through the 
 #### Local UDP port forwarding
 
 ```bash
-gost -L=udp://:5353/192.168.1.1:53 -F=...
+gost -L=udp://:5353/192.168.1.1:53?ttl=60 -F=...
 ```
-The data on the local UDP port 5353 is forwarded to 192.168.1.1:53 (through the proxy chain).
+The data on the local UDP port 5353 is forwarded to 192.168.1.1:53 (through the proxy chain). 
+Each forwarding channel has a timeout period. When this time is exceeded and there is no data interaction during this time period, the channel will be closed. The timeout value can be set by the `ttl` parameter. The default value is 60 seconds.
 
 **NOTE:** When forwarding UDP data, if there is a proxy chain, the end of the chain (the last -F parameter) must be gost SOCKS5 proxy.
 
