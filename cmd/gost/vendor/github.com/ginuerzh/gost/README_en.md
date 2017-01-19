@@ -40,7 +40,7 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used 
 
 > http - standard HTTP proxy: http://:8080
 
-> http+tls - standard HTTPS proxy (may need to provide a trusted certificate): http+tls://:443
+> http+tls - standard HTTPS proxy (may need to provide a trusted certificate): http+tls://:443 or https://:443
 
 > http2 - HTTP2 proxy and backwards-compatible with HTTPS proxy: http2://:443
 
@@ -253,7 +253,6 @@ gost -L=kcp://:8388?c=/path/to/conf/file
 ```
 
 **NOTE:** KCP will be enabled if and only if the proxy chain is not empty and the first proxy node (the first -F parameter) is of type KCP.
-When KCP is enabled, other proxy nodes are ignored.
 
 #### Transparent proxy
 Iptables-based transparent proxy

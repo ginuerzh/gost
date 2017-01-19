@@ -69,7 +69,7 @@ func (c *ProxyChain) SetNode(index int, node ProxyNode) {
 }
 
 // Init initialize the proxy chain.
-// KCP will be enabled if the first proxy node is KCP proxy (transport == kcp), the remaining nodes are ignored.
+// KCP will be enabled if the first proxy node is KCP proxy (transport == kcp).
 // HTTP2 will be enabled when at least one HTTP2 proxy node (scheme == http2) is present.
 //
 // NOTE: Should be called immediately when proxy nodes are ready.
