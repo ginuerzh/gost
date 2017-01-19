@@ -81,6 +81,26 @@ func (c *ProxyChain) Init() {
 
 	c.lastNode = &c.nodes[length-1]
 
+	// HTTP2 restrict: HTTP2 will be enabled when at least one HTTP2 proxy node is present.
+	for i, node := range c.nodes {
+		if node.Transport == "http2" {
+			glog.V(LINFO).Infoln("HTTP2 is enabled")
+			cfg := &tls.Config{
+				InsecureSkipVerify: node.insecureSkipVerify(),
+				ServerName:         node.serverName,
+			}
+			c.http2NodeIndex = i
+			c.initHttp2Client(cfg, c.nodes[:i]...)
+			break // shortest chain for HTTP2
+		}
+	}
+
+	for i, node := range c.nodes {
+		if node.Transport == "kcp" && i > 0 {
+			glog.Fatal("KCP must be the first node in the proxy chain")
+		}
+	}
+
 	if c.nodes[0].Transport == "kcp" {
 		glog.V(LINFO).Infoln("KCP is enabled")
 		c.kcpEnabled = true
@@ -97,20 +117,6 @@ func (c *ProxyChain) Init() {
 		}
 		c.kcpConfig = config
 		return
-	}
-
-	// HTTP2 restrict: HTTP2 will be enabled when at least one HTTP2 proxy node is present.
-	for i, node := range c.nodes {
-		if node.Transport == "http2" {
-			glog.V(LINFO).Infoln("HTTP2 is enabled")
-			cfg := &tls.Config{
-				InsecureSkipVerify: node.insecureSkipVerify(),
-				ServerName:         node.serverName,
-			}
-			c.http2NodeIndex = i
-			c.initHttp2Client(cfg, c.nodes[:i]...)
-			break // shortest chain for HTTP2
-		}
 	}
 }
 
@@ -198,19 +204,6 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 		return nil, ErrEmptyChain
 	}
 
-	if c.KCPEnabled() {
-		kcpConn, err := c.getKCPConn()
-		if err != nil {
-			return nil, err
-		}
-		pc := NewProxyConn(kcpConn, c.nodes[0])
-		if err := pc.Handshake(); err != nil {
-			pc.Close()
-			return nil, err
-		}
-		return pc, nil
-	}
-
 	if c.Http2Enabled() {
 		nodes = nodes[c.http2NodeIndex+1:]
 		if len(nodes) == 0 {
@@ -241,23 +234,6 @@ func (c *ProxyChain) GetConn() (net.Conn, error) {
 func (c *ProxyChain) dialWithNodes(withHttp2 bool, addr string, nodes ...ProxyNode) (conn net.Conn, err error) {
 	if len(nodes) == 0 {
 		return net.DialTimeout("tcp", addr, DialTimeout)
-	}
-
-	if c.KCPEnabled() {
-		kcpConn, err := c.getKCPConn()
-		if err != nil {
-			return nil, err
-		}
-		pc := NewProxyConn(kcpConn, nodes[0])
-		if err := pc.Handshake(); err != nil {
-			pc.Close()
-			return nil, err
-		}
-		if err := pc.Connect(addr); err != nil {
-			pc.Close()
-			return nil, err
-		}
-		return pc, nil
 	}
 
 	if withHttp2 && c.Http2Enabled() {
@@ -291,6 +267,8 @@ func (c *ProxyChain) travelNodes(withHttp2 bool, nodes ...ProxyNode) (conn *Prox
 
 	if withHttp2 && c.Http2Enabled() {
 		cc, err = c.http2Connect(node.Addr)
+	} else if node.Transport == "kcp" {
+		cc, err = c.getKCPConn()
 	} else {
 		cc, err = net.DialTimeout("tcp", node.Addr, DialTimeout)
 	}
@@ -300,19 +278,20 @@ func (c *ProxyChain) travelNodes(withHttp2 bool, nodes ...ProxyNode) (conn *Prox
 	setKeepAlive(cc, KeepAliveTime)
 
 	pc := NewProxyConn(cc, node)
+	conn = pc
 	if err = pc.Handshake(); err != nil {
 		return
 	}
-	conn = pc
+
 	for _, node := range nodes[1:] {
 		if err = conn.Connect(node.Addr); err != nil {
 			return
 		}
 		pc := NewProxyConn(conn, node)
+		conn = pc
 		if err = pc.Handshake(); err != nil {
 			return
 		}
-		conn = pc
 	}
 	return
 }

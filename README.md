@@ -38,25 +38,25 @@ scheme分为两部分: protocol+transport
 
 protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic, kcp), 二者可以任意组合，或单独使用:
 
-> http - 作为HTTP代理: http://:8080
+> http - HTTP代理: http://:8080
 
-> http+tls - 作为HTTPS代理(可能需要提供受信任的证书): http+tls://:443
+> http+tls - HTTPS代理(可能需要提供受信任的证书): http+tls://:443或https://:443
 
-> http2 - 作为HTTP2代理并向下兼容HTTPS代理: http2://:443
+> http2 - HTTP2代理并向下兼容HTTPS代理: http2://:443
 
-> socks - 作为标准SOCKS5代理(支持tls协商加密): socks://:1080
+> socks - 标准SOCKS5代理(支持tls协商加密): socks://:1080
 
-> socks+wss - 作为SOCKS5代理，使用websocket传输数据: socks+wss://:1080
+> socks+wss - SOCKS5代理，使用websocket传输数据: socks+wss://:1080
 
-> tls - 作为HTTPS/SOCKS5代理，使用tls传输数据: tls://:443
+> tls - HTTPS/SOCKS5代理，使用tls传输数据: tls://:443
 
-> ss - 作为Shadowsocks服务，ss://aes-256-cfb:123456@:8338
+> ss - Shadowsocks代理，ss://aes-256-cfb:123456@:8338
 
-> quic - 作为QUIC代理，quic://:6121
+> quic - QUIC代理，quic://:6121
 
-> kcp - 作为KCP代理，kcp://:8388或kcp://aes:123456@:8388
+> kcp - KCP代理，kcp://:8388或kcp://aes:123456@:8388
 
-> redirect - 作为透明代理，redirect://:12345
+> redirect - 透明代理，redirect://:12345
 
 #### 端口转发
 
@@ -251,7 +251,6 @@ gost -L=kcp://:8388?c=/path/to/conf/file
 ```
 
 **注：** 客户端若要开启KCP转发，当且仅当代理链不为空且首个代理节点(第一个-F参数)为kcp类型。
-当KCP转发开启，代理链中的其他代理节点将被忽略。
 
 #### 透明代理
 基于iptables的透明代理。
