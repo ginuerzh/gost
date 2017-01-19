@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"strconv"
 	"sync"
@@ -591,7 +592,6 @@ func NewUDPDatagram(header *UDPHeader, data []byte) *UDPDatagram {
 }
 
 func ReadUDPDatagram(r io.Reader) (*UDPDatagram, error) {
-	// b := make([]byte, 65797)
 	b := lPool.Get().([]byte)
 	defer lPool.Put(b)
 
@@ -621,16 +621,20 @@ func ReadUDPDatagram(r io.Reader) (*UDPDatagram, error) {
 		return nil, ErrBadAddrType
 	}
 
-	// extended feature, for udp over tcp, using reserved field for data length
 	dlen := int(header.Rsv)
-	if n < hlen+dlen {
+	if dlen == 0 { // standard SOCKS5 UDP datagram
+		extra, err := ioutil.ReadAll(r) // we assume no redundant data
+		if err != nil {
+			return nil, err
+		}
+		copy(b[n:], extra)
+		n += len(extra) // total length
+		dlen = n - hlen // data length
+	} else { // extended feature, for UDP over TCP, using reserved field as data length
 		if _, err := io.ReadFull(r, b[n:hlen+dlen]); err != nil {
 			return nil, err
 		}
 		n = hlen + dlen
-	}
-	if dlen == 0 {
-		dlen = n - hlen
 	}
 
 	header.Addr = new(Addr)

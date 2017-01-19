@@ -321,7 +321,7 @@ func (s *Socks5Server) handleUDPRelay(req *gosocks5.Request) {
 		cc.SetReadDeadline(time.Time{})
 		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s [tun: %s]", s.conn.RemoteAddr(), socksAddr, reply.Addr)
 
-		go s.tunnelUDP(relay, cc, true)
+		go s.tunnelClientUDP(relay, cc)
 	}
 
 	glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), socksAddr)
@@ -368,7 +368,7 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), socksAddr, reply)
 
 		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), socksAddr)
-		s.tunnelUDP(uc, s.conn, false)
+		s.tunnelServerUDP(s.conn, uc)
 		glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", s.conn.RemoteAddr(), socksAddr)
 		return
 	}
@@ -535,7 +535,7 @@ func (s *Socks5Server) transportUDP(relay, peer *net.UDPConn) (err error) {
 	return
 }
 
-func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err error) {
+func (s *Socks5Server) tunnelClientUDP(uc *net.UDPConn, cc net.Conn) (err error) {
 	errc := make(chan error, 2)
 
 	var clientAddr *net.UDPAddr
@@ -551,32 +551,22 @@ func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err
 				return
 			}
 
-			var dgram *gosocks5.UDPDatagram
-			if client { // pipe from relay to tunnel
-				dgram, err = gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
-				if err != nil {
-					errc <- err
-					return
-				}
-				if clientAddr == nil {
-					clientAddr = addr
-				}
-				dgram.Header.Rsv = uint16(len(dgram.Data))
-				if err := dgram.Write(cc); err != nil {
-					errc <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", uc.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
-			} else { // pipe from peer to tunnel
-				dgram = gosocks5.NewUDPDatagram(
-					gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
-				if err := dgram.Write(cc); err != nil {
-					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), dgram.Header.Addr, err)
-					errc <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", cc.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
+			// glog.V(LDEBUG).Infof("read udp %d, % #x", n, b[:n])
+			// pipe from relay to tunnel
+			dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n]))
+			if err != nil {
+				errc <- err
+				return
 			}
+			if clientAddr == nil {
+				clientAddr = addr
+			}
+			dgram.Header.Rsv = uint16(len(dgram.Data))
+			if err := dgram.Write(cc); err != nil {
+				errc <- err
+				return
+			}
+			glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", uc.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
 		}
 	}()
 
@@ -589,31 +579,75 @@ func (s *Socks5Server) tunnelUDP(uc *net.UDPConn, cc net.Conn, client bool) (err
 				return
 			}
 
-			if client { // pipe from tunnel to relay
-				if clientAddr == nil {
-					continue
-				}
-				dgram.Header.Rsv = 0
-
-				buf := bytes.Buffer{}
-				dgram.Write(&buf)
-				if _, err := uc.WriteToUDP(buf.Bytes(), clientAddr); err != nil {
-					errc <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", uc.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
-			} else { // pipe from tunnel to peer
-				addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
-				if err != nil {
-					continue // drop silently
-				}
-				if _, err := uc.WriteToUDP(dgram.Data, addr); err != nil {
-					glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", cc.RemoteAddr(), addr, err)
-					errc <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", cc.RemoteAddr(), addr, len(dgram.Data))
+			// pipe from tunnel to relay
+			if clientAddr == nil {
+				continue
 			}
+			dgram.Header.Rsv = 0
+
+			buf := bytes.Buffer{}
+			dgram.Write(&buf)
+			if _, err := uc.WriteToUDP(buf.Bytes(), clientAddr); err != nil {
+				errc <- err
+				return
+			}
+			glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", uc.LocalAddr(), dgram.Header.Addr, len(dgram.Data))
+		}
+	}()
+
+	select {
+	case err = <-errc:
+	}
+
+	return
+}
+
+func (s *Socks5Server) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error) {
+	errc := make(chan error, 2)
+
+	go func() {
+		b := make([]byte, LargeBufferSize)
+
+		for {
+			n, addr, err := uc.ReadFromUDP(b)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), addr, err)
+				errc <- err
+				return
+			}
+
+			// pipe from peer to tunnel
+			dgram := gosocks5.NewUDPDatagram(
+				gosocks5.NewUDPHeader(uint16(n), 0, ToSocksAddr(addr)), b[:n])
+			if err := dgram.Write(cc); err != nil {
+				glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), dgram.Header.Addr, err)
+				errc <- err
+				return
+			}
+			glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s length: %d", cc.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
+		}
+	}()
+
+	go func() {
+		for {
+			dgram, err := gosocks5.ReadUDPDatagram(cc)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp-tun] %s -> 0 : %s", cc.RemoteAddr(), err)
+				errc <- err
+				return
+			}
+
+			// pipe from tunnel to peer
+			addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+			if err != nil {
+				continue // drop silently
+			}
+			if _, err := uc.WriteToUDP(dgram.Data, addr); err != nil {
+				glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", cc.RemoteAddr(), addr, err)
+				errc <- err
+				return
+			}
+			glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s length: %d", cc.RemoteAddr(), addr, len(dgram.Data))
 		}
 	}()
 
