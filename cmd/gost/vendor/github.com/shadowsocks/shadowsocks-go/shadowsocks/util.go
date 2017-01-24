@@ -1,16 +1,16 @@
 package shadowsocks
 
 import (
-	"errors"
-	"fmt"
-	"os"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/binary"
+	"errors"
+	"fmt"
+	"os"
 )
 
 func PrintVersion() {
-	const version = "1.1.5"
+	const version = "1.2.0"
 	fmt.Println("shadowsocks-go version", version)
 }
 

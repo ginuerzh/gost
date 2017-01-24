@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "IFJyJgPCjumDG37lEb0lyRBBGZE=",
+			"path": "github.com/Yawning/chacha20",
+			"revision": "c91e78db502ff629614837aacb7aa4efa61c651a",
+			"revisionTime": "2016-04-30T09:49:23Z"
+		},
+		{
 			"checksumSHA1": "QPs3L3mjPoi+a9GJCjW8HhyJczM=",
 			"path": "github.com/codahale/chacha20",
 			"revision": "ec07b4f69a3f70b1dd2a8ad77230deb1ba5d6953",
@@ -15,10 +21,10 @@
 			"revisionTime": "2017-01-19T05:34:58Z"
 		},
 		{
-			"checksumSHA1": "b0uHAM/lCGCJ9GeKfClvrMMWXQM=",
+			"checksumSHA1": "idpL1fpHpfntk74IVfWtkP1PMZs=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "358f57add6087d77b1d978e92e2f7c8073c2f544",
-			"revisionTime": "2017-01-21T03:14:59Z"
+			"revision": "321b03712af504981d35a47c50c2cfe4dd788a9d",
+			"revisionTime": "2017-01-21T03:16:33Z"
 		},
 		{
 			"checksumSHA1": "URsJa4y/sUUw/STmbeYx9EKqaYE=",
@@ -153,10 +159,10 @@
 			"revisionTime": "2016-10-02T05:25:12Z"
 		},
 		{
-			"checksumSHA1": "o0WHRL8mNIhfsoWlzhdJ8du6+C8=",
+			"checksumSHA1": "MRsfMrdZwnnCTfIzT3czcj0lb0s=",
 			"path": "github.com/shadowsocks/shadowsocks-go/shadowsocks",
-			"revision": "5c9897ecdf623f385ccb8c2c78e32c5256961b41",
-			"revisionTime": "2016-06-15T15:25:08Z"
+			"revision": "97a5c71f80ba5f5b3e549f14a619fe557ff4f3c9",
+			"revisionTime": "2017-01-21T20:35:16Z"
 		},
 		{
 			"checksumSHA1": "JsJdKXhz87gWenMwBeejTOeNE7k=",

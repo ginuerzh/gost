@@ -32,7 +32,7 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *Prox
 
 	var cipher *ss.Cipher
 	var ota bool
-	if node.Protocol == "ss" {
+	if node.Protocol == "ss" || node.Transport == "ssu" {
 		var err error
 		var method, password string
 
@@ -98,8 +98,6 @@ func (s *ProxyServer) Serve() error {
 		return NewRTcpForwardServer(s).Serve()
 	case "rudp": // Remote UDP port forwarding
 		return NewRUdpForwardServer(s).Serve()
-	case "ssu": // TODO: shadowsocks udp relay
-		return NewShadowUdpServer(s).ListenAndServe()
 	case "quic":
 		return NewQuicServer(s).ListenAndServeTLS(s.TLSConfig)
 	case "kcp":
@@ -118,6 +116,12 @@ func (s *ProxyServer) Serve() error {
 		return NewKCPServer(s, config).ListenAndServe()
 	case "redirect":
 		return NewRedsocksTCPServer(s).ListenAndServe()
+	case "ssu": // shadowsocks udp relay
+		ttl, _ := strconv.Atoi(s.Node.Get("ttl"))
+		if ttl <= 0 {
+			ttl = DefaultTTL
+		}
+		return NewShadowUdpServer(s, ttl).ListenAndServe()
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}

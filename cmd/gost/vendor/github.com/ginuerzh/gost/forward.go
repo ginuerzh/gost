@@ -63,15 +63,15 @@ func (s *TcpForwardServer) handleTcpForward(conn net.Conn, raddr net.Addr) {
 }
 
 type packet struct {
-	srcAddr *net.UDPAddr // src address
-	dstAddr *net.UDPAddr // dest address
+	srcAddr string // src address
+	dstAddr string // dest address
 	data    []byte
 }
 
 type cnode struct {
 	chain            *ProxyChain
 	conn             net.Conn
-	srcAddr, dstAddr *net.UDPAddr
+	srcAddr, dstAddr string
 	rChan, wChan     chan *packet
 	err              error
 	ttl              time.Duration
@@ -146,13 +146,9 @@ func (node *cnode) run() {
 				timer.Reset(node.ttl)
 				glog.V(LDEBUG).Infof("[udp] %s <<< %s : length %d", node.srcAddr, addr, n)
 
-				if node.dstAddr.String() != addr.String() {
-					glog.V(LWARNING).Infof("[udp] %s <- %s : dst-addr mismatch (%s)", node.srcAddr, node.dstAddr, addr)
-					break
-				}
 				select {
 				// swap srcAddr with dstAddr
-				case node.rChan <- &packet{srcAddr: node.dstAddr, dstAddr: node.srcAddr, data: b[:n]}:
+				case node.rChan <- &packet{srcAddr: addr.String(), dstAddr: node.srcAddr, data: b[:n]}:
 				case <-time.After(time.Second * 3):
 					glog.V(LWARNING).Infof("[udp] %s <- %s : %s", node.srcAddr, node.dstAddr, "recv queue is full, discard")
 				}
@@ -169,13 +165,9 @@ func (node *cnode) run() {
 				timer.Reset(node.ttl)
 				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s : length %d", node.srcAddr, dgram.Header.Addr.String(), len(dgram.Data))
 
-				if dgram.Header.Addr.String() != node.dstAddr.String() {
-					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : dst-addr mismatch (%s)", node.srcAddr, node.dstAddr, dgram.Header.Addr)
-					break
-				}
 				select {
 				// swap srcAddr with dstAddr
-				case node.rChan <- &packet{srcAddr: node.dstAddr, dstAddr: node.srcAddr, data: dgram.Data}:
+				case node.rChan <- &packet{srcAddr: dgram.Header.Addr.String(), dstAddr: node.srcAddr, data: dgram.Data}:
 				case <-time.After(time.Second * 3):
 					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", node.srcAddr, node.dstAddr, "recv queue is full, discard")
 				}
@@ -187,9 +179,15 @@ func (node *cnode) run() {
 		for pkt := range node.wChan {
 			timer.Reset(node.ttl)
 
+			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
+				continue
+			}
+
 			switch c := node.conn.(type) {
 			case *net.UDPConn:
-				if _, err := c.WriteToUDP(pkt.data, pkt.dstAddr); err != nil {
+				if _, err := c.WriteToUDP(pkt.data, dstAddr); err != nil {
 					glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
 					node.err = err
 					errChan <- err
@@ -198,7 +196,7 @@ func (node *cnode) run() {
 				glog.V(LDEBUG).Infof("[udp] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
 
 			default:
-				dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(pkt.data)), 0, ToSocksAddr(pkt.dstAddr)), pkt.data)
+				dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(pkt.data)), 0, ToSocksAddr(dstAddr)), pkt.data)
 				if err := dgram.Write(c); err != nil {
 					glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
 					node.err = err
@@ -255,7 +253,7 @@ func (s *UdpForwardServer) ListenAndServe() error {
 			}
 
 			select {
-			case ch <- &packet{srcAddr: addr, dstAddr: raddr, data: b[:n]}:
+			case ch <- &packet{srcAddr: addr.String(), dstAddr: raddr.String(), data: b[:n]}:
 			case <-time.After(time.Second * 3):
 				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", addr, raddr, "send queue is full, discard")
 			}
@@ -264,7 +262,12 @@ func (s *UdpForwardServer) ListenAndServe() error {
 	// start recv queue
 	go func(ch <-chan *packet) {
 		for pkt := range ch {
-			if _, err := conn.WriteToUDP(pkt.data, pkt.dstAddr); err != nil {
+			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
+			if err != nil {
+				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
+				continue
+			}
+			if _, err := conn.WriteToUDP(pkt.data, dstAddr); err != nil {
 				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
 				return
 			}
@@ -285,7 +288,7 @@ func (s *UdpForwardServer) ListenAndServe() error {
 			}
 		}
 
-		node, ok := m[pkt.srcAddr.String()]
+		node, ok := m[pkt.srcAddr]
 		if !ok {
 			node = &cnode{
 				chain:   s.Base.Chain,
@@ -295,7 +298,7 @@ func (s *UdpForwardServer) ListenAndServe() error {
 				wChan:   make(chan *packet, 32),
 				ttl:     time.Duration(s.TTL) * time.Second,
 			}
-			m[pkt.srcAddr.String()] = node
+			m[pkt.srcAddr] = node
 			go node.run()
 			glog.V(LINFO).Infof("[udp] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
 		}

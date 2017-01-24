@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
@@ -63,47 +64,6 @@ func (s *ShadowServer) Serve() {
 		s.Base.transport(&shadowConn{conn: s.conn}, cc)
 	}
 	glog.V(LINFO).Infof("[ss] %s >-< %s", s.conn.RemoteAddr(), addr)
-}
-
-type ShadowUdpServer struct {
-	Base    *ProxyServer
-	Handler func(conn *net.UDPConn, addr *net.UDPAddr, data []byte)
-}
-
-func NewShadowUdpServer(base *ProxyServer) *ShadowUdpServer {
-	return &ShadowUdpServer{Base: base}
-}
-
-func (s *ShadowUdpServer) ListenAndServe() error {
-	laddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-	lconn, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		return err
-	}
-	defer lconn.Close()
-
-	if s.Handler == nil {
-		s.Handler = s.HandleConn
-	}
-
-	for {
-		b := make([]byte, LargeBufferSize)
-		n, addr, err := lconn.ReadFromUDP(b)
-		if err != nil {
-			glog.V(LWARNING).Infoln(err)
-			continue
-		}
-
-		go s.Handler(lconn, addr, b[:n])
-	}
-}
-
-// TODO: shadowsocks udp relay handler
-func (s *ShadowUdpServer) HandleConn(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
-
 }
 
 // This function is copied from shadowsocks library with some modification.
@@ -275,4 +235,110 @@ func (c *shadowConn) SetReadDeadline(t time.Time) error {
 
 func (c *shadowConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
+}
+
+type ShadowUdpServer struct {
+	Base *ProxyServer
+	TTL  int
+}
+
+func NewShadowUdpServer(base *ProxyServer, ttl int) *ShadowUdpServer {
+	return &ShadowUdpServer{Base: base, TTL: ttl}
+}
+
+func (s *ShadowUdpServer) ListenAndServe() error {
+	laddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Addr)
+	if err != nil {
+		return err
+	}
+	lconn, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		return err
+	}
+	defer lconn.Close()
+
+	conn := ss.NewSecurePacketConn(lconn, s.Base.cipher.Copy(), true) // force OTA on
+
+	rChan, wChan := make(chan *packet, 128), make(chan *packet, 128)
+	// start send queue
+	go func(ch chan<- *packet) {
+		for {
+			b := make([]byte, MediumBufferSize)
+			n, addr, err := conn.ReadFrom(b[3:]) // add rsv and frag fields to make it the standard SOCKS5 UDP datagram
+			if err != nil {
+				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, laddr, err)
+				continue
+			}
+
+			if b[3]&ss.OneTimeAuthMask > 0 {
+				glog.V(LWARNING).Infof("[ssu] %s -> %s : client does not support OTA", addr, laddr)
+				continue
+			}
+			b[3] &= ss.AddrMask
+
+			dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n+3]))
+			if err != nil {
+				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, laddr, err)
+				continue
+			}
+
+			select {
+			case ch <- &packet{srcAddr: addr.String(), dstAddr: dgram.Header.Addr.String(), data: b[:n+3]}:
+			case <-time.After(time.Second * 3):
+				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, dgram.Header.Addr.String(), "send queue is full, discard")
+			}
+		}
+	}(wChan)
+	// start recv queue
+	go func(ch <-chan *packet) {
+		for pkt := range ch {
+			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
+			if err != nil {
+				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
+				continue
+			}
+			if _, err := conn.WriteTo(pkt.data, dstAddr); err != nil {
+				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
+				return
+			}
+		}
+	}(rChan)
+
+	// mapping client to node
+	m := make(map[string]*cnode)
+
+	// start dispatcher
+	for pkt := range wChan {
+		// clear obsolete nodes
+		for k, node := range m {
+			if node != nil && node.err != nil {
+				close(node.wChan)
+				delete(m, k)
+				glog.V(LINFO).Infof("[ssu] clear node %s", k)
+			}
+		}
+
+		node, ok := m[pkt.srcAddr]
+		if !ok {
+			node = &cnode{
+				chain:   s.Base.Chain,
+				srcAddr: pkt.srcAddr,
+				dstAddr: pkt.dstAddr,
+				rChan:   rChan,
+				wChan:   make(chan *packet, 32),
+				ttl:     time.Duration(s.TTL) * time.Second,
+			}
+			m[pkt.srcAddr] = node
+			go node.run()
+			glog.V(LINFO).Infof("[ssu] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
+		}
+
+		select {
+		case node.wChan <- pkt:
+		case <-time.After(time.Second * 3):
+			glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, "node send queue is full, discard")
+		}
+	}
+
+	return nil
 }
