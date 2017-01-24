@@ -283,7 +283,7 @@ func (s *ShadowUdpServer) ListenAndServe() error {
 			}
 
 			select {
-			case ch <- &packet{srcAddr: addr.String(), dstAddr: dgram.Header.Addr.String(), data: b[:n+3]}:
+			case ch <- &packet{srcAddr: addr.String(), dstAddr: dgram.Header.Addr.String(), data: dgram.Data}:
 			case <-time.After(time.Second * 3):
 				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, dgram.Header.Addr.String(), "send queue is full, discard")
 			}
@@ -292,12 +292,26 @@ func (s *ShadowUdpServer) ListenAndServe() error {
 	// start recv queue
 	go func(ch <-chan *packet) {
 		for pkt := range ch {
+			srcAddr, err := net.ResolveUDPAddr("udp", pkt.srcAddr)
+			if err != nil {
+				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
+				continue
+			}
 			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
 			if err != nil {
 				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
 				continue
 			}
-			if _, err := conn.WriteTo(pkt.data, dstAddr); err != nil {
+
+			dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, ToSocksAddr(srcAddr)), pkt.data)
+			b := bytes.Buffer{}
+			dgram.Write(&b)
+			if b.Len() < 10 {
+				glog.V(LWARNING).Infof("[ssu] %s <- %s : invalid udp datagram", pkt.dstAddr, pkt.srcAddr)
+				continue
+			}
+
+			if _, err := conn.WriteTo(b.Bytes()[3:], dstAddr); err != nil { // remove rsv and frag fields to make it standard shadowsocks UDP datagram
 				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
 				return
 			}
