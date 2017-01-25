@@ -10,7 +10,7 @@ Features
 * Standard HTTP/HTTPS/SOCKS5 proxy protocols support
 * TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
-* Shadowsocks protocol support (OTA: 2.2+)
+* Shadowsocks protocol support (OTA: 2.2+, UDP: 2.4+)
 * Local/remote port forwarding (2.1+)
 * HTTP 2.0 support (2.2+)
 * Experimental QUIC support (2.3+)
@@ -50,7 +50,9 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used 
 
 > tls - HTTPS/SOCKS5 over tls: tls://:443
 
-> ss - standard shadowsocks proxy, ss://aes-256-cfb:123456@:8338
+> ss - standard shadowsocks proxy, ss://chacha20:123456@:8338
+
+> ssu - shadowsocks UDP relay，ssu://chacha20:123456@:8338
 
 > quic - standard QUIC proxy, quic://:6121
 
@@ -295,7 +297,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 If both ends are gosts (as example above), the data transfer will be encrypted (using tls or tls-auth). 
 Otherwise, use standard SOCKS5 for communication (no-auth or user/pass).
 
-**NOTE:** If transport already supports encryption (wss, tls, http2), SOCKS5 will no longer use the encryption method to prevent unnecessary double encryption.
+**NOTE:** If transport already supports encryption (wss, tls, http2, kcp), SOCKS5 will no longer use the encryption method to prevent unnecessary double encryption.
 
 #### Shadowsocks
 Support for shadowsocks is based on library [shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go).
@@ -307,6 +309,14 @@ gost -L=ss://aes-128-cfb:123456@:8338?ota=1
 Client (The OTA mode can be enabled by the ota parameter):
 ```bash
 gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338?ota=1
+```
+
+##### Shadowsocks UDP relay
+Currently, only the server supports UDP, and only OTA mode is supported.
+
+Server:
+```bash
+gost -L=ssu://aes-128-cfb:123456@:8338
 ```
 
 #### TLS
