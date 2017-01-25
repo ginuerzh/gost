@@ -12,7 +12,7 @@ gost - GO Simple Tunnel
 * 支持标准HTTP/HTTPS/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议 (OTA: 2.2+)
+* 支持Shadowsocks协议 (OTA: 2.2+，UDP: 2.4+)
 * 支持本地/远程端口转发 (2.1+)
 * 支持HTTP 2.0 (2.2+)
 * 实验性支持QUIC (2.3+)
@@ -50,7 +50,9 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 
 > tls - HTTPS/SOCKS5代理，使用tls传输数据: tls://:443
 
-> ss - Shadowsocks代理，ss://aes-256-cfb:123456@:8338
+> ss - Shadowsocks代理，ss://chacha20:123456@:8338
+
+> ssu - Shadowsocks UDP relay，ssu://chacha20:123456@:8338
 
 > quic - QUIC代理，quic://:6121
 
@@ -291,7 +293,7 @@ gost -L=:8080 -F=socks://server_ip:1080
 
 如果两端都是gost(如上)则数据传输会被加密(协商使用tls或tls-auth方法)，否则使用标准SOCKS5进行通讯(no-auth或user/pass方法)。
 
-**注：** 如果transport已经支持加密(wss, tls, http2)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
+**注：** 如果transport已经支持加密(wss, tls, http2, kcp)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
 
 #### Shadowsocks
 gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
@@ -303,6 +305,15 @@ gost -L=ss://aes-128-cfb:123456@:8338?ota=1
 客户端(可以通过ota参数开启OTA模式):
 ```bash
 gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338?ota=1
+```
+
+##### Shadowsocks UDP relay
+
+目前仅服务端支持UDP，且仅支持OTA模式。
+
+服务端:
+```bash
+gost -L=ssu://aes-128-cfb:123456@:8338
 ```
 
 #### TLS

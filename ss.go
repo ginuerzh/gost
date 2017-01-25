@@ -270,12 +270,7 @@ func (s *ShadowUdpServer) ListenAndServe() error {
 				continue
 			}
 
-			if b[3]&ss.OneTimeAuthMask > 0 {
-				glog.V(LWARNING).Infof("[ssu] %s -> %s : client does not support OTA", addr, laddr)
-				continue
-			}
-			b[3] &= ss.AddrMask
-
+			b[3] &= ss.AddrMask // remove OTA flag
 			dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n+3]))
 			if err != nil {
 				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, laddr, err)

@@ -270,7 +270,7 @@ func (s *ShadowUdpServer) ListenAndServe() error {
 				continue
 			}
 
-			if b[3]&ss.OneTimeAuthMask > 0 {
+			if b[3]&ss.OneTimeAuthMask == 0 {
 				glog.V(LWARNING).Infof("[ssu] %s -> %s : client does not support OTA", addr, laddr)
 				continue
 			}
