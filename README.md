@@ -25,6 +25,15 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 
 在gost中，gost与其他代理服务都被看作是代理节点，gost可以自己处理请求，或者将请求转发给任意一个或多个代理节点。
 
+
+Ubuntu Store
+------
+gost已经上架ubuntu store，在ubuntu 16.04上可以直接通过`snap`来安装：
+
+```bash
+$ sudo snap install gost
+```
+
 参数说明
 ------
 #### 代理及代理链

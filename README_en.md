@@ -24,6 +24,16 @@ Google group: https://groups.google.com/d/forum/go-gost
 Gost and other proxy services are considered to be proxy nodes, 
 gost can handle the request itself, or forward the request to any one or more proxy nodes.
 
+
+Ubuntu Store
+------
+Gost has been released in ubuntu store, and can be installed directly through the `snap` in ubuntu 16.04:
+
+```bash
+$ sudo snap install gost
+```
+
+
 Parameter Description
 ------
 #### Proxy and proxy chain
