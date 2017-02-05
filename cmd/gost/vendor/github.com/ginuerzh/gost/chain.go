@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
+	"github.com/ginuerzh/pht"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io"
@@ -29,6 +30,7 @@ type ProxyChain struct {
 	kcpConfig      *KCPConfig
 	kcpSession     *KCPSession
 	kcpMutex       sync.Mutex
+	phttpClient    *pht.Client
 }
 
 func NewProxyChain(nodes ...ProxyNode) *ProxyChain {
@@ -96,8 +98,8 @@ func (c *ProxyChain) Init() {
 	}
 
 	for i, node := range c.nodes {
-		if node.Transport == "kcp" && i > 0 {
-			glog.Fatal("KCP must be the first node in the proxy chain")
+		if (node.Transport == "kcp" || node.Transport == "pht" || node.Transport == "quic") && i > 0 {
+			glog.Fatal("KCP/PHT/QUIC must be the first node in the proxy chain")
 		}
 	}
 
@@ -117,6 +119,11 @@ func (c *ProxyChain) Init() {
 		}
 		c.kcpConfig = config
 		return
+	}
+
+	if c.nodes[0].Transport == "pht" {
+		glog.V(LINFO).Infoln("Pure HTTP mode is enabled")
+		c.phttpClient = pht.NewClient(c.nodes[0].Addr, c.nodes[0].Get("key"))
 	}
 }
 
@@ -269,6 +276,8 @@ func (c *ProxyChain) travelNodes(withHttp2 bool, nodes ...ProxyNode) (conn *Prox
 		cc, err = c.http2Connect(node.Addr)
 	} else if node.Transport == "kcp" {
 		cc, err = c.getKCPConn()
+	} else if node.Transport == "pht" {
+		cc, err = c.phttpClient.Dial()
 	} else {
 		cc, err = net.DialTimeout("tcp", node.Addr, DialTimeout)
 	}

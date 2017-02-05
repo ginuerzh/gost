@@ -122,6 +122,8 @@ func (s *ProxyServer) Serve() error {
 			ttl = DefaultTTL
 		}
 		return NewShadowUdpServer(s, ttl).ListenAndServe()
+	case "pht": // pure http tunnel
+		return NewPureHttpServer(s).ListenAndServe()
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}
@@ -238,7 +240,7 @@ func (_ *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
 
 	select {
 	case err = <-errc:
-		//glog.V(LWARNING).Infoln("transport exit", err)
+		// glog.V(LWARNING).Infoln("transport exit", err)
 	}
 
 	return

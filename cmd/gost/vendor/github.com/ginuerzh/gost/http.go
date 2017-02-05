@@ -4,14 +4,14 @@ import (
 	"bufio"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
+	"github.com/ginuerzh/pht"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
-	//"strings"
-	"errors"
 	"time"
 )
 
@@ -382,4 +382,31 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 		f.Flush()
 	}
 	return
+}
+
+type PureHttpServer struct {
+	Base    *ProxyServer
+	Handler func(net.Conn)
+}
+
+func NewPureHttpServer(base *ProxyServer) *PureHttpServer {
+	return &PureHttpServer{
+		Base: base,
+	}
+}
+
+func (s *PureHttpServer) ListenAndServe() error {
+	server := pht.Server{
+		Addr: s.Base.Node.Addr,
+		Key:  s.Base.Node.Get("key"),
+	}
+	if server.Handler == nil {
+		server.Handler = s.handleConn
+	}
+	return server.ListenAndServe()
+}
+
+func (s *PureHttpServer) handleConn(conn net.Conn) {
+	glog.V(LINFO).Infof("[pht] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
+	s.Base.handleConn(conn)
 }

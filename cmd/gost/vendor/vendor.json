@@ -21,10 +21,16 @@
 			"revisionTime": "2017-01-19T05:34:58Z"
 		},
 		{
-			"checksumSHA1": "VXFPGZtx+GKexkXeL3YljqJLHFk=",
+			"checksumSHA1": "ero0DQrGYph2eFDyEjDnOQV8NHo=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "dc75931858cf96d95525faa22b7ffa0cea3e7d68",
-			"revisionTime": "2017-01-25T04:21:04Z"
+			"revision": "72d8a598d50f8517d922f233e8f8d37011fcb18f",
+			"revisionTime": "2017-01-25T04:23:26Z"
+		},
+		{
+			"checksumSHA1": "+XIOnTW0rv8Kr/amkXgMraNeUr4=",
+			"path": "github.com/ginuerzh/pht",
+			"revision": "f90acb425616767b84789d10e50a6fb652cd1e9a",
+			"revisionTime": "2017-02-05T06:05:58Z"
 		},
 		{
 			"checksumSHA1": "URsJa4y/sUUw/STmbeYx9EKqaYE=",
