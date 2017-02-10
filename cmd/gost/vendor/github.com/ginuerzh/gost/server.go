@@ -3,6 +3,7 @@ package gost
 import (
 	"bufio"
 	"crypto/tls"
+	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
@@ -172,6 +173,14 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 			return
 		}
 		NewSocks5Server(conn, s).HandleRequest(req)
+		return
+	case "socks4", "socks4a":
+		req, err := gosocks4.ReadRequest(conn)
+		if err != nil {
+			glog.V(LWARNING).Infoln("[socks4]", err)
+			return
+		}
+		NewSocks4Server(conn, s).HandleRequest(req)
 		return
 	}
 

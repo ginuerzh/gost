@@ -29,7 +29,8 @@ func (s *QuicServer) ListenAndServeTLS(config *tls.Config) error {
 		},
 	}
 	if server.Handler == nil {
-		server.Handler = http.HandlerFunc(s.HandleRequest)
+		// server.Handler = http.HandlerFunc(s.HandleRequest)
+		server.Handler = http.HandlerFunc(NewHttp2Server(s.Base).HandleRequest)
 	}
 	return server.ListenAndServe()
 }

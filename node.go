@@ -84,7 +84,7 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 	}
 
 	switch node.Protocol {
-	case "http", "http2", "socks", "socks5", "ss":
+	case "http", "http2", "socks", "socks4", "socks4a", "socks5", "ss":
 	default:
 		node.Protocol = ""
 	}

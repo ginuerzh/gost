@@ -7,7 +7,7 @@ Features
 ------
 * Listening on multiple ports
 * Multi-level forward proxy - proxy chain
-* Standard HTTP/HTTPS/SOCKS5 proxy protocols support
+* Standard HTTP/HTTPS/SOCKS4(A)/SOCKS5 proxy protocols support
 * TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
 * Shadowsocks protocol support (OTA: 2.2+, UDP: 2.4+)
@@ -35,8 +35,8 @@ Effective for the -L and -F parameters
 ```
 scheme can be divided into two parts: protocol+transport
 
-protocol: proxy protocol types (http, socks5, shadowsocks), 
-transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used in any combination or individually:
+protocol: proxy protocol types (http, socks4(a), socks5, shadowsocks), 
+transport: data transmission mode (ws, wss, tls, http2, quic, kcp, pht), may be used in any combination or individually:
 
 > http - standard HTTP proxy: http://:8080
 
@@ -44,11 +44,13 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used 
 
 > http2 - HTTP2 proxy and backwards-compatible with HTTPS proxy: http2://:443
 
+> socks4(a) - standard SOCKS4(A) proxy: socks4://:1080 or socks4a://:1080
+
 > socks - standard SOCKS5 proxy: socks://:1080
 
 > socks+wss - SOCKS5 over websocket: socks+wss://:1080
 
-> tls - HTTPS/SOCKS5 over tls: tls://:443
+> tls - HTTPS/SOCKS5 over TLS: tls://:443
 
 > ss - standard shadowsocks proxy, ss://chacha20:123456@:8338
 
@@ -57,6 +59,8 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp), may be used 
 > quic - standard QUIC proxy, quic://:6121
 
 > kcp - standard KCP tunnel，kcp://:8388 or kcp://aes:123456@:8388
+
+> pht - plain HTTP tunnel, pht://:8080
 
 > redirect - transparent proxy，redirect://:12345
 

@@ -9,7 +9,7 @@ gost - GO Simple Tunnel
 ------
 * 可同时监听多端口
 * 可设置转发代理，支持多级转发(代理链)
-* 支持标准HTTP/HTTPS/SOCKS5代理协议
+* 支持标准HTTP/HTTPS/SOCKS4(A)/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
 * 支持Shadowsocks协议 (OTA: 2.2+，UDP: 2.4+)
@@ -36,7 +36,7 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic, kcp), 二者可以任意组合，或单独使用:
+protocol: 代理协议类型(http, socks4(a), socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic, kcp, pht), 二者可以任意组合，或单独使用:
 
 > http - HTTP代理: http://:8080
 
@@ -44,11 +44,13 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 
 > http2 - HTTP2代理并向下兼容HTTPS代理: http2://:443
 
-> socks - 标准SOCKS5代理(支持tls协商加密): socks://:1080
+> socks4(a) - 标准SOCKS4(A)代理: socks4://:1080或socks4a://:1080
+
+> socks - 标准SOCKS5代理(支持TLS协商加密): socks://:1080
 
 > socks+wss - SOCKS5代理，使用websocket传输数据: socks+wss://:1080
 
-> tls - HTTPS/SOCKS5代理，使用tls传输数据: tls://:443
+> tls - HTTPS/SOCKS5代理，使用TLS传输数据: tls://:443
 
 > ss - Shadowsocks代理，ss://chacha20:123456@:8338
 
@@ -56,7 +58,9 @@ protocol: 代理协议类型(http, socks5, shadowsocks), transport: 数据传输
 
 > quic - QUIC代理，quic://:6121
 
-> kcp - KCP代理，kcp://:8388或kcp://aes:123456@:8388
+> kcp - KCP通道，kcp://:8388或kcp://aes:123456@:8388
+
+> pht - 普通HTTP通道，pht://:8080
 
 > redirect - 透明代理，redirect://:12345
 

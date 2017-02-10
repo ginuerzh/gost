@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
@@ -178,6 +180,39 @@ func (c *ProxyConn) Connect(addr string) error {
 		glog.V(LDEBUG).Infoln("[socks5]", reply)
 		if reply.Rep != gosocks5.Succeeded {
 			return errors.New("Service unavailable")
+		}
+	case "socks4", "socks4a":
+		atype := gosocks4.AddrDomain
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return err
+		}
+		p, _ := strconv.Atoi(port)
+
+		if c.Node.Protocol == "socks4" {
+			taddr, err := net.ResolveTCPAddr("tcp4", addr)
+			if err != nil {
+				return err
+			}
+			host = taddr.IP.String()
+			p = taddr.Port
+			atype = gosocks4.AddrIPv4
+		}
+		req := gosocks4.NewRequest(gosocks4.CmdConnect,
+			&gosocks4.Addr{Type: atype, Host: host, Port: uint16(p)}, nil)
+		if err := req.Write(c); err != nil {
+			return err
+		}
+		glog.V(LDEBUG).Infof("[%s] %s", c.Node.Protocol, req)
+
+		reply, err := gosocks4.ReadReply(c)
+		if err != nil {
+			return err
+		}
+		glog.V(LDEBUG).Infof("[%s] %s", c.Node.Protocol, reply)
+
+		if reply.Code != gosocks4.Granted {
+			return errors.New(fmt.Sprintf("%s: code=%d", c.Node.Protocol, reply.Code))
 		}
 	case "http":
 		fallthrough
