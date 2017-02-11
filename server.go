@@ -184,27 +184,28 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 		return
 	}
 
-	// http or socks5
-	b := make([]byte, MediumBufferSize)
-
-	n, err := io.ReadAtLeast(conn, b, 2)
+	br := bufio.NewReader(conn)
+	b, err := br.Peek(1)
 	if err != nil {
 		glog.V(LWARNING).Infoln(err)
 		return
 	}
 
-	// TODO: use bufio.Reader
-	if b[0] == gosocks5.Ver5 {
-		mn := int(b[1]) // methods count
-		length := 2 + mn
-		if n < length {
-			if _, err := io.ReadFull(conn, b[n:length]); err != nil {
-				glog.V(LWARNING).Infoln("[socks5]", err)
-				return
-			}
+	switch b[0] {
+	case gosocks4.Ver4:
+		req, err := gosocks4.ReadRequest(br)
+		if err != nil {
+			glog.V(LWARNING).Infoln("[socks4]", err)
+			return
 		}
-		// TODO: use gosocks5.ServerConn
-		methods := b[2 : 2+mn]
+		NewSocks4Server(conn, s).HandleRequest(req)
+
+	case gosocks5.Ver5:
+		methods, err := gosocks5.ReadMethods(br)
+		if err != nil {
+			glog.V(LWARNING).Infoln("[socks5]", err)
+			return
+		}
 		method := s.selector.Select(methods...)
 		if _, err := conn.Write([]byte{gosocks5.Ver5, method}); err != nil {
 			glog.V(LWARNING).Infoln("[socks5] select:", err)
@@ -223,15 +224,15 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 			return
 		}
 		NewSocks5Server(conn, s).HandleRequest(req)
-		return
-	}
 
-	req, err := http.ReadRequest(bufio.NewReader(&reqReader{b: b[:n], r: conn}))
-	if err != nil {
-		glog.V(LWARNING).Infoln("[http]", err)
-		return
+	default: // http
+		req, err := http.ReadRequest(br)
+		if err != nil {
+			glog.V(LWARNING).Infoln("[http]", err)
+			return
+		}
+		NewHttpServer(conn, s).HandleRequest(req)
 	}
-	NewHttpServer(conn, s).HandleRequest(req)
 }
 
 func (_ *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
@@ -251,21 +252,6 @@ func (_ *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
 	case err = <-errc:
 		// glog.V(LWARNING).Infoln("transport exit", err)
 	}
-
-	return
-}
-
-type reqReader struct {
-	b []byte
-	r io.Reader
-}
-
-func (r *reqReader) Read(p []byte) (n int, err error) {
-	if len(r.b) == 0 {
-		return r.r.Read(p)
-	}
-	n = copy(p, r.b)
-	r.b = r.b[n:]
 
 	return
 }
