@@ -23,8 +23,8 @@
 		{
 			"checksumSHA1": "/unEypznQ0qT7TWxnA4KLOgOXwo=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "ab87ca05fa5553dab59aa1623624ddefa66b408b",
-			"revisionTime": "2017-02-11T10:34:35Z"
+			"revision": "1e709ceababe54dc0254683304147359b9d59146",
+			"revisionTime": "2017-02-11T12:45:40Z"
 		},
 		{
 			"checksumSHA1": "+XIOnTW0rv8Kr/amkXgMraNeUr4=",
@@ -53,8 +53,8 @@
 		{
 			"checksumSHA1": "/EgCTbjJkJh2yi9lqEgzmau8O4I=",
 			"path": "github.com/klauspost/compress/snappy",
-			"revision": "1e658061989f47658e69492cf63a839630a25eba",
-			"revisionTime": "2016-10-20T15:14:30Z"
+			"revision": "461e8fd8397ae84a23f56e385801e4feda2048ce",
+			"revisionTime": "2017-01-14T13:08:32Z"
 		},
 		{
 			"checksumSHA1": "iKPMvbAueGfdyHcWCgzwKzm8WVo=",
@@ -105,7 +105,7 @@
 			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "XUdlanAUfQt+UjszRgtMeziyiG8=",
+			"checksumSHA1": "FvtYBMKar0eNDWauCofafpJ+z7w=",
 			"path": "github.com/lucas-clemente/quic-go/crypto",
 			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
 			"revisionTime": "2017-02-04T02:12:35Z"
@@ -177,16 +177,16 @@
 			"revisionTime": "2016-10-21T22:59:10Z"
 		},
 		{
-			"checksumSHA1": "dwOedwBJ1EIK9+S3t108Bx054Y8=",
+			"checksumSHA1": "C1KKOxFoW7/W/NFNpiXK+boguNo=",
 			"path": "golang.org/x/crypto/curve25519",
-			"revision": "bed12803fa9663d7aa2c2346b0c634ad2dcd43b7",
-			"revisionTime": "2017-02-01T20:15:17Z"
+			"revision": "453249f01cfeb54c3d549ddb75ff152ca243f9d8",
+			"revisionTime": "2017-02-08T20:51:15Z"
 		},
 		{
 			"checksumSHA1": "4D8hxMIaSDEW5pCQk22Xj4DcDh4=",
 			"path": "golang.org/x/crypto/hkdf",
-			"revision": "bed12803fa9663d7aa2c2346b0c634ad2dcd43b7",
-			"revisionTime": "2017-02-01T20:15:17Z"
+			"revision": "453249f01cfeb54c3d549ddb75ff152ca243f9d8",
+			"revisionTime": "2017-02-08T20:51:15Z"
 		},
 		{
 			"checksumSHA1": "1MGpGDQqnUoRpv7VEcQrXOBydXE=",
