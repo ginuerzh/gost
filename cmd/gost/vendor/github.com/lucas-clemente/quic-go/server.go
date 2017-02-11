@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(*receivedPacket)
+	OpenStream(protocol.StreamID) (utils.Stream, error)
 	run()
 	Close(error) error
 }
@@ -29,11 +31,12 @@ type Server struct {
 	conn      *net.UDPConn
 	connMutex sync.Mutex
 
-	signer crypto.Signer
-	scfg   *handshake.ServerConfig
+	certChain crypto.CertChain
+	scfg      *handshake.ServerConfig
 
-	sessions      map[protocol.ConnectionID]packetHandler
-	sessionsMutex sync.RWMutex
+	sessions                  map[protocol.ConnectionID]packetHandler
+	sessionsMutex             sync.RWMutex
+	deleteClosedSessionsAfter time.Duration
 
 	streamCallback StreamCallback
 
@@ -42,16 +45,13 @@ type Server struct {
 
 // NewServer makes a new server
 func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	signer, err := crypto.NewProofSource(tlsConfig)
-	if err != nil {
-		return nil, err
-	}
+	certChain := crypto.NewCertChain(tlsConfig)
 
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
 		return nil, err
 	}
-	scfg, err := handshake.NewServerConfig(kex, signer)
+	scfg, err := handshake.NewServerConfig(kex, certChain)
 	if err != nil {
 		return nil, err
 	}
@@ -62,12 +62,13 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 	}
 
 	return &Server{
-		addr:           udpAddr,
-		signer:         signer,
-		scfg:           scfg,
-		streamCallback: cb,
-		sessions:       map[protocol.ConnectionID]packetHandler{},
-		newSession:     newSession,
+		addr:                      udpAddr,
+		certChain:                 certChain,
+		scfg:                      scfg,
+		streamCallback:            cb,
+		sessions:                  map[protocol.ConnectionID]packetHandler{},
+		newSession:                newSession,
+		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 	}, nil
 }
 
@@ -135,11 +136,38 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	r := bytes.NewReader(packet)
 
-	hdr, err := ParsePublicHeader(r)
+	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
+
+	s.sessionsMutex.RLock()
+	session, ok := s.sessions[hdr.ConnectionID]
+	s.sessionsMutex.RUnlock()
+
+	// ignore all Public Reset packets
+	if hdr.ResetFlag {
+		if ok {
+			var pr *publicReset
+			pr, err = parsePublicReset(r)
+			if err != nil {
+				utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
+			} else {
+				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.rejectedPacketNumber)
+			}
+		} else {
+			utils.Infof("Received Public Reset for unknown connection %x.", hdr.ConnectionID)
+		}
+		return nil
+	}
+
+	// a session is only created once the client sent a supported version
+	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
+	// it is safe to drop it
+	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
+		return nil
+	}
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
@@ -148,15 +176,20 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		return err
 	}
 
-	s.sessionsMutex.RLock()
-	session, ok := s.sessions[hdr.ConnectionID]
-	s.sessionsMutex.RUnlock()
-
 	if !ok {
-		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, hdr.VersionNumber, remoteAddr)
+		if !hdr.VersionFlag {
+			_, err = conn.WriteToUDP(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
+			return err
+		}
+		version := hdr.VersionNumber
+		if !protocol.IsSupportedVersion(version) {
+			return errors.New("Server BUG: negotiated version not supported")
+		}
+
+		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
 		session, err = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
-			hdr.VersionNumber,
+			version,
 			hdr.ConnectionID,
 			s.scfg,
 			s.streamCallback,
@@ -187,6 +220,12 @@ func (s *Server) closeCallback(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
 	s.sessions[id] = nil
 	s.sessionsMutex.Unlock()
+
+	time.AfterFunc(s.deleteClosedSessionsAfter, func() {
+		s.sessionsMutex.Lock()
+		delete(s.sessions, id)
+		s.sessionsMutex.Unlock()
+	})
 }
 
 func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
@@ -196,7 +235,7 @@ func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
 		PacketNumber: 1,
 		VersionFlag:  true,
 	}
-	err := responsePublicHeader.WritePublicHeader(fullReply, protocol.Version35)
+	err := responsePublicHeader.Write(fullReply, protocol.Version35, protocol.PerspectiveServer)
 	if err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}

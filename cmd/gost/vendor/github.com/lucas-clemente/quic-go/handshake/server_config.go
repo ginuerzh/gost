@@ -10,13 +10,14 @@ import (
 // ServerConfig is a server config
 type ServerConfig struct {
 	kex       crypto.KeyExchange
-	signer    crypto.Signer
+	certChain crypto.CertChain
 	ID        []byte
+	obit      []byte
 	stkSource crypto.StkSource
 }
 
 // NewServerConfig creates a new server config
-func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfig, error) {
+func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*ServerConfig, error) {
 	id := make([]byte, 16)
 	_, err := rand.Read(id)
 	if err != nil {
@@ -27,6 +28,12 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 	if _, err = rand.Read(stkSecret); err != nil {
 		return nil, err
 	}
+
+	obit := make([]byte, 8)
+	if _, err = rand.Read(obit); err != nil {
+		return nil, err
+	}
+
 	stkSource, err := crypto.NewStkSource(stkSecret)
 	if err != nil {
 		return nil, err
@@ -34,8 +41,9 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 
 	return &ServerConfig{
 		kex:       kex,
-		signer:    signer,
+		certChain: certChain,
 		ID:        id,
+		obit:      obit,
 		stkSource: stkSource,
 	}, nil
 }
@@ -48,7 +56,7 @@ func (s *ServerConfig) Get() []byte {
 		TagKEXS: []byte("C255"),
 		TagAEAD: []byte("AESG"),
 		TagPUBS: append([]byte{0x20, 0x00, 0x00}, s.kex.PublicKey()...),
-		TagOBIT: {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+		TagOBIT: s.obit,
 		TagEXPY: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 	})
 	return serverConfig.Bytes()
@@ -56,10 +64,10 @@ func (s *ServerConfig) Get() []byte {
 
 // Sign the server config and CHLO with the server's keyData
 func (s *ServerConfig) Sign(sni string, chlo []byte) ([]byte, error) {
-	return s.signer.SignServerProof(sni, chlo, s.Get())
+	return s.certChain.SignServerProof(sni, chlo, s.Get())
 }
 
 // GetCertsCompressed returns the certificate data
 func (s *ServerConfig) GetCertsCompressed(sni string, commonSetHashes, compressedHashes []byte) ([]byte, error) {
-	return s.signer.GetCertsCompressed(sni, commonSetHashes, compressedHashes)
+	return s.certChain.GetCertsCompressed(sni, commonSetHashes, compressedHashes)
 }

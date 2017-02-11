@@ -3,18 +3,7 @@ package utils
 import (
 	"bytes"
 	"io"
-
-	"github.com/lucas-clemente/quic-go/protocol"
 )
-
-// Stream is the interface for QUIC streams
-type Stream interface {
-	io.Reader
-	io.Writer
-	io.Closer
-	StreamID() protocol.StreamID
-	CloseRemote(offset protocol.ByteCount)
-}
 
 // ReadUintN reads N bytes
 func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {

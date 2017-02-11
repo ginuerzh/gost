@@ -11,10 +11,6 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-type unpackedPacket struct {
-	frames []frames.Frame
-}
-
 type packetUnpacker struct {
 	version protocol.VersionNumber
 	aead    crypto.AEAD

@@ -18,58 +18,72 @@ type packedPacket struct {
 
 type packetPacker struct {
 	connectionID protocol.ConnectionID
+	perspective  protocol.Perspective
 	version      protocol.VersionNumber
-	cryptoSetup  *handshake.CryptoSetup
+	cryptoSetup  handshake.CryptoSetup
 
 	packetNumberGenerator *packetNumberGenerator
 
-	connectionParametersManager *handshake.ConnectionParametersManager
+	connectionParameters handshake.ConnectionParametersManager
 
 	streamFramer  *streamFramer
 	controlFrames []frames.Frame
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup handshake.CryptoSetup, connectionParameters handshake.ConnectionParametersManager, streamFramer *streamFramer, perspective protocol.Perspective, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
-		cryptoSetup:                 cryptoSetup,
-		connectionID:                connectionID,
-		connectionParametersManager: connectionParametersHandler,
-		version:                     version,
-		streamFramer:                streamFramer,
-		packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
+		cryptoSetup:           cryptoSetup,
+		connectionID:          connectionID,
+		connectionParameters:  connectionParameters,
+		perspective:           perspective,
+		version:               version,
+		streamFramer:          streamFramer,
+		packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 	}
 }
 
-func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, leastUnacked, true, false)
+// PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
+func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	// in case the connection is closed, all queued control frames aren't of any use anymore
+	// discard them and queue the ConnectionCloseFrame
+	p.controlFrames = []frames.Frame{ccf}
+	return p.packPacket(nil, leastUnacked)
 }
 
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, maySendOnlyAck bool) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, leastUnacked, false, maySendOnlyAck)
+// PackPacket packs a new packet
+// the stopWaitingFrame is *guaranteed* to be included in the next packet
+// the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	p.controlFrames = append(p.controlFrames, controlFrames...)
+	return p.packPacket(stopWaitingFrame, leastUnacked)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, onlySendOneControlFrame, maySendOnlyAck bool) (*packedPacket, error) {
-	if len(controlFrames) > 0 {
-		p.controlFrames = append(p.controlFrames, controlFrames...)
-	}
-
-	currentPacketNumber := p.packetNumberGenerator.Peek()
-
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
 	p.cryptoSetup.LockForSealing()
 	defer p.cryptoSetup.UnlockForSealing()
 
+	currentPacketNumber := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
 	responsePublicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,
-		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
-		DiversificationNonce: p.cryptoSetup.DiversificationNonce(),
+		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
 	}
 
-	publicHeaderLength, err := responsePublicHeader.GetLength()
+	if p.perspective == protocol.PerspectiveServer {
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+	}
+
+	// TODO: stop sending version numbers once a version has been negotiated
+	if p.perspective == protocol.PerspectiveClient {
+		responsePublicHeader.VersionFlag = true
+		responsePublicHeader.VersionNumber = p.version
+	}
+
+	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
 	if err != nil {
 		return nil, err
 	}
@@ -79,9 +93,15 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		stopWaitingFrame.PacketNumberLen = packetNumberLen
 	}
 
+	// we're packing a ConnectionClose, don't add any StreamFrames
+	var isConnectionClose bool
+	if len(p.controlFrames) == 1 {
+		_, isConnectionClose = p.controlFrames[0].(*frames.ConnectionCloseFrame)
+	}
+
 	var payloadFrames []frames.Frame
-	if onlySendOneControlFrame {
-		payloadFrames = []frames.Frame{controlFrames[0]}
+	if isConnectionClose {
+		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else {
 		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, publicHeaderLength)
 		if err != nil {
@@ -94,26 +114,14 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		return nil, nil
 	}
 	// Don't send out packets that only contain a StopWaitingFrame
-	if !onlySendOneControlFrame && len(payloadFrames) == 1 && stopWaitingFrame != nil {
+	if len(payloadFrames) == 1 && stopWaitingFrame != nil {
 		return nil, nil
-	}
-	// Don't send out packets that only contain an ACK (plus optional STOP_WAITING), if requested
-	if !maySendOnlyAck {
-		if len(payloadFrames) == 1 {
-			if _, ok := payloadFrames[0].(*frames.AckFrame); ok {
-				return nil, nil
-			}
-		} else if len(payloadFrames) == 2 && stopWaitingFrame != nil {
-			if _, ok := payloadFrames[1].(*frames.AckFrame); ok {
-				return nil, nil
-			}
-		}
 	}
 
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 
-	if err = responsePublicHeader.WritePublicHeader(buffer, p.version); err != nil {
+	if err = responsePublicHeader.Write(buffer, p.version, p.perspective); err != nil {
 		return nil, err
 	}
 

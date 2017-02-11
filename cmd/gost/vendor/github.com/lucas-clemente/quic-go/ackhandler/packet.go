@@ -19,31 +19,17 @@ type Packet struct {
 	SendTime time.Time
 }
 
-// GetStreamFramesForRetransmission gets all the streamframes for retransmission
-func (p *Packet) GetStreamFramesForRetransmission() []*frames.StreamFrame {
-	var streamFrames []*frames.StreamFrame
+// GetFramesForRetransmission gets all the frames for retransmission
+func (p *Packet) GetFramesForRetransmission() []frames.Frame {
+	var fs []frames.Frame
 	for _, frame := range p.Frames {
-		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			streamFrames = append(streamFrames, streamFrame)
-		}
-	}
-	return streamFrames
-}
-
-// GetControlFramesForRetransmission gets all the control frames for retransmission
-func (p *Packet) GetControlFramesForRetransmission() []frames.Frame {
-	var controlFrames []frames.Frame
-	for _, frame := range p.Frames {
-		// omit ACKs
-		if _, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
+		switch frame.(type) {
+		case *frames.AckFrame:
+			continue
+		case *frames.StopWaitingFrame:
 			continue
 		}
-
-		_, isAck := frame.(*frames.AckFrame)
-		_, isStopWaiting := frame.(*frames.StopWaitingFrame)
-		if !isAck && !isStopWaiting {
-			controlFrames = append(controlFrames, frame)
-		}
+		fs = append(fs, frame)
 	}
-	return controlFrames
+	return fs
 }

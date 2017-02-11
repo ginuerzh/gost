@@ -119,7 +119,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		if f.flowControlManager.RemainingConnectionWindowSize() == 0 {
 			// We are now connection-level FC blocked
 			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: 0})
-		} else if sendWindowSize-frame.DataLen() == 0 {
+		} else if !frame.FinBit && sendWindowSize-frame.DataLen() == 0 {
 			// We are now stream-level FC blocked
 			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: s.StreamID()})
 		}

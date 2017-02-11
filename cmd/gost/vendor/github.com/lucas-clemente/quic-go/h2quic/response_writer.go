@@ -21,6 +21,7 @@ type responseWriter struct {
 	headerStreamMutex *sync.Mutex
 
 	header        http.Header
+	status        int // status code passed to WriteHeader
 	headerWritten bool
 }
 
@@ -43,6 +44,7 @@ func (w *responseWriter) WriteHeader(status int) {
 		return
 	}
 	w.headerWritten = true
+	w.status = status
 
 	var headers bytes.Buffer
 	enc := hpack.NewEncoder(&headers)
@@ -72,6 +74,9 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !w.headerWritten {
 		w.WriteHeader(200)
 	}
+	if !bodyAllowedForStatus(w.status) {
+		return 0, http.ErrBodyNotAllowed
+	}
 	return w.dataStream.Write(p)
 }
 
@@ -79,3 +84,18 @@ func (w *responseWriter) Flush() {}
 
 // test that we implement http.Flusher
 var _ http.Flusher = &responseWriter{}
+
+// copied from http2/http2.go
+// bodyAllowedForStatus reports whether a given response status code
+// permits a body. See RFC 2616, section 4.4.
+func bodyAllowedForStatus(status int) bool {
+	switch {
+	case status >= 100 && status <= 199:
+		return false
+	case status == 204:
+		return false
+	case status == 304:
+		return false
+	}
+	return true
+}

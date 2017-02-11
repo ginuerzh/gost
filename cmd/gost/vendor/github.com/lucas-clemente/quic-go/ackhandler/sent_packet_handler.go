@@ -47,9 +47,7 @@ type sentPacketHandler struct {
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler() SentPacketHandler {
-	rttStats := &congestion.RTTStats{}
-
+func NewSentPacketHandler(rttStats *congestion.RTTStats) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,

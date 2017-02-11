@@ -15,16 +15,22 @@
 			"revisionTime": "2015-11-07T02:50:05Z"
 		},
 		{
+			"checksumSHA1": "aIhLeVAIrsjs63CwqmU3+GU8yT4=",
+			"path": "github.com/ginuerzh/gosocks4",
+			"revision": "fc196f9d34e35f19a813bff2f092a275131c23bc",
+			"revisionTime": "2017-02-09T14:09:51Z"
+		},
+		{
 			"checksumSHA1": "5TwW96Afcvo+zm0tAn+DSNIQreQ=",
 			"path": "github.com/ginuerzh/gosocks5",
 			"revision": "0f737bddba2abd1496dc03c8b39b817cc5f33fa7",
 			"revisionTime": "2017-01-19T05:34:58Z"
 		},
 		{
-			"checksumSHA1": "ero0DQrGYph2eFDyEjDnOQV8NHo=",
+			"checksumSHA1": "1iyn4OEHEJknBi+IiZuUaJi6Ifw=",
 			"path": "github.com/ginuerzh/gost",
-			"revision": "72d8a598d50f8517d922f233e8f8d37011fcb18f",
-			"revisionTime": "2017-01-25T04:23:26Z"
+			"revision": "333291e9bc766a76d6df5243a7022c5f028be17c",
+			"revisionTime": "2017-02-05T06:35:38Z"
 		},
 		{
 			"checksumSHA1": "+XIOnTW0rv8Kr/amkXgMraNeUr4=",
@@ -75,10 +81,10 @@
 			"revisionTime": "2016-09-12T19:31:07Z"
 		},
 		{
-			"checksumSHA1": "fbae4URna3lp8RtTOutiXIO1JS0=",
+			"checksumSHA1": "hUI9uYDnlXeOY+SEAPViyVpgq6I=",
 			"path": "github.com/lucas-clemente/aes12",
-			"revision": "8ee5b5610baca43b60ecfad586b3c40d92a96e0c",
-			"revisionTime": "2016-08-23T09:51:02Z"
+			"revision": "25700e67be5c860bcc999137275b9ef8b65932bd",
+			"revisionTime": "2016-12-15T15:22:28Z"
 		},
 		{
 			"checksumSHA1": "ne1X+frkx5fJcpz9FaZPuUZ7amM=",
@@ -87,10 +93,10 @@
 			"revisionTime": "2016-05-04T15:23:51Z"
 		},
 		{
-			"checksumSHA1": "xbX/mARowOKpW3S1G8hmaDlWdp8=",
+			"checksumSHA1": "KF0chHPN90e/Ct/WJJYsuHKdiEM=",
 			"path": "github.com/lucas-clemente/quic-go",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
 			"checksumSHA1": "OA9E+y7g05x/mWJJHmA7oPxWKQo=",
@@ -99,64 +105,64 @@
 			"revisionTime": "2016-08-23T09:51:56Z"
 		},
 		{
-			"checksumSHA1": "1+iOTf/w8VXGqQao0FMNEE2RFFg=",
+			"checksumSHA1": "NtA/2oLQBR72S8l43PNUug2TCog=",
 			"path": "github.com/lucas-clemente/quic-go/ackhandler",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
 			"checksumSHA1": "8zoU6uLKP2Czs96VgmNMubNcWKk=",
 			"path": "github.com/lucas-clemente/quic-go/congestion",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "vzBxE7JViWonmrSndgmRuye8ntA=",
+			"checksumSHA1": "XUdlanAUfQt+UjszRgtMeziyiG8=",
 			"path": "github.com/lucas-clemente/quic-go/crypto",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "CaOt7EZEuyWQ073FITB8qQfFswA=",
+			"checksumSHA1": "qeA/SEEEJISmxMiT7wVH87x8bYs=",
 			"path": "github.com/lucas-clemente/quic-go/flowcontrol",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "VvhIOTKtMkPZ7pdrCPHlDQI2wIw=",
+			"checksumSHA1": "Uj2jJdb2wytCw/DJqmVD7wvq4BU=",
 			"path": "github.com/lucas-clemente/quic-go/frames",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "IJDUjsrJP5dtHvxVNT32x4SQQVk=",
+			"checksumSHA1": "Q+A6dMo3fn7olbOo64BocN5Iun8=",
 			"path": "github.com/lucas-clemente/quic-go/h2quic",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "1DQTvvwcUUrmMKkN4ASjX5+iGqs=",
+			"checksumSHA1": "ItcGJhHoCWJVDtJagkdbtFkqIMo=",
 			"path": "github.com/lucas-clemente/quic-go/handshake",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "qp5LXpuvIAgW3BffRzHVZQk1WfE=",
+			"checksumSHA1": "5qERDU1QlAgmMVbyY/zkWTzG7Po=",
 			"path": "github.com/lucas-clemente/quic-go/protocol",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
 			"checksumSHA1": "ss57bkTclCnmt9fVosYie/ehkoo=",
 			"path": "github.com/lucas-clemente/quic-go/qerr",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
-			"checksumSHA1": "j/A6Rfz4BWpt5rsR2j5kR0H2ZTI=",
+			"checksumSHA1": "LUpOEK8o7qCBWHt5DdPd+3QG6Y4=",
 			"path": "github.com/lucas-clemente/quic-go/utils",
-			"revision": "ef977ee0591f72543f8323cd12a585f5406ff971",
-			"revisionTime": "2016-10-14T09:35:10Z"
+			"revision": "268841f0cc2962070a8bd662551b150acbee369b",
+			"revisionTime": "2017-02-04T02:12:35Z"
 		},
 		{
 			"checksumSHA1": "ynJSWoF6v+3zMnh9R0QmmG6iGV8=",
@@ -185,14 +191,14 @@
 		{
 			"checksumSHA1": "dwOedwBJ1EIK9+S3t108Bx054Y8=",
 			"path": "golang.org/x/crypto/curve25519",
-			"revision": "1150b8bd09e53aea1d415621adae9bad665061a1",
-			"revisionTime": "2016-10-21T22:59:10Z"
+			"revision": "bed12803fa9663d7aa2c2346b0c634ad2dcd43b7",
+			"revisionTime": "2017-02-01T20:15:17Z"
 		},
 		{
 			"checksumSHA1": "4D8hxMIaSDEW5pCQk22Xj4DcDh4=",
 			"path": "golang.org/x/crypto/hkdf",
-			"revision": "1150b8bd09e53aea1d415621adae9bad665061a1",
-			"revisionTime": "2016-10-21T22:59:10Z"
+			"revision": "bed12803fa9663d7aa2c2346b0c634ad2dcd43b7",
+			"revisionTime": "2017-02-01T20:15:17Z"
 		},
 		{
 			"checksumSHA1": "1MGpGDQqnUoRpv7VEcQrXOBydXE=",

@@ -95,12 +95,19 @@ func WriteHandshakeMessage(b *bytes.Buffer, messageTag Tag, data map[Tag][]byte)
 
 func printHandshakeMessage(data map[Tag][]byte) string {
 	var res string
+	var pad string
 	for k, v := range data {
 		if k == TagPAD {
-			continue
+			pad = fmt.Sprintf("\t%s: (%d bytes)\n", tagToString(k), len(v))
+		} else {
+			res += fmt.Sprintf("\t%s: %#v\n", tagToString(k), string(v))
 		}
-		res += fmt.Sprintf("\t%s: %#v\n", tagToString(k), string(v))
 	}
+
+	if len(pad) > 0 {
+		res += pad
+	}
+
 	return res
 }
 

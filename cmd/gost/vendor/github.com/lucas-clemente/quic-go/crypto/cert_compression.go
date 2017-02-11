@@ -22,8 +22,8 @@ const (
 
 type entry struct {
 	t entryType
-	h uint64
-	i uint32
+	h uint64 // set hash
+	i uint32 // index
 }
 
 func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]byte, error) {
@@ -41,7 +41,7 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 
 	chainHashes := make([]uint64, len(chain))
 	for i := range chain {
-		chainHashes[i] = hashCert(chain[i])
+		chainHashes[i] = HashCert(chain[i])
 	}
 
 	entries := buildEntries(chain, chainHashes, cachedHashes, setHashes)
@@ -87,6 +87,111 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 	}
 
 	return res.Bytes(), nil
+}
+
+func decompressChain(data []byte) ([][]byte, error) {
+	var chain [][]byte
+	var entries []entry
+	r := bytes.NewReader(data)
+
+	var numCerts int
+	var hasCompressedCerts bool
+	for {
+		entryTypeByte, err := r.ReadByte()
+		if entryTypeByte == 0 {
+			break
+		}
+
+		et := entryType(entryTypeByte)
+		if err != nil {
+			return nil, err
+		}
+
+		numCerts++
+
+		switch et {
+		case entryCached:
+			// we're not sending any certificate hashes in the CHLO, so there shouldn't be any cached certificates in the chain
+			return nil, errors.New("unexpected cached certificate")
+		case entryCommon:
+			e := entry{t: entryCommon}
+			e.h, err = utils.ReadUint64(r)
+			if err != nil {
+				return nil, err
+			}
+			e.i, err = utils.ReadUint32(r)
+			if err != nil {
+				return nil, err
+			}
+			certSet, ok := certSets[e.h]
+			if !ok {
+				return nil, errors.New("unknown certSet")
+			}
+			if e.i >= uint32(len(certSet)) {
+				return nil, errors.New("certificate not found in certSet")
+			}
+			entries = append(entries, e)
+			chain = append(chain, certSet[e.i])
+		case entryCompressed:
+			hasCompressedCerts = true
+			entries = append(entries, entry{t: entryCompressed})
+			chain = append(chain, nil)
+		default:
+			return nil, errors.New("unknown entryType")
+		}
+	}
+
+	if numCerts == 0 {
+		return make([][]byte, 0, 0), nil
+	}
+
+	if hasCompressedCerts {
+		uncompressedLength, err := utils.ReadUint32(r)
+		if err != nil {
+			fmt.Println(4)
+			return nil, err
+		}
+
+		zlibDict := buildZlibDictForEntries(entries, chain)
+		gz, err := zlib.NewReaderDict(r, zlibDict)
+		if err != nil {
+			return nil, err
+		}
+		defer gz.Close()
+
+		var totalLength uint32
+		var certIndex int
+		for totalLength < uncompressedLength {
+			lenBytes := make([]byte, 4)
+			_, err := gz.Read(lenBytes)
+			if err != nil {
+				return nil, err
+			}
+			certLen := binary.LittleEndian.Uint32(lenBytes)
+
+			cert := make([]byte, certLen)
+			n, err := gz.Read(cert)
+			if uint32(n) != certLen && err != nil {
+				return nil, err
+			}
+
+			for {
+				if certIndex >= len(entries) {
+					return nil, errors.New("CertCompression BUG: no element to save uncompressed certificate")
+				}
+				if entries[certIndex].t == entryCompressed {
+					chain[certIndex] = cert
+					certIndex++
+					break
+				}
+				certIndex++
+			}
+
+			totalLength += 4 + certLen
+		}
+	}
+
+	return chain, nil
 }
 
 func buildEntries(chain [][]byte, chainHashes, cachedHashes, setHashes []uint64) []entry {
@@ -149,8 +254,19 @@ func splitHashes(hashes []byte) ([]uint64, error) {
 	return res, nil
 }
 
-func hashCert(cert []byte) uint64 {
-	h := fnv.New64()
+func getCommonCertificateHashes() []byte {
+	ccs := make([]byte, 8*len(certSets), 8*len(certSets))
+	i := 0
+	for certSetHash := range certSets {
+		binary.LittleEndian.PutUint64(ccs[i*8:(i+1)*8], certSetHash)
+		i++
+	}
+	return ccs
+}
+
+// HashCert calculates the FNV1a hash of a certificate
+func HashCert(cert []byte) uint64 {
+	h := fnv.New64a()
 	h.Write(cert)
 	return h.Sum64()
 }

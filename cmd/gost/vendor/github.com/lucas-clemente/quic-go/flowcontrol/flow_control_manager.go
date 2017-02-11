@@ -2,38 +2,39 @@ package flowcontrol
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type flowControlManager struct {
-	connectionParametersManager        *handshake.ConnectionParametersManager
+	connectionParameters handshake.ConnectionParametersManager
+	rttStats             *congestion.RTTStats
+
 	streamFlowController               map[protocol.StreamID]*flowController
 	contributesToConnectionFlowControl map[protocol.StreamID]bool
 	mutex                              sync.RWMutex
 }
 
-var (
-	// ErrStreamFlowControlViolation is a stream flow control violation
-	ErrStreamFlowControlViolation = errors.New("Stream level flow control violation")
-	// ErrConnectionFlowControlViolation is a connection level flow control violation
-	ErrConnectionFlowControlViolation = errors.New("Connection level flow control violation")
-)
+var _ FlowControlManager = &flowControlManager{}
 
 var errMapAccess = errors.New("Error accessing the flowController map.")
 
 // NewFlowControlManager creates a new flow control manager
-func NewFlowControlManager(connectionParametersManager *handshake.ConnectionParametersManager) FlowControlManager {
+func NewFlowControlManager(connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) FlowControlManager {
 	fcm := flowControlManager{
-		connectionParametersManager:        connectionParametersManager,
+		connectionParameters:               connectionParameters,
+		rttStats:                           rttStats,
 		streamFlowController:               make(map[protocol.StreamID]*flowController),
 		contributesToConnectionFlowControl: make(map[protocol.StreamID]bool),
 	}
 	// initialize connection level flow controller
-	fcm.streamFlowController[0] = newFlowController(0, connectionParametersManager)
+	fcm.streamFlowController[0] = newFlowController(0, connectionParameters, rttStats)
 	fcm.contributesToConnectionFlowControl[0] = false
 	return &fcm
 }
@@ -47,7 +48,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 		return
 	}
 
-	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParametersManager)
+	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParameters, f.rttStats)
 	f.contributesToConnectionFlowControl[streamID] = contributesToConnectionFlow
 }
 
@@ -57,6 +58,48 @@ func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
 	delete(f.streamFlowController, streamID)
 	delete(f.contributesToConnectionFlowControl, streamID)
 	f.mutex.Unlock()
+}
+
+// ResetStream should be called when receiving a RstStreamFrame
+// it updates the byte offset to the value in the RstStreamFrame
+// streamID must not be 0 here
+func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	streamFlowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return err
+	}
+	increment, err := streamFlowController.UpdateHighestReceived(byteOffset)
+	if err != nil {
+		return qerr.StreamDataAfterTermination
+	}
+
+	if streamFlowController.CheckFlowControlViolation() {
+		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
+	}
+
+	if f.contributesToConnectionFlowControl[streamID] {
+		connectionFlowController := f.streamFlowController[0]
+		connectionFlowController.IncrementHighestReceived(increment)
+		if connectionFlowController.CheckFlowControlViolation() {
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
+		}
+	}
+
+	return nil
+}
+
+func (f *flowControlManager) GetBytesSent(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	fc, err := f.getFlowController(streamID)
+	if err != nil {
+		return 0, err
+	}
+	return fc.GetBytesSent(), nil
 }
 
 // UpdateHighestReceived updates the highest received byte offset for a stream
@@ -70,17 +113,19 @@ func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, b
 	if err != nil {
 		return err
 	}
-	increment := streamFlowController.UpdateHighestReceived(byteOffset)
+	// UpdateHighestReceived returns an ErrReceivedSmallerByteOffset when StreamFrames got reordered
+	// this error can be ignored here
+	increment, _ := streamFlowController.UpdateHighestReceived(byteOffset)
 
 	if streamFlowController.CheckFlowControlViolation() {
-		return ErrStreamFlowControlViolation
+		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
 	}
 
 	if f.contributesToConnectionFlowControl[streamID] {
 		connectionFlowController := f.streamFlowController[0]
 		connectionFlowController.IncrementHighestReceived(increment)
 		if connectionFlowController.CheckFlowControlViolation() {
-			return ErrConnectionFlowControlViolation
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
 		}
 	}
 
@@ -115,6 +160,16 @@ func (f *flowControlManager) GetWindowUpdates() (res []WindowUpdate) {
 		}
 	}
 	return res
+}
+
+func (f *flowControlManager) GetReceiveWindow(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	flowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return 0, err
+	}
+	return flowController.receiveFlowControlWindow, nil
 }
 
 // streamID must not be 0 here

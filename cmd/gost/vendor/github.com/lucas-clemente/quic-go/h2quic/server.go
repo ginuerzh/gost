@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"runtime"
@@ -113,6 +112,7 @@ func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
 				if _, ok := err.(*qerr.QuicError); !ok {
 					utils.Errorf("error handling h2 request: %s", err.Error())
 				}
+				session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
 				return
 			}
 		}
@@ -124,7 +124,10 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
-	h2headersFrame := h2frame.(*http2.HeadersFrame)
+	h2headersFrame, ok := h2frame.(*http2.HeadersFrame)
+	if !ok {
+		return qerr.Error(qerr.InvalidHeadersStreamData, "expected a header frame")
+	}
 	if !h2headersFrame.HeadersEnded() {
 		return errors.New("http2 header continuation not implemented")
 	}
@@ -152,13 +155,15 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 		return err
 	}
 
+	var streamEnded bool
 	if h2headersFrame.StreamEnded() {
 		dataStream.CloseRemote(0)
+		streamEnded = true
 		_, _ = dataStream.Read([]byte{0}) // read the eof
 	}
 
-	// stream's Close() closes the write side, not the read side
-	req.Body = ioutil.NopCloser(dataStream)
+	reqBody := newRequestBody(dataStream)
+	req.Body = reqBody
 
 	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
 
@@ -187,6 +192,9 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 			responseWriter.WriteHeader(200)
 		}
 		if responseWriter.dataStream != nil {
+			if !streamEnded && !reqBody.requestRead {
+				responseWriter.dataStream.Reset(nil)
+			}
 			responseWriter.dataStream.Close()
 		}
 		if s.CloseAfterFirstRequest {

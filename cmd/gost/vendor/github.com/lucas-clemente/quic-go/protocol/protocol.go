@@ -64,3 +64,9 @@ const MaxRetransmissionTime = 60 * time.Second
 
 // ClientHelloMinimumSize is the minimum size the server expects an inchoate CHLO to have.
 const ClientHelloMinimumSize = 1024
+
+// MaxClientHellos is the maximum number of times we'll send a client hello
+// The value 3 accounts for:
+// * one failure due to an incorrect or missing source-address token
+// * one failure due the server's certificate chain being unavailible and the server being unwilling to send it without a valid source-address token
+const MaxClientHellos = 3

@@ -1,6 +1,9 @@
 package quic
 
-import "net"
+import (
+	"net"
+	"sync"
+)
 
 type connection interface {
 	write([]byte) error
@@ -9,6 +12,8 @@ type connection interface {
 }
 
 type udpConn struct {
+	mutex sync.RWMutex
+
 	conn        *net.UDPConn
 	currentAddr *net.UDPAddr
 }
@@ -21,9 +26,14 @@ func (c *udpConn) write(p []byte) error {
 }
 
 func (c *udpConn) setCurrentRemoteAddr(addr interface{}) {
+	c.mutex.Lock()
 	c.currentAddr = addr.(*net.UDPAddr)
+	c.mutex.Unlock()
 }
 
 func (c *udpConn) RemoteAddr() *net.UDPAddr {
-	return c.currentAddr
+	c.mutex.RLock()
+	addr := c.currentAddr
+	c.mutex.RUnlock()
+	return addr
 }

@@ -59,6 +59,8 @@ const (
 
 	// TagNONC is the client nonce
 	TagNONC Tag = 'N' + 'O'<<8 + 'N'<<16 + 'C'<<24
+	// TagXLCT is the expected leaf certificate
+	TagXLCT Tag = 'X' + 'L'<<8 + 'C'<<16 + 'T'<<24
 
 	// TagSCID is the server config ID
 	TagSCID Tag = 'S' + 'C'<<8 + 'I'<<16 + 'D'<<24
