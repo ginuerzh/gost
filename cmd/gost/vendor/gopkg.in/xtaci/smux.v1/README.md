@@ -62,7 +62,7 @@ func client() {
         panic(err)
     }
 
-    // Stream implements net.Conn
+    // Stream implements io.ReadWriteCloser
     stream.Write([]byte("ping"))
 }
 
@@ -94,4 +94,4 @@ func server() {
 
 ## Status
 
-Beta
+Stable

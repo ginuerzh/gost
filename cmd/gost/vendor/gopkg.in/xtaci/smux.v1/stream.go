@@ -2,24 +2,28 @@ package smux
 
 import (
 	"bytes"
-	"encoding/binary"
+	"io"
+	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 )
 
 // Stream implements io.ReadWriteCloser
 type Stream struct {
-	id          uint32
-	rstflag     int32
-	sess        *Session
-	buffer      bytes.Buffer
-	bufferLock  sync.Mutex
-	frameSize   int
-	chReadEvent chan struct{} // notify a read event
-	die         chan struct{} // flag the stream has closed
-	dieLock     sync.Mutex
+	id            uint32
+	rstflag       int32
+	sess          *Session
+	buffer        bytes.Buffer
+	bufferLock    sync.Mutex
+	frameSize     int
+	chReadEvent   chan struct{} // notify a read event
+	die           chan struct{} // flag the stream has closed
+	dieLock       sync.Mutex
+	readDeadline  atomic.Value
+	writeDeadline atomic.Value
 }
 
 // newStream initiates a Stream struct
@@ -35,10 +39,19 @@ func newStream(id uint32, frameSize int, sess *Session) *Stream {
 
 // Read implements io.ReadWriteCloser
 func (s *Stream) Read(b []byte) (n int, err error) {
+	var deadline <-chan time.Time
+	if d, ok := s.readDeadline.Load().(time.Time); ok && !d.IsZero() {
+		timer := time.NewTimer(d.Sub(time.Now()))
+		defer timer.Stop()
+		deadline = timer.C
+	}
+
 READ:
 	select {
 	case <-s.die:
 		return 0, errors.New(errBrokenPipe)
+	case <-deadline:
+		return n, errTimeout
 	default:
 	}
 
@@ -51,12 +64,14 @@ READ:
 		return n, nil
 	} else if atomic.LoadInt32(&s.rstflag) == 1 {
 		_ = s.Close()
-		return 0, errors.New(errConnReset)
+		return 0, io.EOF
 	}
 
 	select {
 	case <-s.chReadEvent:
 		goto READ
+	case <-deadline:
+		return n, errTimeout
 	case <-s.die:
 		return 0, errors.New(errBrokenPipe)
 	}
@@ -64,6 +79,13 @@ READ:
 
 // Write implements io.ReadWriteCloser
 func (s *Stream) Write(b []byte) (n int, err error) {
+	var deadline <-chan time.Time
+	if d, ok := s.writeDeadline.Load().(time.Time); ok && !d.IsZero() {
+		timer := time.NewTimer(d.Sub(time.Now()))
+		defer timer.Stop()
+		deadline = timer.C
+	}
+
 	select {
 	case <-s.die:
 		return 0, errors.New(errBrokenPipe)
@@ -71,40 +93,80 @@ func (s *Stream) Write(b []byte) (n int, err error) {
 	}
 
 	frames := s.split(b, cmdPSH, s.id)
-	// preallocate buffer
-	buffer := make([]byte, len(frames)*headerSize+len(b))
-	bts := buffer
-
-	// combine frames into a large blob
+	sent := 0
 	for k := range frames {
-		bts[0] = version
-		bts[1] = frames[k].cmd
-		binary.LittleEndian.PutUint16(bts[2:], uint16(len(frames[k].data)))
-		binary.LittleEndian.PutUint32(bts[4:], frames[k].sid)
-		copy(bts[headerSize:], frames[k].data)
-		bts = bts[len(frames[k].data)+headerSize:]
-	}
+		req := writeRequest{
+			frame:  frames[k],
+			result: make(chan writeResult, 1),
+		}
 
-	if _, err = s.sess.writeBinary(buffer); err != nil {
-		return 0, err
+		select {
+		case s.sess.writes <- req:
+		case <-s.die:
+			return sent, errors.New(errBrokenPipe)
+		case <-deadline:
+			return sent, errTimeout
+		}
+
+		select {
+		case result := <-req.result:
+			sent += result.n
+			if result.err != nil {
+				return sent, result.err
+			}
+		case <-s.die:
+			return sent, errors.New(errBrokenPipe)
+		case <-deadline:
+			return sent, errTimeout
+		}
 	}
-	return len(b), nil
+	return sent, nil
 }
 
 // Close implements io.ReadWriteCloser
 func (s *Stream) Close() error {
 	s.dieLock.Lock()
-	defer s.dieLock.Unlock()
 
 	select {
 	case <-s.die:
+		s.dieLock.Unlock()
 		return errors.New(errBrokenPipe)
 	default:
 		close(s.die)
+		s.dieLock.Unlock()
 		s.sess.streamClosed(s.id)
 		_, err := s.sess.writeFrame(newFrame(cmdRST, s.id))
 		return err
 	}
+}
+
+// SetReadDeadline sets the read deadline as defined by
+// net.Conn.SetReadDeadline.
+// A zero time value disables the deadline.
+func (s *Stream) SetReadDeadline(t time.Time) error {
+	s.readDeadline.Store(t)
+	return nil
+}
+
+// SetWriteDeadline sets the write deadline as defined by
+// net.Conn.SetWriteDeadline.
+// A zero time value disables the deadline.
+func (s *Stream) SetWriteDeadline(t time.Time) error {
+	s.writeDeadline.Store(t)
+	return nil
+}
+
+// SetDeadline sets both read and write deadlines as defined by
+// net.Conn.SetDeadline.
+// A zero time value disables the deadlines.
+func (s *Stream) SetDeadline(t time.Time) error {
+	if err := s.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := s.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
 }
 
 // session closes the stream
@@ -117,6 +179,26 @@ func (s *Stream) sessionClose() {
 	default:
 		close(s.die)
 	}
+}
+
+// LocalAddr satisfies net.Conn interface
+func (s *Stream) LocalAddr() net.Addr {
+	if ts, ok := s.sess.conn.(interface {
+		LocalAddr() net.Addr
+	}); ok {
+		return ts.LocalAddr()
+	}
+	return nil
+}
+
+// RemoteAddr satisfies net.Conn interface
+func (s *Stream) RemoteAddr() net.Addr {
+	if ts, ok := s.sess.conn.(interface {
+		RemoteAddr() net.Addr
+	}); ok {
+		return ts.RemoteAddr()
+	}
+	return nil
 }
 
 // pushBytes a slice into buffer
@@ -164,3 +246,11 @@ func (s *Stream) notifyReadEvent() {
 func (s *Stream) markRST() {
 	atomic.StoreInt32(&s.rstflag, 1)
 }
+
+var errTimeout error = &timeoutError{}
+
+type timeoutError struct{}
+
+func (e *timeoutError) Error() string   { return "i/o timeout" }
+func (e *timeoutError) Timeout() bool   { return true }
+func (e *timeoutError) Temporary() bool { return true }

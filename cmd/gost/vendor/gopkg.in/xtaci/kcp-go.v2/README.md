@@ -1,4 +1,5 @@
-# kcp-go
+<img src="kcp-go.png" alt="kcp-go" height="50px" />
+
 
 [![GoDoc][1]][2] [![Powered][9]][10] [![MIT licensed][11]][12] [![Build Status][3]][4] [![Go Report Card][5]][6] [![Coverage Statusd][7]][8]
 
@@ -19,12 +20,12 @@
 
 ## Introduction
 
-kcp-go is a full-featured ***reliable-UDP*** library for golang. It provides ***reliable, ordered, and error-checked*** delivery of a stream of octets between applications running on hosts communicating over an IP network.
+kcp-go is a full-featured ***Reliable-UDP*** library for golang. It provides ***reliable, ordered, and error-checked*** delivery of a stream of octets between applications running on hosts communicating over an IP network.
 
 ## Features
 
-1. Optimized for ***Real-Time Strategy Game***.
-1. Compatible with [skywind3000's](https://github.com/skywind3000) C version with modifications.
+1. Optimized for ***Online Games, Audio/Video Streaming***.
+1. Compatible with [skywind3000's](https://github.com/skywind3000) C version with optimizations.
 1. ***Cache friendly*** and ***Memory optimized*** design in golang.
 1. Compatible with [net.Conn](https://golang.org/pkg/net/#Conn) and [net.Listener](https://golang.org/pkg/net/#Listener).
 1. [FEC(Forward Error Correction)](https://en.wikipedia.org/wiki/Forward_error_correction) Support with [Reed-Solomon Codes](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction)
@@ -40,7 +41,7 @@ For complete documentation, see the associated [Godoc](https://godoc.org/github.
 
 ## Specification
 
-# <img src="frame.png" alt="Frame Format" height="160px" /> 
+<img src="frame.png" alt="Frame Format" height="109px" />
 
 ## Usage
 
@@ -75,14 +76,14 @@ PASS
 ok  	github.com/xtaci/kcp-go	0.600s
 ```
 
+## Who is using this?
+
+1. https://github.com/xtaci/kcptun
+2. https://github.com/getlantern/lantern
+3. https://github.com/smallnest/rpcx
+
 ## Links
 
-1. https://github.com/xtaci/libkcp -- Official client library for iOS/Android(C++11)
+1. https://github.com/xtaci/libkcp -- FEC enhanced KCP session library for iOS/Android in C++
 2. https://github.com/skywind3000/kcp -- A Fast and Reliable ARQ Protocol
 3. https://github.com/klauspost/reedsolomon -- Reed-Solomon Erasure Coding in Go
-
-## Donation
-
-![donate](donate.png)          
-
-All donations on this project will be used to support the development of [gonet/2](http://gonet2.github.io/).

@@ -9,12 +9,6 @@
 			"revisionTime": "2016-04-30T09:49:23Z"
 		},
 		{
-			"checksumSHA1": "QPs3L3mjPoi+a9GJCjW8HhyJczM=",
-			"path": "github.com/codahale/chacha20",
-			"revision": "ec07b4f69a3f70b1dd2a8ad77230deb1ba5d6953",
-			"revisionTime": "2015-11-07T02:50:05Z"
-		},
-		{
 			"checksumSHA1": "aIhLeVAIrsjs63CwqmU3+GU8yT4=",
 			"path": "github.com/ginuerzh/gosocks4",
 			"revision": "fc196f9d34e35f19a813bff2f092a275131c23bc",
@@ -67,12 +61,6 @@
 			"path": "github.com/klauspost/cpuid",
 			"revision": "09cded8978dc9e80714c4d85b0322337b0a1e5e0",
 			"revisionTime": "2016-03-02T07:53:16Z"
-		},
-		{
-			"checksumSHA1": "BM6ZlNJmtKy3GBoWwg2X55gnZ4A=",
-			"path": "github.com/klauspost/crc32",
-			"revision": "cb6bfca970f6908083f26f39a79009d608efd5cd",
-			"revisionTime": "2016-10-16T15:41:25Z"
 		},
 		{
 			"checksumSHA1": "dwSGkUfh3A2h0VkXndzBX/27hVc=",
@@ -291,16 +279,16 @@
 			"revisionTime": "2016-12-15T22:53:35Z"
 		},
 		{
-			"checksumSHA1": "nkIlj9QTxHQ78Vb+VgjhXZ4rZ3E=",
+			"checksumSHA1": "SbBORpjEg3VfPfdSrW82pa3f9Io=",
 			"path": "gopkg.in/xtaci/kcp-go.v2",
-			"revision": "6610d527ea5c4890cf593796ff8ff1f10486bb68",
-			"revisionTime": "2016-09-08T14:44:41Z"
+			"revision": "6da5044c742f24f05b00db9214b57b2ac943c9ab",
+			"revisionTime": "2017-01-20T08:43:10Z"
 		},
 		{
-			"checksumSHA1": "aIqXwA82JxLOXcgmuVSgcRqdJvU=",
+			"checksumSHA1": "EutBuLS2elfcDCMifXNMGj9farQ=",
 			"path": "gopkg.in/xtaci/smux.v1",
-			"revision": "9f2b528a60917e6446273926f4c676cac759d2b0",
-			"revisionTime": "2016-09-22T10:26:45Z"
+			"revision": "427dd804ce9fb0a9e7b27a628f68a124fb0d67a6",
+			"revisionTime": "2016-11-29T15:03:00Z"
 		}
 	],
 	"rootPath": "github.com/ginuerzh/gost/cmd/gost"

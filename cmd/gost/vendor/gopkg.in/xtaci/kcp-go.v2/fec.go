@@ -2,7 +2,7 @@ package kcp
 
 import (
 	"encoding/binary"
-	"sync"
+	"sync/atomic"
 
 	"github.com/klauspost/reedsolomon"
 )
@@ -26,10 +26,10 @@ type (
 		next         uint32 // next seqid
 		enc          reedsolomon.Encoder
 		shards       [][]byte
+		shards2      [][]byte // for calcECC
 		shardsflag   []bool
 		paws         uint32 // Protect Against Wrapped Sequence numbers
 		lastCheck    uint32
-		xmitBuf      sync.Pool
 	}
 
 	fecPacket struct {
@@ -60,11 +60,8 @@ func newFEC(rxlimit, dataShards, parityShards int) *FEC {
 	}
 	fec.enc = enc
 	fec.shards = make([][]byte, fec.shardSize)
+	fec.shards2 = make([][]byte, fec.shardSize)
 	fec.shardsflag = make([]bool, fec.shardSize)
-	fec.xmitBuf.New = func() interface{} {
-		return make([]byte, mtuLimit)
-	}
-
 	return fec
 }
 
@@ -75,9 +72,8 @@ func (fec *FEC) decode(data []byte) fecPacket {
 	pkt.flag = binary.LittleEndian.Uint16(data[4:])
 	pkt.ts = currentMs()
 	// allocate memory & copy
-	buf := fec.xmitBuf.Get().([]byte)
-	n := copy(buf, data[6:])
-	xorBytes(buf[n:], buf[n:], buf[n:])
+	buf := xmitBuf.Get().([]byte)[:len(data)-6]
+	copy(buf, data[6:])
 	pkt.data = buf
 	return pkt
 }
@@ -107,7 +103,7 @@ func (fec *FEC) input(pkt fecPacket) (recovered [][]byte) {
 			if now-fec.rx[k].ts < fecExpire {
 				rx = append(rx, fec.rx[k])
 			} else {
-				fec.xmitBuf.Put(fec.rx[k].data)
+				xmitBuf.Put(fec.rx[k].data)
 			}
 		}
 		fec.rx = rx
@@ -119,7 +115,7 @@ func (fec *FEC) input(pkt fecPacket) (recovered [][]byte) {
 	insertIdx := 0
 	for i := n; i >= 0; i-- {
 		if pkt.seqid == fec.rx[i].seqid { // de-duplicate
-			fec.xmitBuf.Put(pkt.data)
+			xmitBuf.Put(pkt.data)
 			return nil
 		} else if pkt.seqid > fec.rx[i].seqid { // insertion
 			insertIdx = i + 1
@@ -184,7 +180,7 @@ func (fec *FEC) input(pkt fecPacket) (recovered [][]byte) {
 
 		if numDataShard == fec.dataShards { // no lost
 			for i := first; i < first+numshard; i++ { // free
-				fec.xmitBuf.Put(fec.rx[i].data)
+				xmitBuf.Put(fec.rx[i].data)
 			}
 			copy(fec.rx[first:], fec.rx[first+numshard:])
 			for i := 0; i < numshard; i++ { // dereference
@@ -194,7 +190,9 @@ func (fec *FEC) input(pkt fecPacket) (recovered [][]byte) {
 		} else if numshard >= fec.dataShards { // recoverable
 			for k := range shards {
 				if shards[k] != nil {
+					dlen := len(shards[k])
 					shards[k] = shards[k][:maxlen]
+					xorBytes(shards[k][dlen:], shards[k][dlen:], shards[k][dlen:])
 				}
 			}
 			if err := fec.enc.Reconstruct(shards); err == nil {
@@ -206,7 +204,7 @@ func (fec *FEC) input(pkt fecPacket) (recovered [][]byte) {
 			}
 
 			for i := first; i < first+numshard; i++ { // free
-				fec.xmitBuf.Put(fec.rx[i].data)
+				xmitBuf.Put(fec.rx[i].data)
 			}
 			copy(fec.rx[first:], fec.rx[first+numshard:])
 			for i := 0; i < numshard; i++ { // dereference
@@ -218,7 +216,10 @@ func (fec *FEC) input(pkt fecPacket) (recovered [][]byte) {
 
 	// keep rxlimit
 	if len(fec.rx) > fec.rxlimit {
-		fec.xmitBuf.Put(fec.rx[0].data) // free
+		if fec.rx[0].flag == typeData { // record unrecoverable data
+			atomic.AddUint64(&DefaultSnmp.FECShortShards, 1)
+		}
+		xmitBuf.Put(fec.rx[0].data) // free
 		fec.rx[0].data = nil
 		fec.rx = fec.rx[1:]
 	}
@@ -229,7 +230,7 @@ func (fec *FEC) calcECC(data [][]byte, offset, maxlen int) (ecc [][]byte) {
 	if len(data) != fec.shardSize {
 		return nil
 	}
-	shards := make([][]byte, fec.shardSize)
+	shards := fec.shards2
 	for k := range shards {
 		shards[k] = data[k][offset:maxlen]
 	}
