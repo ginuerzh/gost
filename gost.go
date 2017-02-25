@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"github.com/golang/glog"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -143,4 +144,19 @@ func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
 	}
 
 	return cs[:s], cs[s+1:], true
+}
+
+func Transport(rw1, rw2 io.ReadWriter) error {
+	errc := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(rw1, rw2)
+		errc <- err
+	}()
+
+	go func() {
+		_, err := io.Copy(rw2, rw1)
+		errc <- err
+	}()
+
+	return <-errc
 }

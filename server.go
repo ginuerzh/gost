@@ -7,7 +7,9 @@ import (
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	"golang.org/x/crypto/ssh"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -125,6 +127,31 @@ func (s *ProxyServer) Serve() error {
 		return NewShadowUdpServer(s, ttl).ListenAndServe()
 	case "pht": // pure http tunnel
 		return NewPureHttpServer(s).ListenAndServe()
+	case "ssh": // SSH tunnel
+		key := s.Node.Get("key")
+		privateBytes, err := ioutil.ReadFile(key)
+		if err != nil {
+			glog.V(LWARNING).Infoln("[ssh]", err)
+			privateBytes = defaultRawKey
+		}
+		private, err := ssh.ParsePrivateKey(privateBytes)
+		if err != nil {
+			return err
+		}
+		config := ssh.ServerConfig{
+			PasswordCallback: DefaultPasswordCallback(s.Node.Users),
+		}
+		if len(s.Node.Users) == 0 {
+			config.NoClientAuth = true
+		}
+
+		config.AddHostKey(private)
+		s := &SSHServer{
+			Addr:   node.Addr,
+			Base:   s,
+			Config: &config,
+		}
+		return s.ListenAndServe()
 	default:
 		ln, err = net.Listen("tcp", node.Addr)
 	}

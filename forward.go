@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
+	"golang.org/x/crypto/ssh"
 	"net"
 	"time"
 )
 
 type TcpForwardServer struct {
-	Base    *ProxyServer
-	Handler func(conn net.Conn, raddr net.Addr)
+	Base      *ProxyServer
+	sshClient *ssh.Client
+	Handler   func(conn net.Conn, raddr *net.TCPAddr)
 }
 
 func NewTcpForwardServer(base *ProxyServer) *TcpForwardServer {
@@ -34,19 +36,75 @@ func (s *TcpForwardServer) ListenAndServe() error {
 		s.Handler = s.handleTcpForward
 	}
 
+	quit := make(chan interface{})
+	close(quit)
+
 	for {
+	start:
 		conn, err := ln.Accept()
 		if err != nil {
-			glog.V(LWARNING).Infoln(err)
+			glog.V(LWARNING).Infoln("[tcp]", err)
 			continue
 		}
 		setKeepAlive(conn, KeepAliveTime)
+
+		select {
+		case <-quit:
+			if s.Base.Chain.lastNode.Transport != "ssh" {
+				break
+			}
+			if err := s.initSSHClient(); err != nil {
+				glog.V(LWARNING).Infoln("[tcp]", err)
+				conn.Close()
+				goto start
+			}
+			quit = make(chan interface{})
+			go func(ch chan interface{}) {
+				s.sshClient.Wait()
+				glog.V(LINFO).Infoln("[tcp] connection closed")
+				close(ch)
+			}(quit)
+
+		default:
+		}
 
 		go s.Handler(conn, raddr)
 	}
 }
 
-func (s *TcpForwardServer) handleTcpForward(conn net.Conn, raddr net.Addr) {
+func (s *TcpForwardServer) initSSHClient() error {
+	if s.sshClient != nil {
+		s.sshClient.Close()
+		s.sshClient = nil
+	}
+
+	sshNode := s.Base.Chain.lastNode
+	c, err := s.Base.Chain.GetConn()
+	if err != nil {
+		return err
+	}
+	var user, password string
+	if len(sshNode.Users) > 0 {
+		user = sshNode.Users[0].Username()
+		password, _ = sshNode.Users[0].Password()
+	}
+	config := ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(password),
+		},
+	}
+	sshConn, chans, reqs, err := ssh.NewClientConn(c, sshNode.Addr, &config)
+	if err != nil {
+		return err
+	}
+	s.sshClient = ssh.NewClient(sshConn, chans, reqs)
+	s.Handler = s.handleTcpForwardSSH
+
+	return nil
+}
+
+func (s *TcpForwardServer) handleTcpForward(conn net.Conn, raddr *net.TCPAddr) {
 	defer conn.Close()
 
 	glog.V(LINFO).Infof("[tcp] %s - %s", conn.RemoteAddr(), raddr)
@@ -59,6 +117,25 @@ func (s *TcpForwardServer) handleTcpForward(conn net.Conn, raddr net.Addr) {
 
 	glog.V(LINFO).Infof("[tcp] %s <-> %s", conn.RemoteAddr(), raddr)
 	s.Base.transport(conn, cc)
+	glog.V(LINFO).Infof("[tcp] %s >-< %s", conn.RemoteAddr(), raddr)
+}
+
+func (s *TcpForwardServer) handleTcpForwardSSH(conn net.Conn, raddr *net.TCPAddr) {
+	defer conn.Close()
+
+	if s.sshClient == nil {
+		return
+	}
+
+	rc, err := s.sshClient.DialTCP("tcp", nil, raddr)
+	if err != nil {
+		glog.V(LWARNING).Infof("[tcp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
+		return
+	}
+	defer rc.Close()
+
+	glog.V(LINFO).Infof("[tcp] %s <-> %s", conn.RemoteAddr(), raddr)
+	Transport(conn, rc)
 	glog.V(LINFO).Infof("[tcp] %s >-< %s", conn.RemoteAddr(), raddr)
 }
 
@@ -348,16 +425,73 @@ func (s *RTcpForwardServer) Serve() error {
 		}
 		retry = 0
 
-		if err := s.connectRTcpForward(conn, laddr, raddr); err != nil {
-			conn.Close()
-			time.Sleep(6 * time.Second)
+		glog.V(LINFO).Infof("[rtcp] %s - %s", laddr, raddr)
+
+		lastNode := s.Base.Chain.lastNode
+		if lastNode.Transport == "ssh" {
+			s.connectRTcpForwardSSH(conn, lastNode, laddr, raddr)
+		} else {
+			if err := s.connectRTcpForward(conn, laddr, raddr); err != nil {
+				conn.Close()
+			}
 		}
+		time.Sleep(3 * time.Second)
+	}
+}
+
+func (s *RTcpForwardServer) connectRTcpForwardSSH(conn net.Conn, sshNode *ProxyNode, laddr, raddr net.Addr) error {
+	defer conn.Close()
+
+	var user, password string
+	if len(sshNode.Users) > 0 {
+		user = sshNode.Users[0].Username()
+		password, _ = sshNode.Users[0].Password()
+	}
+	config := ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(password),
+		},
+	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, sshNode.Addr, &config)
+	if err != nil {
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
+		return err
+	}
+	client := ssh.NewClient(c, chans, reqs)
+	defer client.Close()
+
+	ln, err := client.Listen("tcp", laddr.String())
+	if err != nil {
+		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
+		return err
+	}
+	defer ln.Close()
+
+	for {
+		rc, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+
+		go func(c net.Conn) {
+			defer c.Close()
+
+			tc, err := net.DialTimeout("tcp", raddr.String(), time.Second*30)
+			if err != nil {
+				glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
+				return
+			}
+			defer tc.Close()
+
+			glog.V(3).Infof("[rtcp] %s <-> %s", c.RemoteAddr(), c.LocalAddr())
+			Transport(c, tc)
+			glog.V(3).Infof("[rtcp] %s >-< %s", c.RemoteAddr(), c.LocalAddr())
+		}(rc)
 	}
 }
 
 func (s *RTcpForwardServer) connectRTcpForward(conn net.Conn, laddr, raddr net.Addr) error {
-	glog.V(LINFO).Infof("[rtcp] %s - %s", laddr, raddr)
-
 	req := gosocks5.NewRequest(gosocks5.CmdBind, ToSocksAddr(laddr))
 	if err := req.Write(conn); err != nil {
 		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
@@ -394,7 +528,7 @@ func (s *RTcpForwardServer) connectRTcpForward(conn net.Conn, laddr, raddr net.A
 	go func() {
 		defer conn.Close()
 
-		lconn, err := net.DialTimeout("tcp", raddr.String(), time.Second*180)
+		lconn, err := net.DialTimeout("tcp", raddr.String(), time.Second*30)
 		if err != nil {
 			glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", rep.Addr, raddr, err)
 			return

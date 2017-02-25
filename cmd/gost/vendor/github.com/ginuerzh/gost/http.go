@@ -46,7 +46,6 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 
 	valid := false
 	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	glog.V(LINFO).Infoln(u, p)
 	for _, user := range s.Base.Node.Users {
 		username := user.Username()
 		password, _ := user.Password()
