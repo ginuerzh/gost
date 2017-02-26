@@ -30,7 +30,7 @@ type SSHServer struct {
 func (s *SSHServer) ListenAndServe() error {
 	ln, err := net.Listen("tcp", s.Addr)
 	if err != nil {
-		glog.V(1).Infoln("[ssh] Listen:", err)
+		glog.V(LWARNING).Infoln("[ssh] Listen:", err)
 		return err
 	}
 	defer ln.Close()
@@ -38,14 +38,14 @@ func (s *SSHServer) ListenAndServe() error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			glog.V(1).Infoln("[ssh] Accept:", err)
+			glog.V(LWARNING).Infoln("[ssh] Accept:", err)
 			return err
 		}
 
 		go func(conn net.Conn) {
 			sshConn, chans, reqs, err := ssh.NewServerConn(conn, s.Config)
 			if err != nil {
-				glog.V(1).Infof("[ssh] %s -> %s : %s", conn.RemoteAddr(), s.Addr, err)
+				glog.V(LWARNING).Infof("[ssh] %s -> %s : %s", conn.RemoteAddr(), s.Addr, err)
 				return
 			}
 			defer sshConn.Close()
@@ -54,9 +54,9 @@ func (s *SSHServer) ListenAndServe() error {
 				s.Handler = s.handleSSHConn
 			}
 
-			glog.V(3).Infof("[ssh] %s <-> %s", conn.RemoteAddr(), s.Addr)
+			glog.V(LINFO).Infof("[ssh] %s <-> %s", conn.RemoteAddr(), s.Addr)
 			s.Handler(sshConn, chans, reqs)
-			glog.V(3).Infof("[ssh] %s >-< %s", conn.RemoteAddr(), s.Addr)
+			glog.V(LINFO).Infof("[ssh] %s >-< %s", conn.RemoteAddr(), s.Addr)
 		}(conn)
 	}
 }
@@ -69,6 +69,7 @@ func (s *SSHServer) handleSSHConn(conn ssh.Conn, chans <-chan ssh.NewChannel, re
 			case RemoteForwardRequest:
 				go s.tcpipForwardRequest(conn, req, quit)
 			default:
+				// glog.V(LWARNING).Infoln("unknown channel type:", req.Type)
 				if req.WantReply {
 					req.Reply(false, nil)
 				}
@@ -84,7 +85,7 @@ func (s *SSHServer) handleSSHConn(conn ssh.Conn, chans <-chan ssh.NewChannel, re
 			case DirectForwardRequest:
 				channel, requests, err := newChannel.Accept()
 				if err != nil {
-					glog.V(3).Infoln("[ssh] Could not accept channel:", err)
+					glog.V(LINFO).Infoln("[ssh] Could not accept channel:", err)
 					continue
 				}
 				p := directForward{}
@@ -93,7 +94,7 @@ func (s *SSHServer) handleSSHConn(conn ssh.Conn, chans <-chan ssh.NewChannel, re
 				go ssh.DiscardRequests(requests)
 				go s.directPortForwardChannel(channel, fmt.Sprintf("%s:%d", p.Host1, p.Port1))
 			default:
-				glog.V(3).Infoln("[ssh] Unknown channel type:", t)
+				glog.V(LWARNING).Infoln("[ssh] Unknown channel type:", t)
 				newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", t))
 			}
 		}
@@ -118,18 +119,18 @@ func (p directForward) String() string {
 func (s *SSHServer) directPortForwardChannel(channel ssh.Channel, raddr string) {
 	defer channel.Close()
 
-	glog.V(3).Infof("[ssh-tcp] %s - %s", s.Addr, raddr)
+	glog.V(LINFO).Infof("[ssh-tcp] %s - %s", s.Addr, raddr)
 
 	conn, err := s.Base.Chain.Dial(raddr)
 	if err != nil {
-		glog.V(3).Infof("[ssh-tcp] %s - %s : %s", s.Addr, raddr, err)
+		glog.V(LINFO).Infof("[ssh-tcp] %s - %s : %s", s.Addr, raddr, err)
 		return
 	}
 	defer conn.Close()
 
-	glog.V(3).Infof("[ssh-tcp] %s <-> %s", s.Addr, raddr)
+	glog.V(LINFO).Infof("[ssh-tcp] %s <-> %s", s.Addr, raddr)
 	Transport(conn, channel)
-	glog.V(3).Infof("[ssh-tcp] %s >-< %s", s.Addr, raddr)
+	glog.V(LINFO).Infof("[ssh-tcp] %s >-< %s", s.Addr, raddr)
 }
 
 // tcpipForward is structure for RFC 4254 7.1 "tcpip-forward" request
@@ -142,10 +143,10 @@ func (s *SSHServer) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Request, quit
 	t := tcpipForward{}
 	ssh.Unmarshal(req.Payload, &t)
 	addr := fmt.Sprintf("%s:%d", t.Host, t.Port)
-	glog.V(3).Infoln("[ssh-rtcp] listening tcp", addr)
+	glog.V(LINFO).Infoln("[ssh-rtcp] listening tcp", addr)
 	ln, err := net.Listen("tcp", addr) //tie to the client connection
 	if err != nil {
-		glog.V(1).Infoln("[ssh-rtcp]", err)
+		glog.V(LWARNING).Infoln("[ssh-rtcp]", err)
 		req.Reply(false, nil)
 		return
 	}
@@ -165,7 +166,7 @@ func (s *SSHServer) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Request, quit
 		return req.Reply(true, nil)
 	}
 	if err := replyFunc(); err != nil {
-		glog.V(1).Infoln("[ssh-rtcp]", err)
+		glog.V(LWARNING).Infoln("[ssh-rtcp]", err)
 		return
 	}
 
@@ -199,9 +200,9 @@ func (s *SSHServer) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Request, quit
 				defer ch.Close()
 				go ssh.DiscardRequests(reqs)
 
-				glog.V(3).Infof("[ssh-rtcp] %s <-> %s", conn.RemoteAddr(), conn.LocalAddr())
+				glog.V(LINFO).Infof("[ssh-rtcp] %s <-> %s", conn.RemoteAddr(), conn.LocalAddr())
 				Transport(ch, conn)
-				glog.V(3).Infof("[ssh-rtcp] %s >-< %s", conn.RemoteAddr(), conn.LocalAddr())
+				glog.V(LINFO).Infof("[ssh-rtcp] %s >-< %s", conn.RemoteAddr(), conn.LocalAddr())
 			}(conn)
 		}
 	}()
@@ -229,7 +230,7 @@ func DefaultPasswordCallback(users []*url.Userinfo) PasswordCallbackFunc {
 				return nil, nil
 			}
 		}
-		glog.V(3).Infof("[ssh] %s -> %s : password rejected for %s", conn.RemoteAddr(), conn.LocalAddr(), conn.User())
+		glog.V(LINFO).Infof("[ssh] %s -> %s : password rejected for %s", conn.RemoteAddr(), conn.LocalAddr(), conn.User())
 		return nil, fmt.Errorf("password rejected for %s", conn.User())
 	}
 }

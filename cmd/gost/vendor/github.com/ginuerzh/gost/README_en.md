@@ -16,6 +16,7 @@ Features
 * Experimental QUIC support (2.3+)
 * KCP protocol support (2.3+)
 * Transparent proxy (2.3+)
+* SSH tunnel (2.4+)
 
 Binary file download：https://github.com/ginuerzh/gost/releases
 
@@ -63,6 +64,8 @@ transport: data transmission mode (ws, wss, tls, http2, quic, kcp, pht), may be 
 > pht - plain HTTP tunnel, pht://:8080
 
 > redirect - transparent proxy，redirect://:12345
+
+> ssh - SSH tunnel, ssh://admin:123456@:2222
 
 #### Port forwarding
 
@@ -165,7 +168,7 @@ each forward proxy can be any HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks type.
 ```bash
 gost -L=tcp://:2222/192.168.1.1:22 -F=...
 ```
-The data on the local TCP port 2222 is forwarded to 192.168.1.1:22 (through the proxy chain).
+The data on the local TCP port 2222 is forwarded to 192.168.1.1:22 (through the proxy chain). If the last node of the chain (the last -F parameter) is a SSH tunnel, then gost will use the local port forwarding function of SSH directly.
 
 #### Local UDP port forwarding
 
@@ -182,7 +185,7 @@ Each forwarding channel has a timeout period. When this time is exceeded and the
 ```bash
 gost -L=rtcp://:2222/192.168.1.1:22 -F=... -F=socks://172.24.10.1:1080
 ```
-The data on 172.24.10.1:2222 is forwarded to 192.168.1.1:22 (through the proxy chain).
+The data on 172.24.10.1:2222 is forwarded to 192.168.1.1:22 (through the proxy chain). If the last node of the chain (the last -F parameter) is a SSH tunnel, then gost will use the remote port forwarding function of SSH directly.
 
 #### Remote UDP port forwarding
 

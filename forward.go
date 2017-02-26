@@ -7,6 +7,7 @@ import (
 	"github.com/golang/glog"
 	"golang.org/x/crypto/ssh"
 	"net"
+	"strconv"
 	"time"
 )
 
@@ -459,7 +460,40 @@ func (s *RTcpForwardServer) connectRTcpForwardSSH(conn net.Conn, sshNode *ProxyN
 		return err
 	}
 	client := ssh.NewClient(c, chans, reqs)
-	defer client.Close()
+
+	quit := make(chan interface{})
+	defer close(quit)
+
+	go func() {
+		defer client.Close()
+
+		var c <-chan time.Time
+
+		ping, _ := strconv.Atoi(sshNode.Get("ping"))
+		if ping > 0 {
+			d := time.Second * time.Duration(ping)
+			glog.V(LINFO).Infoln("[rtcp] ping is enabled:", d)
+			t := time.NewTicker(d)
+			defer t.Stop()
+			c = t.C
+		}
+
+		for {
+			select {
+			case <-c:
+				_, _, err := client.SendRequest("ping", true, nil)
+				if err != nil {
+					glog.V(LWARNING).Infoln("[rtcp] ping", err)
+					return
+				}
+				glog.V(LDEBUG).Infoln("[rtcp] heartbeat OK")
+
+			case <-quit:
+				glog.V(LWARNING).Infoln("[rtcp] ssh connection closed")
+				return
+			}
+		}
+	}()
 
 	ln, err := client.Listen("tcp", laddr.String())
 	if err != nil {
@@ -484,9 +518,9 @@ func (s *RTcpForwardServer) connectRTcpForwardSSH(conn net.Conn, sshNode *ProxyN
 			}
 			defer tc.Close()
 
-			glog.V(3).Infof("[rtcp] %s <-> %s", c.RemoteAddr(), c.LocalAddr())
+			glog.V(LINFO).Infof("[rtcp] %s <-> %s", c.RemoteAddr(), c.LocalAddr())
 			Transport(c, tc)
-			glog.V(3).Infof("[rtcp] %s >-< %s", c.RemoteAddr(), c.LocalAddr())
+			glog.V(LINFO).Infof("[rtcp] %s >-< %s", c.RemoteAddr(), c.LocalAddr())
 		}(rc)
 	}
 }
