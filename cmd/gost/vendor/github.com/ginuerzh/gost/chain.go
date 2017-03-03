@@ -120,6 +120,9 @@ func (c *ProxyChain) Init() {
 			config.Key, _ = c.nodes[0].Users[0].Password()
 		}
 		c.kcpConfig = config
+		go snmpLogger(config.SnmpLog, config.SnmpPeriod)
+		go kcpSigHandler()
+
 		return
 	}
 

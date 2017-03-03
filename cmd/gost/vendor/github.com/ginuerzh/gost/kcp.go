@@ -4,7 +4,9 @@ package gost
 
 import (
 	"crypto/sha1"
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"github.com/golang/glog"
 	"github.com/klauspost/compress/snappy"
 	"golang.org/x/crypto/pbkdf2"
@@ -12,6 +14,8 @@ import (
 	"gopkg.in/xtaci/smux.v1"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -41,6 +45,8 @@ type KCPConfig struct {
 	NoCongestion int    `json:"nc"`
 	SockBuf      int    `json:"sockbuf"`
 	KeepAlive    int    `json:"keepalive"`
+	SnmpLog      string `json:"snmplog"`
+	SnmpPeriod   int    `json:"snmpperiod"`
 }
 
 func ParseKCPConfig(configFile string) (*KCPConfig, error) {
@@ -63,15 +69,15 @@ func ParseKCPConfig(configFile string) (*KCPConfig, error) {
 func (c *KCPConfig) Init() {
 	switch c.Mode {
 	case "normal":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 30, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 50, 2, 1
 	case "fast2":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 20, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 30, 2, 1
 	case "fast3":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 10, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 20, 2, 1
 	case "fast":
 		fallthrough
 	default:
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 20, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 40, 2, 1
 	}
 }
 
@@ -89,11 +95,13 @@ var (
 		NoComp:       false,
 		AckNodelay:   false,
 		NoDelay:      0,
-		Interval:     40,
+		Interval:     50,
 		Resend:       0,
 		NoCongestion: 0,
 		SockBuf:      4194304,
 		KeepAlive:    10,
+		SnmpLog:      "",
+		SnmpPeriod:   60,
 	}
 )
 
@@ -127,10 +135,12 @@ func (s *KCPServer) ListenAndServe() (err error) {
 		glog.V(LWARNING).Infoln("[kcp]", err)
 	}
 
+	go snmpLogger(s.Config.SnmpLog, s.Config.SnmpPeriod)
+	go kcpSigHandler()
 	for {
 		conn, err := ln.AcceptKCP()
 		if err != nil {
-			glog.V(LWARNING).Infoln(err)
+			glog.V(LWARNING).Infoln("[kcp]", err)
 			continue
 		}
 
@@ -207,6 +217,49 @@ func blockCrypt(key, crypt, salt string) (block kcp.BlockCrypt) {
 		block, _ = kcp.NewAESBlockCrypt(pass)
 	}
 	return
+}
+
+func snmpLogger(path string, interval int) {
+	if path == "" || interval == 0 {
+		return
+	}
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			f, err := os.OpenFile(time.Now().Format(path), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+			if err != nil {
+				glog.V(LWARNING).Infoln("[kcp]", err)
+				return
+			}
+			w := csv.NewWriter(f)
+			// write header in empty file
+			if stat, err := f.Stat(); err == nil && stat.Size() == 0 {
+				if err := w.Write(append([]string{"Unix"}, kcp.DefaultSnmp.Header()...)); err != nil {
+					glog.V(LWARNING).Infoln("[kcp]", err)
+				}
+			}
+			if err := w.Write(append([]string{fmt.Sprint(time.Now().Unix())}, kcp.DefaultSnmp.ToSlice()...)); err != nil {
+				glog.V(LWARNING).Infoln("[kcp]", err)
+			}
+			kcp.DefaultSnmp.Reset()
+			w.Flush()
+			f.Close()
+		}
+	}
+}
+
+func kcpSigHandler() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGUSR1)
+
+	for {
+		switch <-ch {
+		case syscall.SIGUSR1:
+			glog.V(LINFO).Infof("[kcp] SNMP: %+v", kcp.DefaultSnmp.Copy())
+		}
+	}
 }
 
 type KCPSession struct {
