@@ -70,7 +70,7 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 
 	// forward http request
 	lastNode := s.Base.Chain.lastNode
-	if lastNode != nil && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
+	if lastNode != nil && lastNode.Transport == "" && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
 		s.forwardRequest(req)
 		return
 	}
@@ -215,6 +215,7 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	}
 
 	req.Header.Del("Proxy-Authorization")
+	req.Header.Del("Proxy-Connection")
 
 	c, err := s.Base.Chain.Dial(target)
 	if err != nil {
@@ -242,13 +243,12 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 			defer conn.Close()
-
+			glog.V(LINFO).Infof("[http2] %s -> %s : downgrade to HTTP/1.1", req.RemoteAddr, target)
 			s.Base.transport(conn, c)
 			return
 		}
 
 		errc := make(chan error, 2)
-
 		go func() {
 			_, err := io.Copy(c, req.Body)
 			errc <- err
@@ -274,7 +274,7 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 
 	resp, err := http.ReadResponse(bufio.NewReader(c), req)
 	if err != nil {
-		glog.V(LWARNING).Infoln(err)
+		glog.V(LWARNING).Infoln("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -288,7 +288,6 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	if _, err := io.Copy(flushWriter{w}, resp.Body); err != nil {
 		glog.V(LWARNING).Infof("[http2] %s <- %s : %s", req.RemoteAddr, target, err)
 	}
-
 	glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, target)
 }
 

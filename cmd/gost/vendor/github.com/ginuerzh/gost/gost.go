@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	Version = "2.4-dev"
+	Version = "2.4-dev20170303"
 )
 
 // Log level for glog
