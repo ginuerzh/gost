@@ -51,7 +51,7 @@ func (s *TcpForwardServer) ListenAndServe() error {
 
 		select {
 		case <-quit:
-			if s.Base.Chain.lastNode.Transport != "ssh" {
+			if s.Base.Chain.lastNode == nil || s.Base.Chain.lastNode.Transport != "ssh" {
 				break
 			}
 			if err := s.initSSHClient(); err != nil {
@@ -429,7 +429,7 @@ func (s *RTcpForwardServer) Serve() error {
 		glog.V(LINFO).Infof("[rtcp] %s - %s", laddr, raddr)
 
 		lastNode := s.Base.Chain.lastNode
-		if lastNode.Transport == "ssh" {
+		if lastNode != nil && lastNode.Transport == "ssh" {
 			s.connectRTcpForwardSSH(conn, lastNode, laddr, raddr)
 		} else {
 			if err := s.connectRTcpForward(conn, laddr, raddr); err != nil {
