@@ -3,17 +3,18 @@ package gost
 import (
 	"bufio"
 	"crypto/tls"
-	"github.com/ginuerzh/gosocks4"
-	"github.com/ginuerzh/gosocks5"
-	"github.com/golang/glog"
-	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
-	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/ginuerzh/gosocks4"
+	"github.com/ginuerzh/gosocks5"
+	"github.com/golang/glog"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+	"golang.org/x/crypto/ssh"
 )
 
 type ProxyServer struct {
@@ -25,12 +26,21 @@ type ProxyServer struct {
 	ota       bool
 }
 
-func NewProxyServer(node ProxyNode, chain *ProxyChain, config *tls.Config) *ProxyServer {
+func NewProxyServer(node ProxyNode, chain *ProxyChain) *ProxyServer {
+	certFile, keyFile := node.certFile(), node.keyFile()
+
+	cert, err := LoadCertificate(certFile, keyFile)
+
+	if err != nil {
+		glog.Fatal(err)
+	}
+
+	config := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+
 	if chain == nil {
 		chain = NewProxyChain()
-	}
-	if config == nil {
-		config = &tls.Config{}
 	}
 
 	var cipher *ss.Cipher
