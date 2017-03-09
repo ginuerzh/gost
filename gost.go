@@ -1,14 +1,21 @@
 package gost
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
-	"github.com/golang/glog"
 	"io"
+	"math/big"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -44,51 +51,8 @@ var (
 	DefaultKeyFile  = "key.pem"
 
 	// This is the default cert and key data for convenience, providing your own cert is recommended.
-	defaultRawCert = []byte(`-----BEGIN CERTIFICATE-----
-MIIC5jCCAdCgAwIBAgIBADALBgkqhkiG9w0BAQUwEjEQMA4GA1UEChMHQWNtZSBD
-bzAeFw0xNDAzMTcwNjIwNTFaFw0xNTAzMTcwNjIwNTFaMBIxEDAOBgNVBAoTB0Fj
-bWUgQ28wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDccNO1xmd4lWSf
-d/0/QS3E93cYIWHw831i/IKxigdRD/XMZonLdEHywW6lOiXazaP8e6CqPGSmnl0x
-5k/3dvGCMj2JCVxM6+z7NpL+AiwvXmvkj/TOciCgwqssCwYS2CiVwjfazRjx1ZUJ
-VDC5qiyRsfktQ2fVHrpnJGVSRagmiQgwGWBilVG9B8QvRtpQKN/GQGq17oIQm8aK
-kOdPt93g93ojMIg7YJpgDgOirvVz/hDn7YD4ryrtPos9CMafFkJprymKpRHyvz7P
-8a3+OkuPjFjPnwOHQ5u1U3+8vC44vfb1ExWzDLoT8Xp8Gndx39k0f7MVOol3GnYu
-MN/dvNUdAgMBAAGjSzBJMA4GA1UdDwEB/wQEAwIAoDATBgNVHSUEDDAKBggrBgEF
-BQcDATAMBgNVHRMBAf8EAjAAMBQGA1UdEQQNMAuCCWxvY2FsaG9zdDALBgkqhkiG
-9w0BAQUDggEBAIG8CJqvTIgJnNOK+i5/IUc/3yF/mSCWuG8qP+Fmo2t6T0PVOtc0
-8wiWH5iWtCAhjn0MRY9l/hIjWm6gUZGHCGuEgsOPpJDYGoNLjH9Xwokm4y3LFNRK
-UBrrrDbKRNibApBHCapPf6gC5sXcjOwx7P2/kiHDgY7YH47jfcRhtAPNsM4gjsEO
-RmwENY+hRUFHIRfQTyalqND+x6PWhRo3K6hpHs4DQEYPq4P2kFPqUqSBymH+Ny5/
-BcQ3wdMNmC6Bm/oiL1QV0M+/InOsAgQk/EDd0kmoU1ZT2lYHQduGmP099bOlHNpS
-uqO3vXF3q8SPPr/A9TqSs7BKkBQbe0+cdsA=
------END CERTIFICATE-----`)
-	defaultRawKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEA3HDTtcZneJVkn3f9P0EtxPd3GCFh8PN9YvyCsYoHUQ/1zGaJ
-y3RB8sFupTol2s2j/Hugqjxkpp5dMeZP93bxgjI9iQlcTOvs+zaS/gIsL15r5I/0
-znIgoMKrLAsGEtgolcI32s0Y8dWVCVQwuaoskbH5LUNn1R66ZyRlUkWoJokIMBlg
-YpVRvQfEL0baUCjfxkBqte6CEJvGipDnT7fd4Pd6IzCIO2CaYA4Doq71c/4Q5+2A
-+K8q7T6LPQjGnxZCaa8piqUR8r8+z/Gt/jpLj4xYz58Dh0ObtVN/vLwuOL329RMV
-swy6E/F6fBp3cd/ZNH+zFTqJdxp2LjDf3bzVHQIDAQABAoIBAHal26147nQ+pHwY
-jxwers3XDCjWvup7g79lfcqlKi79UiUEA6KYHm7UogMYewt7p4nb2KwH+XycvDiB
-aAUf5flXpTs+6IkWauUDiLZi4PlV7uiEexUq5FjirlL0U/6MjbudX4bK4WQ4uxDc
-WaV07Kw2iJFOOHLDKT0en9JaX5jtJNc4ZnE9efFoQ5jfypPWtRw65G1rULEg6nvc
-GDh+1ce+4foCkpLRC9c24xAwJONZG6x3UqrSS9qfAsb73nWRQrTfUcO3nhoN8VvL
-kL9skn1+S06NyUN0KoEtyRBp+RcpXSsBWAo6qZmo/WqhB/gjzWrxVwn20+yJSm35
-ZsMc6QECgYEA8GS+Mp9xfB2szWHz6YTOO1Uu4lHM1ccZMwS1G+dL0KO3uGAiPdvp
-woVot6v6w88t7onXsLo5pgz7SYug0CpkF3K/MRd1Ar4lH7PK7IBQ6rFr9ppVxDbx
-AEWRswUoPbKCr7W6HU8LbQHDavsDlEIwc6+DiwnL4BzlKjb7RpgQEz0CgYEA6sB5
-uHvx3Y5FDcGk1n73leQSAcq14l3ZLNpjrs8msoREDil/j5WmuSN58/7PGMiMgHEi
-1vLm3H796JmvGr9OBvspOjHyk07ui2/We/j9Hoxm1VWhyi8HkLNDj70HKalTTFMz
-RHO4O+0xCva+h9mKZrRMVktXr2jjdFn/0MYIZ2ECgYAIIsC1IeRLWQ3CHbCNlKsO
-IwHlMvOFwKk/qsceXKOaOhA7szU1dr3gkXdL0Aw6mEZrrkqYdpUA46uVf54/rU+Z
-445I8QxKvXiwK/uQKX+TkdGflPWWIG3jnnch4ejMvb/ihnn4B/bRB6A/fKNQXzUY
-lTYUfI5j1VaEKTwz1W2l2QKBgByFCcSp+jZqhGUpc3dDsZyaOr3Q/Mvlju7uEVI5
-hIAHpaT60a6GBd1UPAqymEJwivFHzW3D0NxU6VAK68UaHMaoWNfjHY9b9YsnKS2i
-kE3XzN56Ks+/avHfdYPO+UHMenw5V28nh+hv5pdoZrlmanQTz3pkaOC8o3WNQZEB
-nh/BAoGBAMY5z2f1pmMhrvtPDSlEVjgjELbaInxFaxPLR4Pdyzn83gtIIU14+R8X
-2LPs6PPwrNjWnIgrUSVXncIFL3pa45B+Mx1pYCpOAB1+nCZjIBQmpeo4Y0dwA/XH
-85EthKPvoszm+OPbyI16OcePV5ocX7lupRYuAo0pek7bomhmHWHz
------END RSA PRIVATE KEY-----`)
+	defaultRawCert []byte
+	defaultRawKey  []byte
 )
 
 var (
@@ -109,6 +73,46 @@ func setKeepAlive(conn net.Conn, d time.Duration) error {
 	return nil
 }
 
+func generateKeyPair() (rawCert, rawKey []byte) {
+	if defaultRawCert != nil && defaultRawKey != nil {
+		return defaultRawCert, defaultRawKey
+	}
+
+	// Create private key and self-signed certificate
+	// Adapted from https://golang.org/src/crypto/tls/generate_cert.go
+
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	validFor := time.Hour * 24 * 365 * 10
+	notBefore := time.Now()
+	notAfter := notBefore.Add(validFor)
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"gost"},
+		},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		glog.Fatal(err)
+	}
+
+	rawCert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	rawKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+
+	return rawCert, rawKey
+}
+
 // Load the certificate from cert and key files, will use the default certificate if the provided info are invalid.
 func LoadCertificate(certFile, keyFile string) (tls.Certificate, error) {
 	tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -116,7 +120,8 @@ func LoadCertificate(certFile, keyFile string) (tls.Certificate, error) {
 		return tlsCert, nil
 	}
 	glog.V(LWARNING).Infoln(err)
-	return tls.X509KeyPair(defaultRawCert, defaultRawKey)
+	rawCert, rawKey := generateKeyPair()
+	return tls.X509KeyPair(rawCert, rawKey)
 }
 
 // Replace the default certificate by your own
