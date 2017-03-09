@@ -3,12 +3,13 @@ package gost
 import (
 	"bufio"
 	"fmt"
-	"github.com/golang/glog"
 	"net"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/golang/glog"
 )
 
 // Proxy node represent a proxy
@@ -140,6 +141,10 @@ func (node *ProxyNode) Set(key, value string) {
 
 func (node *ProxyNode) insecureSkipVerify() bool {
 	return !node.getBool("secure")
+}
+
+func (node *ProxyNode) caFile() string {
+	return node.Get("ca")
 }
 
 func (node *ProxyNode) certFile() string {
