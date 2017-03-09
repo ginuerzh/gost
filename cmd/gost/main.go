@@ -1,17 +1,17 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/ginuerzh/gost"
-	"github.com/golang/glog"
-	"golang.org/x/net/http2"
 	"io/ioutil"
 	"os"
 	"runtime"
 	"sync"
+
+	"github.com/ginuerzh/gost"
+	"github.com/golang/glog"
+	"golang.org/x/net/http2"
 )
 
 var (
@@ -79,7 +79,7 @@ func main() {
 			if err != nil {
 				glog.Fatal(err)
 			}
-			server := gost.NewProxyServer(node, chain, &tls.Config{Certificates: []tls.Certificate{cert}})
+			server := gost.NewProxyServer(node, chain)
 			glog.Fatal(server.Serve())
 		}(serverNode)
 	}

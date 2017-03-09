@@ -21,12 +21,6 @@
 			"revisionTime": "2017-01-19T05:34:58Z"
 		},
 		{
-			"checksumSHA1": "90Nj9KD5KzY15ZBn95Coz7G85+0=",
-			"path": "github.com/ginuerzh/gost",
-			"revision": "26f4e49f0538177eb5ec33c84a280afe2ae16042",
-			"revisionTime": "2017-03-03T13:33:05Z"
-		},
-		{
 			"checksumSHA1": "+XIOnTW0rv8Kr/amkXgMraNeUr4=",
 			"path": "github.com/ginuerzh/pht",
 			"revision": "f90acb425616767b84789d10e50a6fb652cd1e9a",
