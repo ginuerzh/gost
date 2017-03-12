@@ -3,13 +3,14 @@ package gost
 import (
 	"bytes"
 	"crypto/tls"
-	"github.com/ginuerzh/gosocks4"
-	"github.com/ginuerzh/gosocks5"
-	"github.com/golang/glog"
 	"net"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/ginuerzh/gosocks4"
+	"github.com/ginuerzh/gosocks5"
+	"github.com/golang/glog"
 )
 
 const (
@@ -191,7 +192,7 @@ func (s *Socks5Server) HandleRequest(req *gosocks5.Request) {
 		s.handleUDPRelay(req)
 
 	case CmdUdpTun:
-		glog.V(LINFO).Infof("[socks5-udp] %s - %s", s.conn.RemoteAddr(), req.Addr)
+		glog.V(LINFO).Infof("[socks5-rudp] %s - %s", s.conn.RemoteAddr(), req.Addr)
 		s.handleUDPTunnel(req)
 
 	default:
@@ -200,7 +201,16 @@ func (s *Socks5Server) HandleRequest(req *gosocks5.Request) {
 }
 
 func (s *Socks5Server) handleConnect(req *gosocks5.Request) {
-	cc, err := s.Base.Chain.Dial(req.Addr.String())
+	addr := req.Addr.String()
+
+	if !s.Base.Node.Can("tcp", addr) {
+		glog.Errorf("Unauthorized to tcp connect to %s", addr)
+		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
+		rep.Write(s.conn)
+		return
+	}
+
+	cc, err := s.Base.Chain.Dial(addr)
 	if err != nil {
 		glog.V(LWARNING).Infof("[socks5-connect] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 		rep := gosocks5.NewReply(gosocks5.HostUnreachable, nil)
@@ -226,7 +236,7 @@ func (s *Socks5Server) handleConnect(req *gosocks5.Request) {
 func (s *Socks5Server) handleBind(req *gosocks5.Request) {
 	cc, err := s.Base.Chain.GetConn()
 
-	// connection error
+	// connection error when forwarding bind
 	if err != nil && err != ErrEmptyChain {
 		glog.V(LWARNING).Infof("[socks5-bind] %s <- %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
@@ -234,23 +244,42 @@ func (s *Socks5Server) handleBind(req *gosocks5.Request) {
 		glog.V(LDEBUG).Infof("[socks5-bind] %s <- %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
 		return
 	}
+
 	// serve socks5 bind
 	if err == ErrEmptyChain {
-		s.bindOn(req.Addr.String())
+		addr := req.Addr.String()
+
+		if !s.Base.Node.Can("rtcp", addr) {
+			glog.Errorf("Unauthorized to tcp bind to %s", addr)
+			return
+		}
+
+		s.bindOn(addr)
+
 		return
 	}
 
-	defer cc.Close()
 	// forward request
+	// note: this type of request forwarding is defined when starting server
+	// so we don't need to authenticate it, as it's as explicit as whitelisting
+	defer cc.Close()
 	req.Write(cc)
-
 	glog.V(LINFO).Infof("[socks5-bind] %s <-> %s", s.conn.RemoteAddr(), cc.RemoteAddr())
 	s.Base.transport(s.conn, cc)
 	glog.V(LINFO).Infof("[socks5-bind] %s >-< %s", s.conn.RemoteAddr(), cc.RemoteAddr())
 }
 
 func (s *Socks5Server) handleUDPRelay(req *gosocks5.Request) {
-	bindAddr, _ := net.ResolveUDPAddr("udp", req.Addr.String())
+	addr := req.Addr.String()
+
+	if !s.Base.Node.Can("udp", addr) {
+		glog.Errorf("Unauthorized to udp connect to %s", addr)
+		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
+		rep.Write(s.conn)
+		return
+	}
+
+	bindAddr, _ := net.ResolveUDPAddr("udp", addr)
 	relay, err := net.ListenUDP("udp", bindAddr) // udp associate, strict mode: if the port already in use, it will return error
 	if err != nil {
 		glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
@@ -338,19 +367,26 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 
 	// connection error
 	if err != nil && err != ErrEmptyChain {
-		glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		glog.V(LWARNING).Infof("[socks5-rudp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
 		reply.Write(s.conn)
-		glog.V(LDEBUG).Infof("[socks5-udp] %s -> %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
+		glog.V(LDEBUG).Infof("[socks5-rudp] %s -> %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
 		return
 	}
 
 	// serve tunnel udp, tunnel <-> remote, handle tunnel udp request
 	if err == ErrEmptyChain {
-		bindAddr, _ := net.ResolveUDPAddr("udp", req.Addr.String())
+		addr := req.Addr.String()
+
+		if !s.Base.Node.Can("rudp", addr) {
+			glog.Errorf("Unauthorized to udp bind to %s", addr)
+			return
+		}
+
+		bindAddr, _ := net.ResolveUDPAddr("udp", addr)
 		uc, err := net.ListenUDP("udp", bindAddr)
 		if err != nil {
-			glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+			glog.V(LWARNING).Infof("[socks5-rudp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 			return
 		}
 		defer uc.Close()
@@ -359,25 +395,27 @@ func (s *Socks5Server) handleUDPTunnel(req *gosocks5.Request) {
 		socksAddr.Host, _, _ = net.SplitHostPort(s.conn.LocalAddr().String())
 		reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 		if err := reply.Write(s.conn); err != nil {
-			glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), socksAddr, err)
+			glog.V(LWARNING).Infof("[socks5-rudp] %s <- %s : %s", s.conn.RemoteAddr(), socksAddr, err)
 			return
 		}
-		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), socksAddr, reply)
+		glog.V(LDEBUG).Infof("[socks5-rudp] %s <- %s\n%s", s.conn.RemoteAddr(), socksAddr, reply)
 
-		glog.V(LINFO).Infof("[socks5-udp] %s <-> %s", s.conn.RemoteAddr(), socksAddr)
+		glog.V(LINFO).Infof("[socks5-rudp] %s <-> %s", s.conn.RemoteAddr(), socksAddr)
 		s.tunnelServerUDP(s.conn, uc)
-		glog.V(LINFO).Infof("[socks5-udp] %s >-< %s", s.conn.RemoteAddr(), socksAddr)
+		glog.V(LINFO).Infof("[socks5-rudp] %s >-< %s", s.conn.RemoteAddr(), socksAddr)
 		return
 	}
 
 	defer cc.Close()
 
 	// tunnel <-> tunnel, direct forwarding
+	// note: this type of request forwarding is defined when starting server
+	// so we don't need to authenticate it, as it's as explicit as whitelisting
 	req.Write(cc)
 
-	glog.V(LINFO).Infof("[socks5-udp] %s <-> %s [tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
+	glog.V(LINFO).Infof("[socks5-rudp] %s <-> %s [tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
 	s.Base.transport(s.conn, cc)
-	glog.V(LINFO).Infof("[socks5-udp] %s >-< %s [tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
+	glog.V(LINFO).Infof("[socks5-rudp] %s >-< %s [tun]", s.conn.RemoteAddr(), cc.RemoteAddr())
 }
 
 func (s *Socks5Server) bindOn(addr string) {
@@ -697,7 +735,16 @@ func (s *Socks4Server) HandleRequest(req *gosocks4.Request) {
 }
 
 func (s *Socks4Server) handleConnect(req *gosocks4.Request) {
-	cc, err := s.Base.Chain.Dial(req.Addr.String())
+	addr := req.Addr.String()
+
+	if !s.Base.Node.Can("tcp", addr) {
+		glog.Errorf("Unauthorized to tcp connect to %s", addr)
+		rep := gosocks5.NewReply(gosocks4.Rejected, nil)
+		rep.Write(s.conn)
+		return
+	}
+
+	cc, err := s.Base.Chain.Dial(addr)
 	if err != nil {
 		glog.V(LWARNING).Infof("[socks4-connect] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
 		rep := gosocks4.NewReply(gosocks4.Failed, nil)

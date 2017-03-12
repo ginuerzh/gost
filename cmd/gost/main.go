@@ -65,6 +65,8 @@ func main() {
 			glog.Fatal(err)
 		}
 
+		glog.Info(serverNode)
+
 		wg.Add(1)
 		go func(node gost.ProxyNode) {
 			defer wg.Done()
