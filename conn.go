@@ -149,7 +149,7 @@ func (c *ProxyConn) Connect(addr string) error {
 			return err
 		}
 
-		ssc, err := ss.DialWithRawAddrConn(rawaddr, c.conn, cipher)
+		ssc, err := ss.DialWithRawAddr(rawaddr, c.Node.serverName, cipher.Copy())
 		if err != nil {
 			return err
 		}
