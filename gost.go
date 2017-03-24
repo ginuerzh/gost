@@ -4,11 +4,12 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
-	"github.com/golang/glog"
 	"io"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 const (
