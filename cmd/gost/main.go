@@ -68,17 +68,6 @@ func main() {
 		wg.Add(1)
 		go func(node gost.ProxyNode) {
 			defer wg.Done()
-			certFile, keyFile := node.Get("cert"), node.Get("key")
-			if certFile == "" {
-				certFile = gost.DefaultCertFile
-			}
-			if keyFile == "" {
-				keyFile = gost.DefaultKeyFile
-			}
-			cert, err := gost.LoadCertificate(certFile, keyFile)
-			if err != nil {
-				glog.Fatal(err)
-			}
 			server := gost.NewProxyServer(node, chain)
 			glog.Fatal(server.Serve())
 		}(serverNode)
