@@ -148,7 +148,7 @@ func ParsePermissions(s string) (*Permissions, error) {
 		return &Permissions{}, nil
 	}
 
-	perms := strings.Split(s, "+")
+	perms := strings.Split(s, " ")
 
 	for _, perm := range perms {
 		parts := strings.Split(perm, ":")

@@ -46,7 +46,7 @@ var permissionsTests = []struct {
 			Ports:   PortSet{PortRange{Min: 0, Max: 65535}},
 		},
 	}},
-	{"bind:127.0.0.1,localhost:80,443,8000-8100+connect:*.google.pl:80,443", &Permissions{
+	{"bind:127.0.0.1,localhost:80,443,8000-8100 connect:*.google.pl:80,443", &Permissions{
 		Permission{
 			Actions: StringSet{"bind"},
 			Hosts:   StringSet{"127.0.0.1", "localhost"},
