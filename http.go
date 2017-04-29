@@ -5,14 +5,15 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
-	"github.com/ginuerzh/pht"
-	"github.com/golang/glog"
-	"golang.org/x/net/http2"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"time"
+
+	"github.com/ginuerzh/pht"
+	"github.com/golang/glog"
+	"golang.org/x/net/http2"
 )
 
 type HttpServer struct {
@@ -72,6 +73,11 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 	lastNode := s.Base.Chain.lastNode
 	if lastNode != nil && lastNode.Transport == "" && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
 		s.forwardRequest(req)
+		return
+	}
+
+	if !s.Base.Node.Can("tcp", req.Host) {
+		glog.Errorf("Unauthorized to tcp connect to %s", req.Host)
 		return
 	}
 
@@ -183,6 +189,11 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("Proxy-Agent", "gost/"+Version)
+
+	if !s.Base.Node.Can("tcp", target) {
+		glog.Errorf("Unauthorized to tcp connect to %s", target)
+		return
+	}
 
 	// HTTP2 as transport
 	if req.Header.Get("Proxy-Switch") == "gost" {

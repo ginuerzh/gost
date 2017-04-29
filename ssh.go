@@ -5,11 +5,12 @@ package gost
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/golang/glog"
-	"golang.org/x/crypto/ssh"
 	"net"
 	"net/url"
 	"strconv"
+
+	"github.com/golang/glog"
+	"golang.org/x/crypto/ssh"
 )
 
 // Applicaple SSH Request types for Port Forwarding - RFC 4254 7.X
@@ -121,6 +122,11 @@ func (s *SSHServer) directPortForwardChannel(channel ssh.Channel, raddr string) 
 
 	glog.V(LINFO).Infof("[ssh-tcp] %s - %s", s.Addr, raddr)
 
+	if !s.Base.Node.Can("tcp", raddr) {
+		glog.Errorf("Unauthorized to tcp connect to %s", raddr)
+		return
+	}
+
 	conn, err := s.Base.Chain.Dial(raddr)
 	if err != nil {
 		glog.V(LINFO).Infof("[ssh-tcp] %s - %s : %s", s.Addr, raddr, err)
@@ -143,6 +149,13 @@ func (s *SSHServer) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Request, quit
 	t := tcpipForward{}
 	ssh.Unmarshal(req.Payload, &t)
 	addr := fmt.Sprintf("%s:%d", t.Host, t.Port)
+
+	if !s.Base.Node.Can("rtcp", addr) {
+		glog.Errorf("Unauthorized to tcp bind to %s", addr)
+		req.Reply(false, nil)
+		return
+	}
+
 	glog.V(LINFO).Infoln("[ssh-rtcp] listening tcp", addr)
 	ln, err := net.Listen("tcp", addr) //tie to the client connection
 	if err != nil {
