@@ -279,26 +279,25 @@ func (s *Socks5Server) handleUDPRelay(req *gosocks5.Request) {
 		return
 	}
 
-	bindAddr, _ := net.ResolveUDPAddr("udp", addr)
-	relay, err := net.ListenUDP("udp", bindAddr) // udp associate, strict mode: if the port already in use, it will return error
+	relay, err := net.ListenUDP("udp", nil)
 	if err != nil {
-		glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		glog.V(LWARNING).Infof("[socks5-udp] %s -> %s : %s", s.conn.RemoteAddr(), relay.LocalAddr(), err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
 		reply.Write(s.conn)
-		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), req.Addr, reply)
+		glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), relay.LocalAddr(), reply)
 		return
 	}
 	defer relay.Close()
 
 	socksAddr := ToSocksAddr(relay.LocalAddr())
-	socksAddr.Host, _, _ = net.SplitHostPort(s.conn.LocalAddr().String())
+	socksAddr.Host, _, _ = net.SplitHostPort(s.conn.LocalAddr().String()) // replace the IP to out-going interface's
 	reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 	if err := reply.Write(s.conn); err != nil {
-		glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), req.Addr, err)
+		glog.V(LWARNING).Infof("[socks5-udp] %s <- %s : %s", s.conn.RemoteAddr(), relay.LocalAddr(), err)
 		return
 	}
 	glog.V(LDEBUG).Infof("[socks5-udp] %s <- %s\n%s", s.conn.RemoteAddr(), reply.Addr, reply)
-	glog.V(LINFO).Infof("[socks5-udp] %s - %s BIND ON %s OK", s.conn.RemoteAddr(), req.Addr, socksAddr)
+	glog.V(LINFO).Infof("[socks5-udp] %s - %s BIND ON %s OK", s.conn.RemoteAddr(), relay.LocalAddr(), socksAddr)
 
 	cc, err := s.Base.Chain.GetConn()
 	// connection error

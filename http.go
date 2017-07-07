@@ -100,7 +100,7 @@ func (s *HttpServer) HandleRequest(req *http.Request) {
 		s.conn.Write(b)
 	} else {
 		req.Header.Del("Proxy-Connection")
-		req.Header.Set("Connection", "Keep-Alive")
+		// req.Header.Set("Connection", "Keep-Alive")
 
 		if err = req.Write(c); err != nil {
 			glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), req.Host, err)
@@ -277,7 +277,7 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	req.Header.Set("Connection", "Keep-Alive")
+	// req.Header.Set("Connection", "Keep-Alive")
 	if err = req.Write(c); err != nil {
 		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
 		return
