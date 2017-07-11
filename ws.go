@@ -2,12 +2,14 @@ package gost
 
 import (
 	"crypto/tls"
-	"github.com/golang/glog"
-	"gopkg.in/gorilla/websocket.v1"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"time"
+
+	"github.com/golang/glog"
+	"gopkg.in/gorilla/websocket.v1"
 )
 
 type WebsocketServer struct {
@@ -18,14 +20,18 @@ type WebsocketServer struct {
 }
 
 func NewWebsocketServer(base *ProxyServer) *WebsocketServer {
+	rbuf, _ := strconv.Atoi(base.Node.Get("rbuf"))
+	wbuf, _ := strconv.Atoi(base.Node.Get("wbuf"))
+	comp := base.Node.getBool("compression")
+
 	return &WebsocketServer{
 		Addr: base.Node.Addr,
 		Base: base,
 		upgrader: websocket.Upgrader{
-			ReadBufferSize:    1024,
-			WriteBufferSize:   1024,
+			ReadBufferSize:    rbuf,
+			WriteBufferSize:   wbuf,
 			CheckOrigin:       func(r *http.Request) bool { return true },
-			EnableCompression: true,
+			EnableCompression: comp,
 		},
 	}
 }
@@ -68,18 +74,29 @@ func (s *WebsocketServer) ListenAndServeTLS(config *tls.Config) error {
 	return server.ListenAndServeTLS("", "")
 }
 
+type WSOptions struct {
+	ReadBufferSize    int
+	WriteBufferSize   int
+	HandshakeTimeout  time.Duration
+	EnableCompression bool
+	TLSConfig         *tls.Config
+}
+
 type WebsocketConn struct {
 	conn *websocket.Conn
 	rb   []byte
 }
 
-func WebsocketClientConn(url string, conn net.Conn, config *tls.Config) (*WebsocketConn, error) {
+func WebsocketClientConn(url string, conn net.Conn, options *WSOptions) (*WebsocketConn, error) {
+	if options == nil {
+		options = &WSOptions{}
+	}
 	dialer := websocket.Dialer{
-		ReadBufferSize:    1024,
-		WriteBufferSize:   1024,
-		TLSClientConfig:   config,
-		HandshakeTimeout:  DialTimeout,
-		EnableCompression: true,
+		ReadBufferSize:    options.ReadBufferSize,
+		WriteBufferSize:   options.WriteBufferSize,
+		TLSClientConfig:   options.TLSConfig,
+		HandshakeTimeout:  options.HandshakeTimeout,
+		EnableCompression: options.EnableCompression,
 		NetDial: func(net, addr string) (net.Conn, error) {
 			return conn, nil
 		},

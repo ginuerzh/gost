@@ -6,10 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/ginuerzh/gosocks4"
-	"github.com/ginuerzh/gosocks5"
-	"github.com/golang/glog"
-	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -18,6 +14,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ginuerzh/gosocks4"
+	"github.com/ginuerzh/gosocks5"
+	"github.com/golang/glog"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
 type ProxyConn struct {
@@ -57,20 +58,40 @@ func (c *ProxyConn) handshake() error {
 
 	switch c.Node.Transport {
 	case "ws": // websocket connection
+		rbuf, _ := strconv.Atoi(c.Node.Get("rbuf"))
+		wbuf, _ := strconv.Atoi(c.Node.Get("wbuf"))
+		comp := c.Node.getBool("compression")
+		opt := WSOptions{
+			ReadBufferSize:    rbuf,
+			WriteBufferSize:   wbuf,
+			HandshakeTimeout:  DialTimeout,
+			EnableCompression: comp,
+		}
 		u := url.URL{Scheme: "ws", Host: c.Node.Addr, Path: "/ws"}
-		conn, err := WebsocketClientConn(u.String(), c.conn, nil)
+		conn, err := WebsocketClientConn(u.String(), c.conn, &opt)
 		if err != nil {
 			return err
 		}
 		c.conn = conn
 	case "wss": // websocket security
 		tlsUsed = true
-		u := url.URL{Scheme: "wss", Host: c.Node.Addr, Path: "/ws"}
-		config := &tls.Config{
-			InsecureSkipVerify: c.Node.insecureSkipVerify(),
-			ServerName:         c.Node.serverName,
+
+		rbuf, _ := strconv.Atoi(c.Node.Get("rbuf"))
+		wbuf, _ := strconv.Atoi(c.Node.Get("wbuf"))
+		comp := c.Node.getBool("compression")
+		opt := WSOptions{
+			ReadBufferSize:    rbuf,
+			WriteBufferSize:   wbuf,
+			HandshakeTimeout:  DialTimeout,
+			EnableCompression: comp,
+			TLSConfig: &tls.Config{
+				InsecureSkipVerify: c.Node.insecureSkipVerify(),
+				ServerName:         c.Node.serverName,
+			},
 		}
-		conn, err := WebsocketClientConn(u.String(), c.conn, config)
+
+		u := url.URL{Scheme: "wss", Host: c.Node.Addr, Path: "/ws"}
+		conn, err := WebsocketClientConn(u.String(), c.conn, &opt)
 		if err != nil {
 			return err
 		}
