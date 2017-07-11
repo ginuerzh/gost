@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	Version = "2.4-dev20170303"
+	Version = "2.4-dev20170711"
 )
 
 // Log level for glog
@@ -120,7 +120,11 @@ func LoadCertificate(certFile, keyFile string) (tls.Certificate, error) {
 		return tlsCert, nil
 	}
 	glog.V(LWARNING).Infoln(err)
-	rawCert, rawKey := generateKeyPair()
+
+	rawCert, rawKey := defaultRawCert, defaultRawKey
+	if defaultRawCert == nil || defaultRawKey == nil {
+		rawCert, rawKey = generateKeyPair()
+	}
 	return tls.X509KeyPair(rawCert, rawKey)
 }
 

@@ -9,6 +9,13 @@
 			"revisionTime": "2016-04-30T09:49:23Z"
 		},
 		{
+			"checksumSHA1": "OFu4xJEIjiI8Suu+j/gabfp+y6Q=",
+			"origin": "github.com/stretchr/testify/vendor/github.com/davecgh/go-spew/spew",
+			"path": "github.com/davecgh/go-spew/spew",
+			"revision": "f6abca593680b2315d2075e0f5e2a9751e3f431a",
+			"revisionTime": "2017-06-01T20:57:54Z"
+		},
+		{
 			"checksumSHA1": "aIhLeVAIrsjs63CwqmU3+GU8yT4=",
 			"path": "github.com/ginuerzh/gosocks4",
 			"revision": "fc196f9d34e35f19a813bff2f092a275131c23bc",
@@ -153,10 +160,29 @@
 			"revisionTime": "2016-10-02T05:25:12Z"
 		},
 		{
+			"checksumSHA1": "zKKp5SZ3d3ycKe4EKMNT0BqAWBw=",
+			"origin": "github.com/stretchr/testify/vendor/github.com/pmezard/go-difflib/difflib",
+			"path": "github.com/pmezard/go-difflib/difflib",
+			"revision": "f6abca593680b2315d2075e0f5e2a9751e3f431a",
+			"revisionTime": "2017-06-01T20:57:54Z"
+		},
+		{
+			"checksumSHA1": "9JoAHfGuIBHqCaJSoy4LPIhcA1k=",
+			"path": "github.com/ryanuber/go-glob",
+			"revision": "0067a9abd927e50aed5190662702f81231413ae0",
+			"revisionTime": "2014-06-17T17:15:57Z"
+		},
+		{
 			"checksumSHA1": "MRsfMrdZwnnCTfIzT3czcj0lb0s=",
 			"path": "github.com/shadowsocks/shadowsocks-go/shadowsocks",
 			"revision": "97a5c71f80ba5f5b3e549f14a619fe557ff4f3c9",
 			"revisionTime": "2017-01-21T20:35:16Z"
+		},
+		{
+			"checksumSHA1": "5NBHAe3S15q3L9hOLThnMZjIZRE=",
+			"path": "github.com/stretchr/testify/assert",
+			"revision": "f6abca593680b2315d2075e0f5e2a9751e3f431a",
+			"revisionTime": "2017-06-01T20:57:54Z"
 		},
 		{
 			"checksumSHA1": "JsJdKXhz87gWenMwBeejTOeNE7k=",

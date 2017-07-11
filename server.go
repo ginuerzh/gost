@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -30,7 +29,6 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain) *ProxyServer {
 	certFile, keyFile := node.certFile(), node.keyFile()
 
 	cert, err := LoadCertificate(certFile, keyFile)
-
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -138,24 +136,29 @@ func (s *ProxyServer) Serve() error {
 	case "pht": // pure http tunnel
 		return NewPureHttpServer(s).ListenAndServe()
 	case "ssh": // SSH tunnel
-		key := s.Node.Get("key")
-		privateBytes, err := ioutil.ReadFile(key)
-		if err != nil {
-			glog.V(LWARNING).Infoln("[ssh]", err)
-			privateBytes = defaultRawKey
-		}
-		private, err := ssh.ParsePrivateKey(privateBytes)
-		if err != nil {
-			return err
-		}
+		/*
+			key := s.Node.Get("key")
+			privateBytes, err := ioutil.ReadFile(key)
+			if err != nil {
+				glog.V(LWARNING).Infoln("[ssh]", err)
+				privateBytes = defaultRawKey
+			}
+			private, err := ssh.ParsePrivateKey(privateBytes)
+			if err != nil {
+				return err
+			}
+		*/
 		config := ssh.ServerConfig{
 			PasswordCallback: DefaultPasswordCallback(s.Node.Users),
 		}
 		if len(s.Node.Users) == 0 {
 			config.NoClientAuth = true
 		}
-
-		config.AddHostKey(private)
+		signer, err := ssh.NewSignerFromKey(s.TLSConfig.Certificates[0].PrivateKey)
+		if err != nil {
+			return err
+		}
+		config.AddHostKey(signer)
 		s := &SSHServer{
 			Addr:   node.Addr,
 			Base:   s,

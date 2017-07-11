@@ -92,6 +92,10 @@ func (s *SSHServer) handleSSHConn(conn ssh.Conn, chans <-chan ssh.NewChannel, re
 				p := directForward{}
 				ssh.Unmarshal(newChannel.ExtraData(), &p)
 
+				if p.Host1 == "<nil>" {
+					p.Host1 = ""
+				}
+
 				go ssh.DiscardRequests(requests)
 				go s.directPortForwardChannel(channel, fmt.Sprintf("%s:%d", p.Host1, p.Port1))
 			default:
@@ -148,6 +152,7 @@ type tcpipForward struct {
 func (s *SSHServer) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Request, quit <-chan interface{}) {
 	t := tcpipForward{}
 	ssh.Unmarshal(req.Payload, &t)
+
 	addr := fmt.Sprintf("%s:%d", t.Host, t.Port)
 
 	if !s.Base.Node.Can("rtcp", addr) {
@@ -205,6 +210,7 @@ func (s *SSHServer) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Request, quit
 				}
 
 				p.Port2 = uint32(portnum)
+				glog.V(3).Info(p)
 				ch, reqs, err := sshConn.OpenChannel(ForwardedTCPReturnRequest, ssh.Marshal(p))
 				if err != nil {
 					glog.V(1).Infoln("[ssh-rtcp] open forwarded channel:", err)

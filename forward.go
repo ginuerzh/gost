@@ -3,12 +3,14 @@ package gost
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/ginuerzh/gosocks5"
 	"github.com/golang/glog"
 	"golang.org/x/crypto/ssh"
-	"net"
-	"strconv"
-	"time"
 )
 
 type TcpForwardServer struct {
@@ -38,13 +40,13 @@ func (s *TcpForwardServer) ListenAndServe() error {
 	}
 
 	quit := make(chan interface{})
-	close(quit)
+	close(quit) // first init ssh client
 
 	for {
 	start:
 		conn, err := ln.Accept()
 		if err != nil {
-			glog.V(LWARNING).Infoln("[tcp]", err)
+			glog.V(LWARNING).Infoln("[ssh]", err)
 			continue
 		}
 		setKeepAlive(conn, KeepAliveTime)
@@ -55,16 +57,47 @@ func (s *TcpForwardServer) ListenAndServe() error {
 				break
 			}
 			if err := s.initSSHClient(); err != nil {
-				glog.V(LWARNING).Infoln("[tcp]", err)
+				glog.V(LWARNING).Infoln("[ssh]", err)
 				conn.Close()
 				goto start
 			}
 			quit = make(chan interface{})
-			go func(ch chan interface{}) {
-				s.sshClient.Wait()
-				glog.V(LINFO).Infoln("[tcp] connection closed")
-				close(ch)
-			}(quit)
+			exit := make(chan error, 1)
+			go func() {
+				exit <- s.sshClient.Wait()
+			}()
+
+			go func() {
+				var c <-chan time.Time
+				ping, _ := strconv.Atoi(s.Base.Chain.lastNode.Get("ping"))
+				if ping > 0 {
+					d := time.Second * time.Duration(ping)
+					glog.V(LINFO).Infoln("[tcp-ssh] ping is enabled:", d)
+					t := time.NewTicker(d)
+					defer t.Stop()
+					c = t.C
+				}
+
+				for {
+					select {
+					case <-c:
+						_, _, err := s.sshClient.SendRequest("ping", true, nil)
+						if err != nil {
+							glog.V(LWARNING).Infoln("[tcp-ssh] ping", err)
+							close(quit)
+							return
+						}
+						glog.V(LDEBUG).Infoln("[tcp-ssh] heartbeat OK")
+
+					case er := <-exit:
+						if er != nil {
+							glog.V(LWARNING).Infoln("[tcp-ssh] ssh connection closed:", er)
+						}
+						close(quit)
+						return
+					}
+				}
+			}()
 
 		default:
 		}
@@ -495,7 +528,11 @@ func (s *RTcpForwardServer) connectRTcpForwardSSH(conn net.Conn, sshNode *ProxyN
 		}
 	}()
 
-	ln, err := client.Listen("tcp", laddr.String())
+	addr := laddr.String()
+	if strings.HasPrefix(addr, ":") {
+		addr = "0.0.0.0" + addr
+	}
+	ln, err := client.Listen("tcp", addr)
 	if err != nil {
 		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
 		return err

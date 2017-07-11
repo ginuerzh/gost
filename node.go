@@ -153,6 +153,9 @@ func (node *ProxyNode) Get(key string) string {
 }
 
 func (node *ProxyNode) Can(action string, addr string) bool {
+	if !strings.Contains(addr, ":") {
+		addr = addr + ":80"
+	}
 	host, strport, err := net.SplitHostPort(addr)
 
 	if err != nil {
