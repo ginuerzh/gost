@@ -556,3 +556,7 @@ func (c *ProxyChain) getQuicConn(header http.Header) (net.Conn, error) {
 	conn.remoteAddr, _ = net.ResolveUDPAddr("udp", quicNode.Addr)
 	return conn, nil
 }
+
+type Chain struct {
+	nodes []Node
+}

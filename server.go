@@ -295,3 +295,8 @@ func (_ *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
 
 	return
 }
+
+// Server represents a node server
+type Server interface {
+	Run() error
+}
