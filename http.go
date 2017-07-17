@@ -211,6 +211,7 @@ func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	}
 	if len(s.Base.Node.Users) > 0 && !valid {
 		glog.V(LWARNING).Infof("[http2] %s <- %s : proxy authentication required", req.RemoteAddr, target)
+		w.Header().Set("Proxy-Authenticate", "Basic realm=\"gost\"")
 		w.WriteHeader(http.StatusProxyAuthRequired)
 		return
 	}
