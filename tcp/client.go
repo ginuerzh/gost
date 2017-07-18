@@ -14,8 +14,8 @@ import (
 
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
+	"github.com/ginuerzh/gost"
 	"github.com/ginuerzh/gost/socks"
-	"github.com/ginuerzh/gost/ssocks"
 	"github.com/go-log/log"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
@@ -45,8 +45,9 @@ func (c *nodeClient) Dial(conn net.Conn, addr string) (net.Conn, error) {
 			gosocks5.MethodUserPass,
 			socks.MethodTLS,
 		)
-		if len(c.options.users) > 0 {
-			selector.User = &c.options.users[0]
+		users := c.options.BaseOptions().Users
+		if len(users) > 0 {
+			selector.User = &users[0]
 		}
 
 		cc := gosocks5.ClientConn(conn, selector)
@@ -69,9 +70,10 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 		}
 
 		var method, password string
-		if len(c.options.users) > 0 {
-			method = c.options.users[0].Username()
-			password, _ = c.options.users[0].Password()
+		users := c.options.BaseOptions().Users
+		if len(users) > 0 {
+			method = users[0].Username()
+			password, _ = users[0].Password()
 		}
 
 		cipher, err := ss.NewCipher(method, password)
@@ -83,7 +85,7 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		conn = ssocks.NewConn(sc)
+		conn = gost.ShadowConn(sc)
 
 	case "socks5":
 		host, port, err := net.SplitHostPort(addr)
@@ -155,8 +157,9 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 			Header:     make(http.Header),
 		}
 		req.Header.Set("Proxy-Connection", "keep-alive")
-		if len(c.options.users) > 0 {
-			user := c.options.users[0]
+		users := c.options.BaseOptions().Users
+		if len(users) > 0 {
+			user := users[0]
 			s := user.String()
 			if _, set := user.Password(); !set {
 				s += ":"

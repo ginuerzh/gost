@@ -1,30 +1,19 @@
 package tcp
 
 import (
-	"net/url"
-
 	"github.com/ginuerzh/gost"
 )
 
 type nodeOptions struct {
 	base         *gost.BaseOptions
-	users        []url.Userinfo `opt:"users"` // authentication for proxy
-	certFile     string         `opt:"cert"`
-	keyFile      string         `opt:"key"`
-	serverName   string         `opt:"server_name"`
-	secureVerify bool           `opt:"secure"`
+	certFile     string `opt:"cert"`
+	keyFile      string `opt:"key"`
+	serverName   string `opt:"server_name"`
+	secureVerify bool   `opt:"secure"`
 }
 
 func (o *nodeOptions) BaseOptions() *gost.BaseOptions {
 	return o.base
-}
-
-func UsersOption(users ...url.Userinfo) gost.Option {
-	return func(opts gost.Options) {
-		if o, ok := opts.(*nodeOptions); ok {
-			o.users = users
-		}
-	}
 }
 
 func (o *nodeOptions) ServerNameOption(n string) gost.Option {

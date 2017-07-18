@@ -2,6 +2,7 @@ package gost
 
 import (
 	"log"
+	"net/url"
 	"reflect"
 )
 
@@ -13,9 +14,10 @@ type Options interface {
 type Option func(Options)
 
 type BaseOptions struct {
-	Addr      string `opt:"addr"`      // [host]:port
-	Protocol  string `opt:"protocol"`  // protocol: http/socks5/ss
-	Transport string `opt:"transport"` // transport: ws/wss/tls/http2/tcp/udp/rtcp/rudp
+	Addr      string         `opt:"addr"`      // [host]:port
+	Protocol  string         `opt:"protocol"`  // protocol: http/socks5/ss
+	Transport string         `opt:"transport"` // transport: ws/wss/tls/http2/tcp/udp/rtcp/rudp
+	Users     []url.Userinfo `opt:"users"`     // authentication for proxy
 }
 
 func AddrOption(a string) Option {
@@ -33,6 +35,12 @@ func ProtocolOption(p string) Option {
 func TransportOption(t string) Option {
 	return func(opts Options) {
 		opts.BaseOptions().Transport = t
+	}
+}
+
+func UsersOption(users ...url.Userinfo) Option {
+	return func(opts Options) {
+		opts.BaseOptions().Users = users
 	}
 }
 
