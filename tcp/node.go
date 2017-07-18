@@ -5,18 +5,21 @@ import (
 )
 
 type tcpNode struct {
-	options *tcpNodeOptions
+	options *nodeOptions
 	client  *nodeClient
 	server  *nodeServer
 }
 
 // NewNode creates a tcpNode with options
 func NewNode(opts ...gost.Option) gost.Node {
-	node := &tcpNode{
-		options: new(tcpNodeOptions),
-	}
+	options := new(nodeOptions)
 	for _, opt := range opts {
-		opt(node.options)
+		opt(options)
+	}
+	node := &tcpNode{
+		options: options,
+		client:  &nodeClient{options: options},
+		server: &nodeServer{options: options},
 	}
 
 	return node

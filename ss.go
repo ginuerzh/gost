@@ -5,13 +5,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/ginuerzh/gosocks5"
-	"github.com/golang/glog"
-	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 	"io"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/ginuerzh/gosocks5"
+	"github.com/golang/glog"
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
 const (
