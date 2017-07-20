@@ -556,39 +556,3 @@ func (c *ProxyChain) getQuicConn(header http.Header) (net.Conn, error) {
 	conn.remoteAddr, _ = net.ResolveUDPAddr("udp", quicNode.Addr)
 	return conn, nil
 }
-
-type Chain struct {
-	nodes []Node
-}
-
-func (c *Chain) Dial(addr string) (net.Conn, error) {
-	if len(c.nodes) == 0 {
-		return net.Dial("tcp", addr)
-	}
-
-	nodes := c.nodes
-	conn, err := nodes[0].Client().Connect()
-	if err != nil {
-		return nil, err
-	}
-
-	for i, node := range nodes {
-		if i == len(nodes)-1 {
-			break
-		}
-
-		cn, err := node.Client().Dial(conn, nodes[i+1].Options().BaseOptions().Addr)
-		if err != nil {
-			conn.Close()
-			return nil, err
-		}
-		conn = cn
-	}
-
-	cn, err := nodes[len(nodes)-1].Client().Dial(conn, addr)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return cn, nil
-}

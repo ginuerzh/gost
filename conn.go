@@ -112,7 +112,7 @@ func (c *ProxyConn) handshake() error {
 
 	switch c.Node.Protocol {
 	case "socks", "socks5": // socks5 handshake with auth and tls supported
-		selector := &clientSelector{
+		selector := &ClientSelector{
 			methods: []uint8{
 				gosocks5.MethodNoAuth,
 				gosocks5.MethodUserPass,
@@ -121,12 +121,12 @@ func (c *ProxyConn) handshake() error {
 		}
 
 		if len(c.Node.Users) > 0 {
-			selector.user = c.Node.Users[0]
+			selector.User = c.Node.Users[0]
 		}
 
 		if !tlsUsed { // if transport is not security, enable security socks5
 			selector.methods = append(selector.methods, MethodTLS)
-			selector.tlsConfig = &tls.Config{
+			selector.TLSConfig = &tls.Config{
 				InsecureSkipVerify: c.Node.insecureSkipVerify(),
 				ServerName:         c.Node.serverName,
 			}

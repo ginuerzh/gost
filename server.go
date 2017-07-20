@@ -20,7 +20,7 @@ type ProxyServer struct {
 	Node      ProxyNode
 	Chain     *ProxyChain
 	TLSConfig *tls.Config
-	selector  *serverSelector
+	selector  *ServerSelector
 	cipher    *ss.Cipher
 	ota       bool
 }
@@ -65,7 +65,7 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain) *ProxyServer {
 		Node:      node,
 		Chain:     chain,
 		TLSConfig: config,
-		selector: &serverSelector{ // socks5 server selector
+		selector: &ServerSelector{ // socks5 server selector
 			// methods that socks5 server supported
 			methods: []uint8{
 				gosocks5.MethodNoAuth,
@@ -73,8 +73,8 @@ func NewProxyServer(node ProxyNode, chain *ProxyChain) *ProxyServer {
 				MethodTLS,
 				MethodTLSAuth,
 			},
-			users:     node.Users,
-			tlsConfig: config,
+			// Users:     node.Users,
+			TLSConfig: config,
 		},
 		cipher: cipher,
 		ota:    ota,
@@ -193,9 +193,9 @@ func (s *ProxyServer) handleConn(conn net.Conn) {
 
 	switch s.Node.Protocol {
 	case "ss": // shadowsocks
-		server := NewShadowServer(ss.NewConn(conn, s.cipher.Copy()), s)
-		server.OTA = s.ota
-		server.Serve()
+		//server := NewShadowServer(ss.NewConn(conn, s.cipher.Copy()), s)
+		//server.OTA = s.ota
+		//server.Serve()
 		return
 	case "http":
 		req, err := http.ReadRequest(bufio.NewReader(conn))
@@ -294,12 +294,4 @@ func (_ *ProxyServer) transport(conn1, conn2 net.Conn) (err error) {
 	}
 
 	return
-}
-
-// Server represents a node server
-type Server interface {
-	Chain() *Chain
-	SetChain(chain *Chain)
-	Options() Options
-	Run() error
 }

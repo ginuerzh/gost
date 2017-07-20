@@ -10,6 +10,7 @@ import (
 
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
+	"github.com/go-log/log"
 	"github.com/golang/glog"
 )
 
@@ -22,50 +23,56 @@ const (
 	CmdUdpTun uint8 = 0xF3 // extended method for udp over tcp
 )
 
-type clientSelector struct {
+type ClientSelector struct {
 	methods   []uint8
-	user      *url.Userinfo
-	tlsConfig *tls.Config
+	User      *url.Userinfo
+	TLSConfig *tls.Config
 }
 
-func (selector *clientSelector) Methods() []uint8 {
+func (selector *ClientSelector) Methods() []uint8 {
 	return selector.methods
 }
 
-func (selector *clientSelector) Select(methods ...uint8) (method uint8) {
+func (selector *ClientSelector) AddMethod(methods ...uint8) {
+	selector.methods = append(selector.methods, methods...)
+}
+
+func (selector *ClientSelector) Select(methods ...uint8) (method uint8) {
 	return
 }
 
-func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
+func (selector *ClientSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
 	switch method {
 	case MethodTLS:
-		conn = tls.Client(conn, selector.tlsConfig)
+		conn = tls.Client(conn, selector.TLSConfig)
 
 	case gosocks5.MethodUserPass, MethodTLSAuth:
 		if method == MethodTLSAuth {
-			conn = tls.Client(conn, selector.tlsConfig)
+			conn = tls.Client(conn, selector.TLSConfig)
 		}
 
 		var username, password string
-		if selector.user != nil {
-			username = selector.user.Username()
-			password, _ = selector.user.Password()
+		if selector.User != nil {
+			username = selector.User.Username()
+			password, _ = selector.User.Password()
 		}
 
 		req := gosocks5.NewUserPassRequest(gosocks5.UserPassVer, username, password)
 		if err := req.Write(conn); err != nil {
-			glog.V(LWARNING).Infoln("socks5 auth:", err)
+			log.Log("[socks5]", err)
 			return nil, err
 		}
-		glog.V(LDEBUG).Infoln(req)
-
+		if Debug {
+			log.Log(req)
+		}
 		resp, err := gosocks5.ReadUserPassResponse(conn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("socks5 auth:", err)
+			log.Log("[socks5]", err)
 			return nil, err
 		}
-		glog.V(LDEBUG).Infoln(resp)
-
+		if Debug {
+			log.Log(resp)
+		}
 		if resp.Status != gosocks5.Succeeded {
 			return nil, gosocks5.ErrAuthFailure
 		}
@@ -76,19 +83,24 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 	return conn, nil
 }
 
-type serverSelector struct {
+type ServerSelector struct {
 	methods   []uint8
-	users     []*url.Userinfo
-	tlsConfig *tls.Config
+	Users     []url.Userinfo
+	TLSConfig *tls.Config
 }
 
-func (selector *serverSelector) Methods() []uint8 {
+func (selector *ServerSelector) Methods() []uint8 {
 	return selector.methods
 }
 
-func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
-	glog.V(LDEBUG).Infof("%d %d %v", gosocks5.Ver5, len(methods), methods)
+func (selector *ServerSelector) AddMethod(methods ...uint8) {
+	selector.methods = append(selector.methods, methods...)
+}
 
+func (selector *ServerSelector) Select(methods ...uint8) (method uint8) {
+	if Debug {
+		log.Logf("[socks5] %d %d %v", gosocks5.Ver5, len(methods), methods)
+	}
 	method = gosocks5.MethodNoAuth
 	for _, m := range methods {
 		if m == MethodTLS {
@@ -98,7 +110,7 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 	}
 
 	// when user/pass is set, auth is mandatory
-	if selector.users != nil {
+	if selector.Users != nil {
 		if method == gosocks5.MethodNoAuth {
 			method = gosocks5.MethodUserPass
 		}
@@ -110,27 +122,29 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 	return
 }
 
-func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
-	glog.V(LDEBUG).Infof("%d %d", gosocks5.Ver5, method)
-
+func (selector *ServerSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
+	if Debug {
+		log.Logf("[socks5] %d %d", gosocks5.Ver5, method)
+	}
 	switch method {
 	case MethodTLS:
-		conn = tls.Server(conn, selector.tlsConfig)
+		conn = tls.Server(conn, selector.TLSConfig)
 
 	case gosocks5.MethodUserPass, MethodTLSAuth:
 		if method == MethodTLSAuth {
-			conn = tls.Server(conn, selector.tlsConfig)
+			conn = tls.Server(conn, selector.TLSConfig)
 		}
 
 		req, err := gosocks5.ReadUserPassRequest(conn)
 		if err != nil {
-			glog.V(LWARNING).Infoln("[socks5-auth]", err)
+			log.Log("[socks5]", err)
 			return nil, err
 		}
-		glog.V(LDEBUG).Infoln("[socks5]", req.String())
-
+		if Debug {
+			log.Log("[socks5]", req.String())
+		}
 		valid := false
-		for _, user := range selector.users {
+		for _, user := range selector.Users {
 			username := user.Username()
 			password, _ := user.Password()
 			if (req.Username == username && req.Password == password) ||
@@ -140,30 +154,56 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 				break
 			}
 		}
-		if len(selector.users) > 0 && !valid {
+		if len(selector.Users) > 0 && !valid {
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
-				glog.V(LWARNING).Infoln("[socks5-auth]", err)
+				log.Log("[socks5]", err)
 				return nil, err
 			}
-			glog.V(LDEBUG).Infoln("[socks5]", resp)
-			glog.V(LWARNING).Infoln("[socks5-auth] proxy authentication required")
-
+			if Debug {
+				log.Log("[socks5]", resp)
+			}
+			log.Log("[socks5] proxy authentication required")
 			return nil, gosocks5.ErrAuthFailure
 		}
 
 		resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Succeeded)
 		if err := resp.Write(conn); err != nil {
-			glog.V(LWARNING).Infoln("[socks5-auth]", err)
+			log.Log("[socks5]", err)
 			return nil, err
 		}
-		glog.V(LDEBUG).Infoln(resp)
-
+		if Debug {
+			log.Log("[socks5]", resp)
+		}
 	case gosocks5.MethodNoAcceptable:
 		return nil, gosocks5.ErrBadMethod
 	}
 
 	return conn, nil
+}
+
+type socks5Handler struct {
+	server Server
+}
+
+func (h *socks5Handler) Handle(conn net.Conn) {
+	selector := &ServerSelector{
+		Users:     h.server.Options().BaseOptions().Users,
+		TLSConfig: config,
+	}
+	// methods that socks5 server supported
+	selector.AddMethod(
+		gosocks5.MethodNoAuth,
+		gosocks5.MethodUserPass,
+		MethodTLS,
+		MethodTLSAuth,
+	)
+	conn = gosocks5.ServerConn(conn, s.selector)
+	req, err := gosocks5.ReadRequest(conn)
+	if err != nil {
+		glog.V(LWARNING).Infoln("[socks5]", err)
+		return
+	}
 }
 
 type Socks5Server struct {

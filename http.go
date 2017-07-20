@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ginuerzh/pht"
+	"github.com/go-log/log"
 	"github.com/golang/glog"
 	"golang.org/x/net/http2"
 )
@@ -30,87 +31,7 @@ func NewHttpServer(conn net.Conn, base *ProxyServer) *HttpServer {
 
 // Default HTTP server handler
 func (s *HttpServer) HandleRequest(req *http.Request) {
-	glog.V(LINFO).Infof("[http] %s %s - %s %s", req.Method, s.conn.RemoteAddr(), req.Host, req.Proto)
 
-	if glog.V(LDEBUG) {
-		dump, _ := httputil.DumpRequest(req, false)
-		glog.Infoln(string(dump))
-	}
-
-	if req.Method == "PRI" && req.ProtoMajor == 2 {
-		glog.V(LWARNING).Infof("[http] %s <- %s : Not an HTTP2 server", s.conn.RemoteAddr(), req.Host)
-		resp := "HTTP/1.1 400 Bad Request\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
-		s.conn.Write([]byte(resp))
-		return
-	}
-
-	valid := false
-	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	for _, user := range s.Base.Node.Users {
-		username := user.Username()
-		password, _ := user.Password()
-		if (u == username && p == password) ||
-			(u == username && password == "") ||
-			(username == "" && p == password) {
-			valid = true
-			break
-		}
-	}
-
-	if len(s.Base.Node.Users) > 0 && !valid {
-		glog.V(LWARNING).Infof("[http] %s <- %s : proxy authentication required", s.conn.RemoteAddr(), req.Host)
-		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
-			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
-		s.conn.Write([]byte(resp))
-		return
-	}
-
-	req.Header.Del("Proxy-Authorization")
-
-	// forward http request
-	lastNode := s.Base.Chain.lastNode
-	if lastNode != nil && lastNode.Transport == "" && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
-		s.forwardRequest(req)
-		return
-	}
-
-	if !s.Base.Node.Can("tcp", req.Host) {
-		glog.Errorf("Unauthorized to tcp connect to %s", req.Host)
-		return
-	}
-
-	c, err := s.Base.Chain.Dial(req.Host)
-	if err != nil {
-		glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), req.Host, err)
-
-		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", s.conn.RemoteAddr(), req.Host, string(b))
-		s.conn.Write(b)
-		return
-	}
-	defer c.Close()
-
-	if req.Method == http.MethodConnect {
-		b := []byte("HTTP/1.1 200 Connection established\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", s.conn.RemoteAddr(), req.Host, string(b))
-		s.conn.Write(b)
-	} else {
-		req.Header.Del("Proxy-Connection")
-		// req.Header.Set("Connection", "Keep-Alive")
-
-		if err = req.Write(c); err != nil {
-			glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), req.Host, err)
-			return
-		}
-	}
-
-	glog.V(LINFO).Infof("[http] %s <-> %s", s.conn.RemoteAddr(), req.Host)
-	s.Base.transport(s.conn, c)
-	glog.V(LINFO).Infof("[http] %s >-< %s", s.conn.RemoteAddr(), req.Host)
 }
 
 func (s *HttpServer) forwardRequest(req *http.Request) {
@@ -151,6 +72,109 @@ func (s *HttpServer) forwardRequest(req *http.Request) {
 	s.Base.transport(s.conn, cc)
 	glog.V(LINFO).Infof("[http] %s >-< %s", s.conn.RemoteAddr(), req.Host)
 	return
+}
+
+type httpHandler struct {
+	server Server
+}
+
+func HTTPHandler(server Server) Handler {
+	return &httpHandler{server: server}
+}
+
+func (h *httpHandler) Handle(conn net.Conn) {
+	req, err := http.ReadRequest(bufio.NewReader(conn))
+	if err != nil {
+		log.Log("[http]", err)
+		return
+	}
+
+	log.Logf("[http] %s %s - %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
+
+	if Debug {
+		dump, _ := httputil.DumpRequest(req, false)
+		log.Logf(string(dump))
+	}
+
+	if req.Method == "PRI" && req.ProtoMajor == 2 {
+		log.Logf("[http] %s <- %s : Not an HTTP2 server", conn.RemoteAddr(), req.Host)
+		resp := "HTTP/1.1 400 Bad Request\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
+		conn.Write([]byte(resp))
+		return
+	}
+
+	valid := false
+	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
+	users := h.server.Options().BaseOptions().Users
+	for _, user := range users {
+		username := user.Username()
+		password, _ := user.Password()
+		if (u == username && p == password) ||
+			(u == username && password == "") ||
+			(username == "" && p == password) {
+			valid = true
+			break
+		}
+	}
+
+	if len(users) > 0 && !valid {
+		log.Logf("[http] %s <- %s : proxy authentication required", conn.RemoteAddr(), req.Host)
+		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
+			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
+		conn.Write([]byte(resp))
+		return
+	}
+
+	req.Header.Del("Proxy-Authorization")
+
+	// forward http request
+	//lastNode := s.Base.Chain.lastNode
+	//if lastNode != nil && lastNode.Transport == "" && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
+	//	s.forwardRequest(req)
+	//	return
+	//}
+
+	// if !s.Base.Node.Can("tcp", req.Host) {
+	//	glog.Errorf("Unauthorized to tcp connect to %s", req.Host)
+	//	return
+	// }
+
+	cc, err := h.server.Chain().Dial(req.Host)
+	if err != nil {
+		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+
+		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
+		}
+		conn.Write(b)
+		return
+	}
+	defer cc.Close()
+
+	if req.Method == http.MethodConnect {
+		b := []byte("HTTP/1.1 200 Connection established\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
+		}
+		conn.Write(b)
+	} else {
+		req.Header.Del("Proxy-Connection")
+		// req.Header.Set("Connection", "Keep-Alive")
+
+		if err = req.Write(cc); err != nil {
+			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+			return
+		}
+	}
+
+	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
+	Transport(conn, cc)
+	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
 }
 
 type Http2Server struct {

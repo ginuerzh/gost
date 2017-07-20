@@ -1,7 +1,8 @@
-package tcp
+package gost
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -14,64 +15,23 @@ import (
 
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
-	"github.com/ginuerzh/gost"
-	"github.com/ginuerzh/gost/client"
 	"github.com/go-log/log"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
-type nodeClient struct {
-	options *client.Options
+type Client struct {
+	Protocol  string
+	Transport *Transport
+	User      *url.Userinfo
 }
 
-func (c *nodeClient) Init(opts ...client.Option) {
-	for _, opt := range opts {
-		opt(c.options)
-	}
+func (c *Client) Dial(ctx context.Context, addr string) (net.Conn, error) {
+	return c.Transport.Dial(ctx, addr)
 }
 
-func (c *nodeClient) Options() *Options {
-	return c.options
-}
+func (c *Client) Connect(ctx context.Context, conn net.Conn, addr string) (net.Conn, error) {
+	protocol := c.Protocol
 
-func (c *nodeClient) Connect() (net.Conn, error) {
-	return net.Dial("tcp", c.options.Addr)
-}
-
-func (c *nodeClient) Handshake(conn net.Conn) (net.Conn, error) {
-	return conn, nil
-}
-
-func (c *nodeClient) Dial(conn net.Conn, addr string) (net.Conn, error) {
-	if c.options.Protocol == "socks5" {
-		selector := &gost.ClientSelector{
-			TLSConfig: &tls.Config{
-				InsecureSkipVerify: !c.options.SecureVerify,
-				ServerName:         c.options.ServerName,
-			},
-		}
-		selector.AddMethod(
-			gosocks5.MethodNoAuth,
-			gosocks5.MethodUserPass,
-			gost.MethodTLS,
-		)
-		users := c.options.Users
-		if len(users) > 0 {
-			selector.User = &users[0]
-		}
-
-		cc := gosocks5.ClientConn(conn, selector)
-		if err := cc.Handleshake(); err != nil {
-			return nil, err
-		}
-		conn = cc
-	}
-
-	return c.dial(conn, addr)
-}
-
-func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
-	protocol := c.options.Protocol
 	switch protocol {
 	case "ss": // shadowsocks
 		rawaddr, err := ss.RawAddr(addr)
@@ -80,10 +40,9 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 		}
 
 		var method, password string
-		users := c.options.Users
-		if len(users) > 0 {
-			method = users[0].Username()
-			password, _ = users[0].Password()
+		if c.User != nil {
+			method = c.User.Username()
+			password, _ = c.User.Password()
 		}
 
 		cipher, err := ss.NewCipher(method, password)
@@ -95,7 +54,7 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		conn = gost.ShadowConn(sc)
+		conn = ShadowConn(sc)
 
 	case "socks", "socks5":
 		host, port, err := net.SplitHostPort(addr)
@@ -167,11 +126,9 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 			Header:     make(http.Header),
 		}
 		req.Header.Set("Proxy-Connection", "keep-alive")
-		users := c.options.Users
-		if len(users) > 0 {
-			user := users[0]
-			s := user.String()
-			if _, set := user.Password(); !set {
+		if c.User != nil {
+			s := c.User.String()
+			if _, set := c.User.Password(); !set {
 				s += ":"
 			}
 			req.Header.Set("Proxy-Authorization",
@@ -180,23 +137,31 @@ func (c *nodeClient) dial(conn net.Conn, addr string) (net.Conn, error) {
 		if err := req.Write(conn); err != nil {
 			return nil, err
 		}
-		//if glog.V(LDEBUG) {
-		dump, _ := httputil.DumpRequest(req, false)
-		log.Log(string(dump))
-		//}
+
+		if Debug {
+			dump, _ := httputil.DumpRequest(req, false)
+			log.Log(string(dump))
+		}
 
 		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 		if err != nil {
 			return nil, err
 		}
-		//if glog.V(LDEBUG) {
-		dump, _ = httputil.DumpResponse(resp, false)
-		log.Log(string(dump))
-		//}
+
+		if Debug {
+			dump, _ := httputil.DumpResponse(resp, false)
+			log.Log(string(dump))
+		}
+
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("%d %s", resp.StatusCode, resp.Status)
 		}
 	}
 
 	return conn, nil
+}
+
+type Transport struct {
+	Dial            func(ctx context.Context, addr string) (net.Conn, error)
+	TLSClientConfig *tls.Config
 }

@@ -211,11 +211,3 @@ func (node *ProxyNode) keyFile() string {
 func (node ProxyNode) String() string {
 	return fmt.Sprintf("transport: %s, protocol: %s, addr: %s, whitelist: %v, blacklist: %v", node.Transport, node.Protocol, node.Addr, node.Whitelist, node.Blacklist)
 }
-
-// Node represents a proxy node
-type Node interface {
-	Init(opts ...Option) error
-	Client() Client
-	Server() Server
-	Options() Options
-}

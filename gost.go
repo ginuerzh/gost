@@ -31,6 +31,8 @@ const (
 	LDEBUG
 )
 
+var Debug bool
+
 var (
 	KeepAliveTime = 180 * time.Second
 	DialTimeout   = 30 * time.Second

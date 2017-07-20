@@ -99,9 +99,8 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 	defer cc.Close()
 
 	log.Logf("[ss] %s <-> %s", conn.RemoteAddr(), addr)
-	defer log.Logf("[ss] %s >-< %s", conn.RemoteAddr(), addr)
-
 	Transport(conn, cc)
+	log.Logf("[ss] %s >-< %s", conn.RemoteAddr(), addr)
 }
 
 const (
