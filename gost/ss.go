@@ -1,8 +1,12 @@
 package gost
 
 import (
+	"context"
 	"net"
+	"net/url"
 	"time"
+
+	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
 // Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
@@ -47,4 +51,36 @@ func (c *shadowConn) SetReadDeadline(t time.Time) error {
 
 func (c *shadowConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
+}
+
+type shadowConnector struct {
+	Cipher *url.Userinfo
+}
+
+func ShadowConnector(cipher *url.Userinfo) Connector {
+	return &shadowConnector{Cipher: cipher}
+}
+
+func (c *shadowConnector) Connect(ctx context.Context, conn net.Conn, addr string) (net.Conn, error) {
+	rawaddr, err := ss.RawAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	var method, password string
+	if c.Cipher != nil {
+		method = c.Cipher.Username()
+		password, _ = c.Cipher.Password()
+	}
+
+	cipher, err := ss.NewCipher(method, password)
+	if err != nil {
+		return nil, err
+	}
+
+	sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
+	if err != nil {
+		return nil, err
+	}
+	return &shadowConn{conn: sc}, nil
 }

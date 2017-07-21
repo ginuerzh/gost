@@ -1,6 +1,8 @@
 package gost
 
 type Node struct {
-	Addr   string
-	Client *Client
+	Addr      string
+	Protocol  string
+	Transport string
+	Client    *Client
 }

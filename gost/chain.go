@@ -9,6 +9,12 @@ type Chain struct {
 	Nodes []Node
 }
 
+func NewChain(nodes ...Node) *Chain {
+	return &Chain{
+		Nodes: nodes,
+	}
+}
+
 func (c *Chain) Dial(ctx context.Context, addr string) (net.Conn, error) {
 	if len(c.Nodes) == 0 {
 		return net.Dial("tcp", addr)
@@ -20,23 +26,35 @@ func (c *Chain) Dial(ctx context.Context, addr string) (net.Conn, error) {
 		return nil, err
 	}
 
+	conn, err = nodes[0].Client.Handshake(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+
 	for i, node := range nodes {
 		if i == len(nodes)-1 {
 			break
 		}
 
-		cn, err := node.Client.Connect(ctx, conn, nodes[i+1].Addr)
+		next := nodes[i+1]
+		cc, err := node.Client.Connect(ctx, conn, next.Addr)
 		if err != nil {
 			conn.Close()
 			return nil, err
 		}
-		conn = cn
+		cc, err = next.Client.Handshake(ctx, cc)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+
+		conn = cc
 	}
 
-	cn, err := nodes[len(nodes)-1].Client.Connect(ctx, conn, addr)
+	cc, err := nodes[len(nodes)-1].Client.Connect(ctx, conn, addr)
 	if err != nil {
 		conn.Close()
 		return nil, err
 	}
-	return cn, nil
+	return cc, nil
 }
