@@ -26,7 +26,7 @@ type ProxyNode struct {
 // The proxy node string pattern is [scheme://][user:pass@host]:port.
 //
 // Scheme can be devided into two parts by character '+', such as: http+tls.
-func ParseProxyNode(s string) (node ProxyNode, err error) {
+func ParseProxyNode(s string, isServeNode bool) (node ProxyNode, err error) {
 	if !strings.Contains(s, "://") {
 		s = "gost://" + s
 	}
@@ -79,6 +79,12 @@ func ParseProxyNode(s string) (node ProxyNode, err error) {
 		node.Remote = strings.Trim(u.EscapedPath(), "/")
 	case "rtcp", "rudp": // started from v2.1, rtcp and rudp are for remote port forwarding
 		node.Remote = strings.Trim(u.EscapedPath(), "/")
+	case "obfs4":
+		err := node.Obfs4Init(isServeNode)
+		if err != nil {
+			glog.V(LDEBUG).Infoln("obfs4 init failed", err)
+			return node, err
+		}
 	default:
 		node.Transport = ""
 	}

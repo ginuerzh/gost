@@ -84,6 +84,12 @@ func (c *ProxyConn) handshake() error {
 		tlsUsed = true
 	case "kcp": // kcp connection
 		tlsUsed = true
+	case "obfs4":
+		conn, err := c.Node.Obfs4ClientConn(c.conn)
+		if err != nil {
+			return err
+		}
+		c.conn = conn
 	default:
 	}
 
