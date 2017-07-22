@@ -1,7 +1,6 @@
 package gost
 
 import (
-	"context"
 	"net"
 )
 
@@ -15,18 +14,18 @@ func NewChain(nodes ...Node) *Chain {
 	}
 }
 
-func (c *Chain) Dial(ctx context.Context, addr string) (net.Conn, error) {
+func (c *Chain) Dial(addr string) (net.Conn, error) {
 	if len(c.Nodes) == 0 {
 		return net.Dial("tcp", addr)
 	}
 
 	nodes := c.Nodes
-	conn, err := nodes[0].Client.Dial(ctx, nodes[0].Addr)
+	conn, err := nodes[0].Client.Dial(nodes[0].Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err = nodes[0].Client.Handshake(ctx, conn)
+	conn, err = nodes[0].Client.Handshake(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +36,12 @@ func (c *Chain) Dial(ctx context.Context, addr string) (net.Conn, error) {
 		}
 
 		next := nodes[i+1]
-		cc, err := node.Client.Connect(ctx, conn, next.Addr)
+		cc, err := node.Client.Connect(conn, next.Addr)
 		if err != nil {
 			conn.Close()
 			return nil, err
 		}
-		cc, err = next.Client.Handshake(ctx, cc)
+		cc, err = next.Client.Handshake(cc)
 		if err != nil {
 			conn.Close()
 			return nil, err
@@ -51,7 +50,7 @@ func (c *Chain) Dial(ctx context.Context, addr string) (net.Conn, error) {
 		conn = cc
 	}
 
-	cc, err := nodes[len(nodes)-1].Client.Connect(ctx, conn, addr)
+	cc, err := nodes[len(nodes)-1].Client.Connect( conn, addr)
 	if err != nil {
 		conn.Close()
 		return nil, err
