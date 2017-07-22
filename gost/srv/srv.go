@@ -30,6 +30,8 @@ func main() {
 	go wsServer(&wg)
 	wg.Add(1)
 	go wssServer(&wg)
+	wg.Add(1)
+	go kcpServer(&wg)
 	wg.Wait()
 }
 
@@ -126,6 +128,18 @@ func wssServer(wg *sync.WaitGroup) {
 		log.Fatal(err)
 	}
 	ln, err := gost.WSSListener(":8443", &gost.WSOptions{TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}}})
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func kcpServer(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	s := &gost.Server{}
+	s.Handle(gost.HTTPHandler())
+	ln, err := gost.KCPListener(":8388", nil)
 	if err != nil {
 		log.Fatal(err)
 	}

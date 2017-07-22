@@ -18,12 +18,15 @@ import (
 )
 
 const (
-	MethodTLS     uint8 = 0x80 // extended method for tls
-	MethodTLSAuth uint8 = 0x82 // extended method for tls+auth
+	// MethodTLS is an extended SOCKS5 method for TLS.
+	MethodTLS uint8 = 0x80
+	// MethodTLSAuth is an extended SOCKS5 method for TLS+AUTH.
+	MethodTLSAuth uint8 = 0x82
 )
 
 const (
-	CmdUdpTun uint8 = 0xF3 // extended method for udp over tcp
+	// CmdUDPTun is an extended SOCKS5 method for UDP over TCP.
+	CmdUDPTun uint8 = 0xF3
 )
 
 type clientSelector struct {
@@ -189,6 +192,8 @@ type socks5Connector struct {
 	User *url.Userinfo
 }
 
+// SOCKS5Connector creates a connector for SOCKS5 proxy client.
+// It accepts an optional auth info for SOCKS5 Username/Password Authentication.
 func SOCKS5Connector(user *url.Userinfo) Connector {
 	return &socks5Connector{User: user}
 }
@@ -246,6 +251,7 @@ func (c *socks5Connector) Connect(conn net.Conn, addr string) (net.Conn, error) 
 
 type socks4Connector struct{}
 
+// SOCKS4Connector creates a Connector for SOCKS4 proxy client.
 func SOCKS4Connector() Connector {
 	return &socks4Connector{}
 }
@@ -289,6 +295,7 @@ func (c *socks4Connector) Connect(conn net.Conn, addr string) (net.Conn, error) 
 
 type socks4aConnector struct{}
 
+// SOCKS4AConnector creates a Connector for SOCKS4A proxy client.
 func SOCKS4AConnector() Connector {
 	return &socks4aConnector{}
 }
@@ -331,7 +338,7 @@ type socks5Handler struct {
 	options  *HandlerOptions
 }
 
-// SOCKS5Handler returns a SOCKS5 server handler
+// SOCKS5Handler creates a server Handler for SOCKS5 proxy server.
 func SOCKS5Handler(opts ...HandlerOption) Handler {
 	options := &HandlerOptions{
 		Chain: new(Chain),
@@ -381,7 +388,7 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 		log.Logf("[socks5-udp] %s - %s", conn.RemoteAddr(), req.Addr)
 		h.handleUDPRelay(conn, req)
 
-	case CmdUdpTun:
+	case CmdUDPTun:
 		log.Logf("[socks5-rudp] %s - %s", conn.RemoteAddr(), req.Addr)
 		h.handleUDPTunnel(conn, req)
 
@@ -613,7 +620,7 @@ func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
 	defer cc.Close()
 
 	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	r := gosocks5.NewRequest(CmdUdpTun, nil)
+	r := gosocks5.NewRequest(CmdUDPTun, nil)
 	if err := r.Write(cc); err != nil {
 		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), cc.RemoteAddr(), err)
 		return
@@ -647,8 +654,8 @@ func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
 	log.Logf("[socks5-udp] %s >-< %s", conn.RemoteAddr(), socksAddr)
 }
 
-func (s *socks5Handler) discardClientData(conn net.Conn) (err error) {
-	b := make([]byte, TinyBufferSize)
+func (h *socks5Handler) discardClientData(conn net.Conn) (err error) {
+	b := make([]byte, tinyBufferSize)
 	n := 0
 	for {
 		n, err = conn.Read(b) // discard any data from tcp connection
@@ -663,13 +670,13 @@ func (s *socks5Handler) discardClientData(conn net.Conn) (err error) {
 	return
 }
 
-func (s *socks5Handler) transportUDP(relay, peer *net.UDPConn) (err error) {
+func (h *socks5Handler) transportUDP(relay, peer *net.UDPConn) (err error) {
 	errc := make(chan error, 2)
 
 	var clientAddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, LargeBufferSize)
+		b := make([]byte, largeBufferSize)
 
 		for {
 			n, laddr, err := relay.ReadFromUDP(b)
@@ -701,7 +708,7 @@ func (s *socks5Handler) transportUDP(relay, peer *net.UDPConn) (err error) {
 	}()
 
 	go func() {
-		b := make([]byte, LargeBufferSize)
+		b := make([]byte, largeBufferSize)
 
 		for {
 			n, raddr, err := peer.ReadFromUDP(b)
@@ -739,7 +746,7 @@ func (h *socks5Handler) tunnelClientUDP(uc *net.UDPConn, cc net.Conn) (err error
 	var clientAddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, LargeBufferSize)
+		b := make([]byte, largeBufferSize)
 
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
@@ -864,7 +871,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 	errc := make(chan error, 2)
 
 	go func() {
-		b := make([]byte, LargeBufferSize)
+		b := make([]byte, largeBufferSize)
 
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
@@ -939,7 +946,7 @@ type socks4Handler struct {
 	options *HandlerOptions
 }
 
-// SOCKS4Handler returns a SOCKS4 server handler
+// SOCKS4Handler creates a server Handler for SOCKS4(A) proxy server.
 func SOCKS4Handler(opts ...HandlerOption) Handler {
 	options := &HandlerOptions{
 		Chain: new(Chain),

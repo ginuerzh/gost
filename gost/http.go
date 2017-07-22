@@ -17,6 +17,8 @@ type httpConnector struct {
 	User *url.Userinfo
 }
 
+// HTTPConnector creates a Connector for HTTP proxy client.
+// It accepts an optional auth info for HTTP Basic Authentication.
 func HTTPConnector(user *url.Userinfo) Connector {
 	return &httpConnector{User: user}
 }
@@ -71,6 +73,7 @@ type httpHandler struct {
 	options *HandlerOptions
 }
 
+// HTTPHandler creates a server Handler for HTTP proxy server.
 func HTTPHandler(opts ...HandlerOption) Handler {
 	h := &httpHandler{
 		options: &HandlerOptions{

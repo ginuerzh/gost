@@ -14,7 +14,7 @@ type Server struct {
 	handler Handler
 }
 
-// Handle sets a handler for the server
+// Handle sets a handler for the server.
 func (s *Server) Handle(h Handler) {
 	s.handler = h
 }
@@ -57,6 +57,7 @@ type tcpListener struct {
 	net.Listener
 }
 
+// TCPListener creates a Listener for TCP proxy server.
 func TCPListener(addr string) (Listener, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

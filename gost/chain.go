@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	// ErrEmptyChain is an error that implies the chain is empty
+	// ErrEmptyChain is an error that implies the chain is empty.
 	ErrEmptyChain = errors.New("empty chain")
 )
 

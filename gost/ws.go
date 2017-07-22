@@ -13,6 +13,7 @@ import (
 	"gopkg.in/gorilla/websocket.v1"
 )
 
+// WSOptions describes the options for websocket.
 type WSOptions struct {
 	ReadBufferSize    int
 	WriteBufferSize   int
@@ -82,11 +83,11 @@ func (c *websocketConn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-func (conn *websocketConn) SetDeadline(t time.Time) error {
-	if err := conn.SetReadDeadline(t); err != nil {
+func (c *websocketConn) SetDeadline(t time.Time) error {
+	if err := c.SetReadDeadline(t); err != nil {
 		return err
 	}
-	return conn.SetWriteDeadline(t)
+	return c.SetWriteDeadline(t)
 }
 func (c *websocketConn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
@@ -101,6 +102,7 @@ type wsTransporter struct {
 	options *WSOptions
 }
 
+// WSTransporter creates a Transporter that is used by websocket proxy client.
 func WSTransporter(addr string, opts *WSOptions) Transporter {
 	return &wsTransporter{
 		addr:    addr,
@@ -108,8 +110,9 @@ func WSTransporter(addr string, opts *WSOptions) Transporter {
 	}
 }
 
-func (tr *wsTransporter) Network() string {
-	return "tcp"
+func (tr *wsTransporter) Dial(addr string) (net.Conn, error) {
+	tr.addr = addr // NOTE: the addr must match the initial tr.addr
+	return net.Dial("tcp", addr)
 }
 
 func (tr *wsTransporter) Handshake(conn net.Conn) (net.Conn, error) {
@@ -122,6 +125,7 @@ type wssTransporter struct {
 	options *WSOptions
 }
 
+// WSSTransporter creates a Transporter that is used by websocket secure proxy client.
 func WSSTransporter(addr string, opts *WSOptions) Transporter {
 	return &wssTransporter{
 		addr:    addr,
@@ -129,8 +133,8 @@ func WSSTransporter(addr string, opts *WSOptions) Transporter {
 	}
 }
 
-func (tr *wssTransporter) Network() string {
-	return "tcp"
+func (tr *wssTransporter) Dial(addr string) (net.Conn, error) {
+	return net.Dial("tcp", addr)
 }
 
 func (tr *wssTransporter) Handshake(conn net.Conn) (net.Conn, error) {
@@ -146,6 +150,7 @@ type wsListener struct {
 	errChan  chan error
 }
 
+// WSListener creates a Listener for websocket proxy server.
 func WSListener(addr string, options *WSOptions) (Listener, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -162,7 +167,7 @@ func WSListener(addr string, options *WSOptions) (Listener, error) {
 			CheckOrigin:       func(r *http.Request) bool { return true },
 			EnableCompression: options.EnableCompression,
 		},
-		connChan: make(chan net.Conn, 32),
+		connChan: make(chan net.Conn, 128),
 		errChan:  make(chan error, 1),
 	}
 
@@ -202,7 +207,11 @@ func (l *wsListener) upgrade(w http.ResponseWriter, r *http.Request) {
 		log.Logf("[ws] %s - %s : %s", r.RemoteAddr, l.addr, err)
 		return
 	}
-	l.connChan <- websocketServerConn(conn)
+	select {
+	case l.connChan <- websocketServerConn(conn):
+	default:
+		log.Logf("[ws] %s - %s: connection queue is full", r.RemoteAddr, l.addr)
+	}
 }
 
 func (l *wsListener) Accept() (conn net.Conn, err error) {
@@ -225,6 +234,7 @@ type wssListener struct {
 	*wsListener
 }
 
+// WSSListener creates a Listener for websocket secure proxy server.
 func WSSListener(addr string, options *WSOptions) (Listener, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -242,7 +252,7 @@ func WSSListener(addr string, options *WSOptions) (Listener, error) {
 				CheckOrigin:       func(r *http.Request) bool { return true },
 				EnableCompression: options.EnableCompression,
 			},
-			connChan: make(chan net.Conn, 32),
+			connChan: make(chan net.Conn, 128),
 			errChan:  make(chan error, 1),
 		},
 	}

@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 
 	"github.com/ginuerzh/gost/gost"
 )
@@ -28,61 +27,72 @@ func main() {
 			},
 		*/
 
-		// socks5+tcp
-		gost.Node{
-			Addr: "127.0.0.1:1080",
-			Client: gost.NewClient(
-				gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
-				gost.TCPTransporter(),
-			),
-		},
-
-	/*
-		// ss+tcp
-		gost.Node{
-			Addr: "127.0.0.1:8338",
-			Client: gost.NewClient(
-				gost.ShadowConnector(url.UserPassword("chacha20", "123456")),
-				gost.TCPTransporter(),
-			),
-		},
-	*/
-
-	/*
-		// http+ws
-		gost.Node{
-			Addr: "127.0.0.1:8000",
-			Client: gost.NewClient(
-				gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				gost.WSTransporter("127.0.0.1:8000", nil),
-			),
-		},
-	*/
-
-	/*
-		// http+wss
-		gost.Node{
-			Addr: "127.0.0.1:8443",
-			Client: gost.NewClient(
-				gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				gost.WSSTransporter(
-					"127.0.0.1:8443",
-					&gost.WSOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}},
+		/*
+			// socks5+tcp
+			gost.Node{
+				Addr: "127.0.0.1:1080",
+				Client: gost.NewClient(
+					gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+					gost.TCPTransporter(),
 				),
-			),
-		},
-	*/
+			},
+		*/
 
-	/*
-		// http+tls
+		/*
+			// ss+tcp
+			gost.Node{
+				Addr: "127.0.0.1:8338",
+				Client: gost.NewClient(
+					gost.ShadowConnector(url.UserPassword("chacha20", "123456")),
+					gost.TCPTransporter(),
+				),
+			},
+		*/
+
+		/*
+			// http+ws
+			gost.Node{
+				Addr: "127.0.0.1:8000",
+				Client: gost.NewClient(
+					gost.HTTPConnector(url.UserPassword("admin", "123456")),
+					gost.WSTransporter("127.0.0.1:8000", nil),
+				),
+			},
+		*/
+
+		/*
+			// http+wss
+			gost.Node{
+				Addr: "127.0.0.1:8443",
+				Client: gost.NewClient(
+					gost.HTTPConnector(url.UserPassword("admin", "123456")),
+					gost.WSSTransporter(
+						"127.0.0.1:8443",
+						&gost.WSOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}},
+					),
+				),
+			},
+		*/
+
+		/*
+			// http+tls
+			gost.Node{
+				Addr: "127.0.0.1:1443",
+				Client: gost.NewClient(
+					gost.HTTPConnector(url.UserPassword("admin", "123456")),
+					gost.TLSTransporter(&tls.Config{InsecureSkipVerify: true}),
+				),
+			},
+		*/
+
+		// http+kcp
 		gost.Node{
-			Addr: "127.0.0.1:1443",
+			Addr: "127.0.0.1:8388",
 			Client: gost.NewClient(
-				gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				gost.TLSTransporter(&tls.Config{InsecureSkipVerify: true}),
+				gost.HTTPConnector(nil),
+				gost.KCPTransporter(nil),
 			),
 		},
-	*/
 	)
 
 	conn, err := chain.Dial("localhost:10000")

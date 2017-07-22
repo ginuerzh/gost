@@ -14,7 +14,7 @@ import (
 )
 
 // Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
-// we wrap around it to make io.Copy happy
+// we wrap around it to make io.Copy happy.
 type shadowConn struct {
 	conn net.Conn
 }
@@ -57,6 +57,9 @@ type shadowConnector struct {
 	Cipher *url.Userinfo
 }
 
+// ShadowConnector creates a Connector for shadowsocks proxy client.
+// It accepts a cipher info for shadowsocks data encryption/decryption.
+// The cipher must not be nil.
 func ShadowConnector(cipher *url.Userinfo) Connector {
 	return &shadowConnector{Cipher: cipher}
 }
@@ -89,6 +92,7 @@ type shadowHandler struct {
 	options *HandlerOptions
 }
 
+// ShadowHandler creates a server Handler for shadowsocks proxy server.
 func ShadowHandler(opts ...HandlerOption) Handler {
 	h := &shadowHandler{
 		options: &HandlerOptions{
@@ -158,7 +162,7 @@ func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
 	// buf size should at least have the same size with the largest possible
 	// request size (when addrType is 3, domain name has at most 256 bytes)
 	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
-	buf := make([]byte, SmallBufferSize)
+	buf := make([]byte, smallBufferSize)
 
 	// read till we get possible domain length field
 	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
