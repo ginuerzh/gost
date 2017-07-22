@@ -1,25 +1,25 @@
 package gost
 
 import (
-	"crypto/tls"
 	"io"
 	"net"
 	"time"
 
-	"net/url"
-
 	"github.com/go-log/log"
 )
 
+// Server is a proxy server.
 type Server struct {
 	l       net.Listener
 	handler Handler
 }
 
+// Handle sets a handler for the server
 func (s *Server) Handle(h Handler) {
 	s.handler = h
 }
 
+// Serve serves as a proxy server.
 func (s *Server) Serve(l net.Listener) error {
 	defer l.Close()
 
@@ -48,6 +48,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 }
 
+// Listener is a proxy server listener, just like a net.Listener.
 type Listener interface {
 	net.Listener
 }
@@ -64,34 +65,18 @@ func TCPListener(addr string) (Listener, error) {
 	return &tcpListener{Listener: &tcpKeepAliveListener{ln.(*net.TCPListener)}}, nil
 }
 
-type Handler interface {
-	Handle(net.Conn)
+type tcpKeepAliveListener struct {
+	*net.TCPListener
 }
 
-type HandlerOptions struct {
-	Chain     *Chain
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
-}
-
-type HandlerOption func(opts *HandlerOptions)
-
-func ChainHandlerOption(chain *Chain) HandlerOption {
-	return func(opts *HandlerOptions) {
-		opts.Chain = chain
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
 	}
-}
-
-func UsersHandlerOption(users ...*url.Userinfo) HandlerOption {
-	return func(opts *HandlerOptions) {
-		opts.Users = users
-	}
-}
-
-func TLSConfigHandlerOption(config *tls.Config) HandlerOption {
-	return func(opts *HandlerOptions) {
-		opts.TLSConfig = config
-	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(KeepAliveTime)
+	return tc, nil
 }
 
 func transport(rw1, rw2 io.ReadWriter) error {
@@ -106,23 +91,9 @@ func transport(rw1, rw2 io.ReadWriter) error {
 		errc <- err
 	}()
 
-	return <-errc
-}
-
-// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
-// connections. It's used by ListenAndServe and ListenAndServeTLS so
-// dead TCP connections (e.g. closing laptop mid-download) eventually
-// go away.
-type tcpKeepAliveListener struct {
-	*net.TCPListener
-}
-
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
-	if err != nil {
-		return
+	err := <-errc
+	if err != nil && err == io.EOF {
+		err = nil
 	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(3 * time.Minute)
-	return tc, nil
+	return err
 }

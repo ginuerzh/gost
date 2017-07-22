@@ -2,11 +2,9 @@ package main
 
 import (
 	"bufio"
-	"crypto/tls"
 	"log"
 	"net/http"
 	"net/http/httputil"
-
 	"net/url"
 
 	"github.com/ginuerzh/gost/gost"
@@ -20,16 +18,48 @@ func init() {
 func main() {
 	chain := gost.NewChain(
 		/*
-			// http+ws
+			// http+tcp
 			gost.Node{
-				Addr: "127.0.0.1:8000",
+				Addr: "127.0.0.1:8080",
 				Client: gost.NewClient(
 					gost.HTTPConnector(url.UserPassword("admin", "123456")),
-					gost.WSTransporter("127.0.0.1:8000", nil),
+					gost.TCPTransporter(),
 				),
 			},
 		*/
 
+		// socks5+tcp
+		gost.Node{
+			Addr: "127.0.0.1:1080",
+			Client: gost.NewClient(
+				gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+				gost.TCPTransporter(),
+			),
+		},
+
+	/*
+		// ss+tcp
+		gost.Node{
+			Addr: "127.0.0.1:8338",
+			Client: gost.NewClient(
+				gost.ShadowConnector(url.UserPassword("chacha20", "123456")),
+				gost.TCPTransporter(),
+			),
+		},
+	*/
+
+	/*
+		// http+ws
+		gost.Node{
+			Addr: "127.0.0.1:8000",
+			Client: gost.NewClient(
+				gost.HTTPConnector(url.UserPassword("admin", "123456")),
+				gost.WSTransporter("127.0.0.1:8000", nil),
+			),
+		},
+	*/
+
+	/*
 		// http+wss
 		gost.Node{
 			Addr: "127.0.0.1:8443",
@@ -39,15 +69,6 @@ func main() {
 					"127.0.0.1:8443",
 					&gost.WSOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}},
 				),
-			),
-		},
-	/*
-		// http+tcp
-		gost.Node{
-			Addr: "127.0.0.1:1080",
-			Client: gost.NewClient(
-				gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				gost.TCPTransporter(),
 			),
 		},
 	*/
@@ -62,18 +83,8 @@ func main() {
 			),
 		},
 	*/
-
-	/*
-		// ss+tcp
-		gost.Node{
-			Addr: "127.0.0.1:8338",
-			Client: gost.NewClient(
-				gost.ShadowConnector(url.UserPassword("chacha20", "123456")),
-				gost.TCPTransporter(),
-			),
-		},
-	*/
 	)
+
 	conn, err := chain.Dial("localhost:10000")
 	if err != nil {
 		log.Fatal(err)

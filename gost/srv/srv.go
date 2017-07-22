@@ -21,6 +21,8 @@ func main() {
 	wg.Add(1)
 	go httpServer(&wg)
 	wg.Add(1)
+	go socks5Server(&wg)
+	wg.Add(1)
 	go tlsServer(&wg)
 	wg.Add(1)
 	go shadowServer(&wg)
@@ -38,7 +40,41 @@ func httpServer(wg *sync.WaitGroup) {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
+	ln, err := gost.TCPListener(":8080")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func socks5Server(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s := &gost.Server{}
+	s.Handle(gost.SOCKS5Handler(
+		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+		gost.TLSConfigHandlerOption(&tls.Config{Certificates: []tls.Certificate{cert}}),
+	))
 	ln, err := gost.TCPListener(":1080")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func shadowServer(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	s := &gost.Server{}
+	s.Handle(gost.ShadowHandler(
+		gost.UsersHandlerOption(url.UserPassword("chacha20", "123456")),
+	))
+	ln, err := gost.TCPListener(":8338")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,20 +126,6 @@ func wssServer(wg *sync.WaitGroup) {
 		log.Fatal(err)
 	}
 	ln, err := gost.WSSListener(":8443", &gost.WSOptions{TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}}})
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Fatal(s.Serve(ln))
-}
-
-func shadowServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	s := &gost.Server{}
-	s.Handle(gost.ShadowHandler(
-		gost.UsersHandlerOption(url.UserPassword("chacha20", "123456")),
-	))
-	ln, err := gost.TCPListener(":8338")
 	if err != nil {
 		log.Fatal(err)
 	}
