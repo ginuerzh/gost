@@ -38,13 +38,16 @@ func (c *Chain) LastNode() Node {
 
 // AddNode appends the node(s) to the chain.
 func (c *Chain) AddNode(nodes ...Node) {
+	if c == nil {
+		return
+	}
 	c.nodes = append(c.nodes, nodes...)
 }
 
 // IsEmpty checks if the chain is empty.
 // An empty chain means that there is no proxy node in the chain.
 func (c *Chain) IsEmpty() bool {
-	return len(c.nodes) == 0
+	return c == nil || len(c.nodes) == 0
 }
 
 // Dial connects to the target address addr through the chain.

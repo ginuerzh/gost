@@ -106,6 +106,8 @@ func ShadowHandler(opts ...HandlerOption) Handler {
 }
 
 func (h *shadowHandler) Handle(conn net.Conn) {
+	defer conn.Close()
+
 	var method, password string
 
 	users := h.options.Users

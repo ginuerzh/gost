@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	// SALT is the default salt for KCP cipher.
-	SALT = "kcp-go"
+	// KCPSalt is the default salt for KCP cipher.
+	KCPSalt = "kcp-go"
 )
 
 // KCPConfig describes the config for KCP.
@@ -204,7 +204,7 @@ func (tr *kcpTransporter) Dial(addr string) (conn net.Conn, err error) {
 
 func (tr *kcpTransporter) dial(addr string, config *KCPConfig) (*kcpSession, error) {
 	kcpconn, err := kcp.DialWithOptions(addr,
-		blockCrypt(config.Key, config.Crypt, SALT), config.DataShard, config.ParityShard)
+		blockCrypt(config.Key, config.Crypt, KCPSalt), config.DataShard, config.ParityShard)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func KCPListener(addr string, config *KCPConfig) (Listener, error) {
 	config.Init()
 
 	ln, err := kcp.ListenWithOptions(addr,
-		blockCrypt(config.Key, config.Crypt, SALT), config.DataShard, config.ParityShard)
+		blockCrypt(config.Key, config.Crypt, KCPSalt), config.DataShard, config.ParityShard)
 	if err != nil {
 		return nil, err
 	}

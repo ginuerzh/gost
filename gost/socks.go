@@ -365,6 +365,8 @@ func SOCKS5Handler(opts ...HandlerOption) Handler {
 }
 
 func (h *socks5Handler) Handle(conn net.Conn) {
+	defer conn.Close()
+
 	conn = gosocks5.ServerConn(conn, h.selector)
 	req, err := gosocks5.ReadRequest(conn)
 	if err != nil {
@@ -960,6 +962,8 @@ func SOCKS4Handler(opts ...HandlerOption) Handler {
 }
 
 func (h *socks4Handler) Handle(conn net.Conn) {
+	defer conn.Close()
+
 	req, err := gosocks4.ReadRequest(conn)
 	if err != nil {
 		log.Log("[socks4]", err)

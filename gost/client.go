@@ -26,14 +26,12 @@ func (c *Client) Dial(addr string) (net.Conn, error) {
 	return c.Transporter.Dial(addr)
 }
 
-// Handshake performs a handshake with the proxy.
-// The conn should be an connection to this proxy.
+// Handshake performs a handshake with the proxy over connection conn.
 func (c *Client) Handshake(conn net.Conn) (net.Conn, error) {
 	return c.Transporter.Handshake(conn)
 }
 
-// Connect connects to the address addr via the proxy.
-// The conn should be an connection to this proxy.
+// Connect connects to the address addr via the proxy over connection conn.
 func (c *Client) Connect(conn net.Conn, addr string) (net.Conn, error) {
 	return c.Connector.Connect(conn, addr)
 }

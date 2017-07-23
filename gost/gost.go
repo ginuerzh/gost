@@ -25,9 +25,9 @@ var (
 	// DialTimeout is the timeout of dial.
 	DialTimeout = 30 * time.Second
 	// ReadTimeout is the timeout for reading.
-	ReadTimeout = 90 * time.Second
+	ReadTimeout = 30 * time.Second
 	// WriteTimeout is the timeout for writing.
-	WriteTimeout = 90 * time.Second
+	WriteTimeout = 60 * time.Second
 	// default udp node TTL in second for udp port forwarding.
 	defaultTTL = 60
 )

@@ -87,6 +87,8 @@ func HTTPHandler(opts ...HandlerOption) Handler {
 }
 
 func (h *httpHandler) Handle(conn net.Conn) {
+	defer conn.Close()
+
 	req, err := http.ReadRequest(bufio.NewReader(conn))
 	if err != nil {
 		log.Log("[http]", err)

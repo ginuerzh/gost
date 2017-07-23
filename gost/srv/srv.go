@@ -6,8 +6,6 @@ import (
 
 	"net/url"
 
-	"sync"
-
 	"github.com/ginuerzh/gost/gost"
 )
 
@@ -17,27 +15,22 @@ func init() {
 }
 
 func main() {
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go httpServer(&wg)
-	wg.Add(1)
-	go socks5Server(&wg)
-	wg.Add(1)
-	go tlsServer(&wg)
-	wg.Add(1)
-	go shadowServer(&wg)
-	wg.Add(1)
-	go wsServer(&wg)
-	wg.Add(1)
-	go wssServer(&wg)
-	wg.Add(1)
-	go kcpServer(&wg)
-	wg.Wait()
+	go httpServer()
+	go socks5Server()
+	go tlsServer()
+	go shadowServer()
+	go wsServer()
+	go wssServer()
+	go kcpServer()
+	go tcpForwardServer()
+	go rtcpForwardServer()
+	// go rudpForwardServer()
+	go tcpRedirectServer()
+
+	select {}
 }
 
-func httpServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func httpServer() {
 	s := &gost.Server{}
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
@@ -49,9 +42,7 @@ func httpServer(wg *sync.WaitGroup) {
 	log.Fatal(s.Serve(ln))
 }
 
-func socks5Server(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func socks5Server() {
 	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
 	if err != nil {
 		log.Fatal(err)
@@ -69,9 +60,7 @@ func socks5Server(wg *sync.WaitGroup) {
 	log.Fatal(s.Serve(ln))
 }
 
-func shadowServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func shadowServer() {
 	s := &gost.Server{}
 	s.Handle(gost.ShadowHandler(
 		gost.UsersHandlerOption(url.UserPassword("chacha20", "123456")),
@@ -83,9 +72,7 @@ func shadowServer(wg *sync.WaitGroup) {
 	log.Fatal(s.Serve(ln))
 }
 
-func tlsServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func tlsServer() {
 	s := &gost.Server{}
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
@@ -101,9 +88,7 @@ func tlsServer(wg *sync.WaitGroup) {
 	log.Fatal(s.Serve(ln))
 }
 
-func wsServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func wsServer() {
 	s := &gost.Server{}
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
@@ -115,9 +100,7 @@ func wsServer(wg *sync.WaitGroup) {
 	log.Fatal(s.Serve(ln))
 }
 
-func wssServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func wssServer() {
 	s := &gost.Server{}
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
@@ -134,12 +117,78 @@ func wssServer(wg *sync.WaitGroup) {
 	log.Fatal(s.Serve(ln))
 }
 
-func kcpServer(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func kcpServer() {
 	s := &gost.Server{}
 	s.Handle(gost.HTTPHandler())
 	ln, err := gost.KCPListener(":8388", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func tcpForwardServer() {
+	s := &gost.Server{}
+	s.Handle(gost.TCPForwardHandler("ginuerzh.xyz:22"))
+	ln, err := gost.TCPListener(":2222")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func rtcpForwardServer() {
+	s := &gost.Server{}
+	s.Handle(gost.RTCPForwardHandler(":1222", "ginuerzh.xyz:22"))
+	ln, err := gost.RTCPForwardListener(
+		":1222",
+		gost.NewChain(
+			gost.Node{
+				Protocol:  "socks5",
+				Transport: "tcp",
+				Addr:      "localhost:12345",
+				User:      url.UserPassword("admin", "123456"),
+				Client: gost.NewClient(
+					gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+					gost.TCPTransporter(),
+				),
+			},
+		),
+	)
+	if err != nil {
+		log.Fatal()
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func rudpForwardServer() {
+	s := &gost.Server{}
+	s.Handle(gost.RUDPForwardHandler(":10053", "localhost:53"))
+	ln, err := gost.RUDPForwardListener(
+		":10053",
+		gost.NewChain(
+			gost.Node{
+				Protocol:  "socks5",
+				Transport: "tcp",
+				Addr:      "localhost:12345",
+				User:      url.UserPassword("admin", "123456"),
+				Client: gost.NewClient(
+					gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+					gost.TCPTransporter(),
+				),
+			},
+		),
+	)
+	if err != nil {
+		log.Fatal()
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func tcpRedirectServer() {
+	s := &gost.Server{}
+	s.Handle(gost.TCPRedirectHandler())
+	ln, err := gost.TCPListener(":8008")
 	if err != nil {
 		log.Fatal(err)
 	}
