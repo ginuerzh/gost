@@ -196,7 +196,7 @@ func (tr *kcpTransporter) Dial(addr string) (conn net.Conn, err error) {
 	if err != nil {
 		tr.sessionMutex.Lock()
 		session.Close()
-		delete(tr.sessions, addr)
+		delete(tr.sessions, addr) // TODO: we could obtain a new session automatically.
 		tr.sessionMutex.Unlock()
 	}
 	return
@@ -243,6 +243,10 @@ func (tr *kcpTransporter) dial(addr string, config *KCPConfig) (*kcpSession, err
 
 func (tr *kcpTransporter) Handshake(conn net.Conn) (net.Conn, error) {
 	return conn, nil
+}
+
+func (tr *kcpTransporter) Multiplex() bool {
+	return true
 }
 
 type kcpListener struct {

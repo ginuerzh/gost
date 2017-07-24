@@ -28,6 +28,10 @@ var (
 	ReadTimeout = 30 * time.Second
 	// WriteTimeout is the timeout for writing.
 	WriteTimeout = 60 * time.Second
+	// PingTimeout is the timeout for pinging.
+	PingTimeout = 30 * time.Second
+	// PingRetries is the reties of ping.
+	PingRetries = 3
 	// default udp node TTL in second for udp port forwarding.
 	defaultTTL = 60
 )

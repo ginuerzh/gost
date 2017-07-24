@@ -63,6 +63,8 @@ type Connector interface {
 type Transporter interface {
 	Dial(addr string) (net.Conn, error)
 	Handshake(conn net.Conn) (net.Conn, error)
+	// Indicate that the Transporter supports multiplex
+	Multiplex() bool
 }
 
 type tcpTransporter struct {
@@ -79,4 +81,8 @@ func (tr *tcpTransporter) Dial(addr string) (net.Conn, error) {
 
 func (tr *tcpTransporter) Handshake(conn net.Conn) (net.Conn, error) {
 	return conn, nil
+}
+
+func (tr *tcpTransporter) Multiplex() bool {
+	return false
 }

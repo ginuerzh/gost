@@ -15,17 +15,18 @@ func init() {
 }
 
 func main() {
-	go httpServer()
-	go socks5Server()
-	go tlsServer()
-	go shadowServer()
-	go wsServer()
-	go wssServer()
-	go kcpServer()
-	go tcpForwardServer()
-	go rtcpForwardServer()
+	// go httpServer()
+	// go socks5Server()
+	// go tlsServer()
+	// go shadowServer()
+	// go wsServer()
+	// go wssServer()
+	// go kcpServer()
+	// go tcpForwardServer()
+	// go rtcpForwardServer()
 	// go rudpForwardServer()
-	go tcpRedirectServer()
+	// go tcpRedirectServer()
+	go http2Server()
 
 	select {}
 }
@@ -43,15 +44,10 @@ func httpServer() {
 }
 
 func socks5Server() {
-	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	s := &gost.Server{}
 	s.Handle(gost.SOCKS5Handler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
-		gost.TLSConfigHandlerOption(&tls.Config{Certificates: []tls.Certificate{cert}}),
+		gost.TLSConfigHandlerOption(tlsConfig()),
 	))
 	ln, err := gost.TCPListener(":1080")
 	if err != nil {
@@ -77,11 +73,7 @@ func tlsServer() {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ln, err := gost.TLSListener(":1443", &tls.Config{Certificates: []tls.Certificate{cert}})
+	ln, err := gost.TLSListener(":1443", tlsConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,12 +97,7 @@ func wssServer() {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-
-	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-	if err != nil {
-		log.Fatal(err)
-	}
-	ln, err := gost.WSSListener(":8443", &gost.WSOptions{TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}}})
+	ln, err := gost.WSSListener(":8443", &gost.WSOptions{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -193,4 +180,27 @@ func tcpRedirectServer() {
 		log.Fatal(err)
 	}
 	log.Fatal(s.Serve(ln))
+}
+
+func http2Server() {
+	// http2.VerboseLogs = true
+
+	s := &gost.Server{}
+	s.Handle(gost.HTTP2Handler(
+		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+	))
+	ln, err := gost.TLSListener(":1443", tlsConfig())
+	// ln, err := gost.TCPListener(":1443")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func tlsConfig() *tls.Config {
+	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	if err != nil {
+		panic(err)
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}}
 }

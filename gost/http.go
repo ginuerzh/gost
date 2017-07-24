@@ -110,21 +110,8 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	valid := false
-	u, p, _ := h.basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	users := h.options.Users
-	for _, user := range users {
-		username := user.Username()
-		password, _ := user.Password()
-		if (u == username && p == password) ||
-			(u == username && password == "") ||
-			(username == "" && p == password) {
-			valid = true
-			break
-		}
-	}
-
-	if len(users) > 0 && !valid {
+	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
+	if !authenticate(u, p, h.options.Users...) {
 		log.Logf("[http] %s <- %s : proxy authentication required", conn.RemoteAddr(), req.Host)
 		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
 			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
@@ -182,7 +169,7 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
 }
 
-func (h *httpHandler) basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
+func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
 	if proxyAuth == "" {
 		return
 	}
@@ -201,4 +188,21 @@ func (h *httpHandler) basicProxyAuth(proxyAuth string) (username, password strin
 	}
 
 	return cs[:s], cs[s+1:], true
+}
+
+func authenticate(username, password string, users ...*url.Userinfo) bool {
+	if len(users) == 0 {
+		return true
+	}
+
+	for _, user := range users {
+		u := user.Username()
+		p, _ := user.Password()
+		if (u == username && p == password) ||
+			(u == username && p == "") ||
+			(u == "" && p == password) {
+			return true
+		}
+	}
+	return false
 }

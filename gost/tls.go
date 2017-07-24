@@ -6,13 +6,13 @@ import (
 )
 
 type tlsTransporter struct {
-	TLSClientConfig *tls.Config
+	tlsConfig *tls.Config
 }
 
 // TLSTransporter creates a Transporter that is used by TLS proxy client.
 // It accepts a TLS config for TLS handshake.
 func TLSTransporter(cfg *tls.Config) Transporter {
-	return &tlsTransporter{TLSClientConfig: cfg}
+	return &tlsTransporter{tlsConfig: cfg}
 }
 
 func (tr *tlsTransporter) Dial(addr string) (net.Conn, error) {
@@ -20,7 +20,11 @@ func (tr *tlsTransporter) Dial(addr string) (net.Conn, error) {
 }
 
 func (tr *tlsTransporter) Handshake(conn net.Conn) (net.Conn, error) {
-	return tls.Client(conn, tr.TLSClientConfig), nil
+	return tls.Client(conn, tr.tlsConfig), nil
+}
+
+func (tr *tlsTransporter) Multiplex() bool {
+	return false
 }
 
 type tlsListener struct {
@@ -33,5 +37,5 @@ func TLSListener(addr string, config *tls.Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &tlsListener{Listener: ln}, nil
+	return &tlsListener{ln}, nil
 }

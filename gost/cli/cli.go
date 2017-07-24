@@ -2,9 +2,13 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
+
+	"time"
 
 	"github.com/ginuerzh/gost/gost"
 )
@@ -85,36 +89,55 @@ func main() {
 			},
 		*/
 
-		// http+kcp
+		// http2
 		gost.Node{
-			Addr: "127.0.0.1:8388",
+			Addr: "127.0.0.1:1443",
 			Client: gost.NewClient(
-				gost.HTTPConnector(nil),
-				gost.KCPTransporter(nil),
+				gost.HTTP2Connector(url.UserPassword("admin", "123456")),
+				gost.HTTP2Transporter(
+					nil,
+					&tls.Config{InsecureSkipVerify: true},
+					time.Second*60,
+				),
 			),
 		},
+
+		/*
+			// http+kcp
+			gost.Node{
+				Addr: "127.0.0.1:8388",
+				Client: gost.NewClient(
+					gost.HTTPConnector(nil),
+					gost.KCPTransporter(nil),
+				),
+			},
+		*/
 	)
 
-	conn, err := chain.Dial("localhost:10000")
-	if err != nil {
-		log.Fatal(err)
-	}
-	//conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	req, err := http.NewRequest(http.MethodGet, "http://localhost:10000/pkg", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := req.Write(conn); err != nil {
-		log.Fatal(err)
-	}
-	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
+	for i := 0; i < 10; i++ {
+		conn, err := chain.Dial("localhost:10000")
+		if err != nil {
+			log.Fatal(err)
+		}
+		//conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+		req, err := http.NewRequest(http.MethodGet, "http://localhost:10000/pkg", nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := req.Write(conn); err != nil {
+			log.Fatal(err)
+		}
+		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
 
-	rb, _ := httputil.DumpRequest(req, true)
-	log.Println(string(rb))
-	rb, _ = httputil.DumpResponse(resp, true)
-	log.Println(string(rb))
+		rb, _ := httputil.DumpRequest(req, true)
+		log.Println(string(rb))
+		rb, _ = httputil.DumpResponse(resp, true)
+		log.Println(string(rb))
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
