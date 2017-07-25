@@ -27,14 +27,14 @@ type websocketConn struct {
 	rb   []byte
 }
 
-func websocketClientConn(url string, conn net.Conn, options *WSOptions) (net.Conn, error) {
+func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, options *WSOptions) (net.Conn, error) {
 	if options == nil {
 		options = &WSOptions{}
 	}
 	dialer := websocket.Dialer{
 		ReadBufferSize:    options.ReadBufferSize,
 		WriteBufferSize:   options.WriteBufferSize,
-		TLSClientConfig:   options.TLSConfig,
+		TLSClientConfig:   tlsConfig,
 		HandshakeTimeout:  options.HandshakeTimeout,
 		EnableCompression: options.EnableCompression,
 		NetDial: func(net, addr string) (net.Conn, error) {
@@ -98,26 +98,31 @@ func (c *websocketConn) SetWriteDeadline(t time.Time) error {
 }
 
 type wsTransporter struct {
-	addr    string
 	options *WSOptions
 }
 
 // WSTransporter creates a Transporter that is used by websocket proxy client.
-func WSTransporter(addr string, opts *WSOptions) Transporter {
+func WSTransporter(opts *WSOptions) Transporter {
 	return &wsTransporter{
-		addr:    addr,
 		options: opts,
 	}
 }
 
-func (tr *wsTransporter) Dial(addr string) (net.Conn, error) {
-	tr.addr = addr // NOTE: the addr must match the initial tr.addr
+func (tr *wsTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
 	return net.Dial("tcp", addr)
 }
 
-func (tr *wsTransporter) Handshake(conn net.Conn) (net.Conn, error) {
-	url := url.URL{Scheme: "ws", Host: tr.addr, Path: "/ws"}
-	return websocketClientConn(url.String(), conn, tr.options)
+func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	opts := &HandshakeOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	wsOptions := tr.options
+	if opts.WSOptions != nil {
+		wsOptions = opts.WSOptions
+	}
+	url := url.URL{Scheme: "ws", Host: opts.Addr, Path: "/ws"}
+	return websocketClientConn(url.String(), conn, nil, wsOptions)
 }
 
 func (tr *wsTransporter) Multiplex() bool {
@@ -125,25 +130,34 @@ func (tr *wsTransporter) Multiplex() bool {
 }
 
 type wssTransporter struct {
-	addr    string
 	options *WSOptions
 }
 
 // WSSTransporter creates a Transporter that is used by websocket secure proxy client.
-func WSSTransporter(addr string, opts *WSOptions) Transporter {
+func WSSTransporter(opts *WSOptions) Transporter {
 	return &wssTransporter{
-		addr:    addr,
 		options: opts,
 	}
 }
 
-func (tr *wssTransporter) Dial(addr string) (net.Conn, error) {
+func (tr *wssTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
 	return net.Dial("tcp", addr)
 }
 
-func (tr *wssTransporter) Handshake(conn net.Conn) (net.Conn, error) {
-	url := url.URL{Scheme: "wss", Host: tr.addr, Path: "/ws"}
-	return websocketClientConn(url.String(), conn, tr.options)
+func (tr *wssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	opts := &HandshakeOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	wsOptions := tr.options
+	if opts.WSOptions != nil {
+		wsOptions = opts.WSOptions
+	}
+	if opts.TLSConfig == nil {
+		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	url := url.URL{Scheme: "wss", Host: opts.Addr, Path: "/ws"}
+	return websocketClientConn(url.String(), conn, opts.TLSConfig, wsOptions)
 }
 
 func (tr *wssTransporter) Multiplex() bool {

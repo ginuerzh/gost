@@ -79,8 +79,8 @@ type http2Transporter struct {
 	tlsConfig    *tls.Config
 	tr           *http2.Transport
 	chain        *Chain
-	conns        map[string]*http2.ClientConn
-	connMutex    sync.Mutex
+	sessions     map[string]*http2Session
+	sessionMutex sync.Mutex
 	pingInterval time.Duration
 }
 
@@ -97,93 +97,49 @@ func HTTP2Transporter(chain *Chain, config *tls.Config, ping time.Duration) Tran
 		tr:           new(http2.Transport),
 		chain:        chain,
 		pingInterval: ping,
-		conns:        make(map[string]*http2.ClientConn),
+		sessions:     make(map[string]*http2Session),
 	}
 }
 
-func (tr *http2Transporter) Dial(addr string) (net.Conn, error) {
-	tr.connMutex.Lock()
-	conn, ok := tr.conns[addr]
+func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
+	tr.sessionMutex.Lock()
+	defer tr.sessionMutex.Unlock()
 
+	session, ok := tr.sessions[addr]
 	if !ok {
-		cc, err := tr.chain.Dial(addr)
+		conn, err := tr.chain.Dial(addr)
 		if err != nil {
-			tr.connMutex.Unlock()
 			return nil, err
 		}
 
 		if tr.tlsConfig != nil {
-			tc := tls.Client(cc, tr.tlsConfig)
+			tc := tls.Client(conn, tr.tlsConfig)
 			if err := tc.Handshake(); err != nil {
-				tr.connMutex.Unlock()
 				return nil, err
 			}
-			cc = tc
+			conn = tc
 		}
-		conn, err = tr.tr.NewClientConn(cc)
+		cc, err := tr.tr.NewClientConn(conn)
 		if err != nil {
-			tr.connMutex.Unlock()
 			return nil, err
 		}
-		tr.conns[addr] = conn
-		go tr.ping(tr.pingInterval, addr, conn)
+		session = newHTTP2Session(conn, cc, tr.pingInterval)
+		tr.sessions[addr] = session
 	}
-	tr.connMutex.Unlock()
 
-	if !conn.CanTakeNewRequest() {
-		tr.connMutex.Lock()
-		delete(tr.conns, addr) // TODO: we could re-connect to the addr automatically.
-		tr.connMutex.Unlock()
+	if !session.Healthy() {
+		session.Close()
+		delete(tr.sessions, addr) // TODO: we could re-connect to the addr automatically.
 		return nil, errors.New("connection is dead")
 	}
 
 	return &http2DummyConn{
 		raddr: addr,
-		conn:  conn,
+		conn:  session.clientConn,
 	}, nil
 }
 
-func (tr *http2Transporter) ping(interval time.Duration, addr string, conn *http2.ClientConn) {
-	if interval <= 0 {
-		return
-	}
-	log.Log("[http2] ping is enabled, interval:", interval)
-
-	baseCtx := context.Background()
-	t := time.NewTicker(interval)
-	retries := PingRetries
-	for {
-		select {
-		case <-t.C:
-			if !conn.CanTakeNewRequest() {
-				return
-			}
-			ctx, cancel := context.WithTimeout(baseCtx, PingTimeout)
-			if err := conn.Ping(ctx); err != nil {
-				log.Logf("[http2] ping: %s", err)
-				if retries > 0 {
-					retries--
-					log.Log("[http2] retry ping")
-					cancel()
-					continue
-				}
-
-				// connection is dead, remove it.
-				tr.connMutex.Lock()
-				delete(tr.conns, addr)
-				tr.connMutex.Unlock()
-
-				cancel()
-				return
-			}
-
-			cancel()
-			retries = PingRetries
-		}
-	}
-}
-
-func (tr *http2Transporter) Handshake(conn net.Conn) (net.Conn, error) {
+func (tr *http2Transporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
 	return conn, nil
 }
 
@@ -331,6 +287,112 @@ func (h *http2Handler) handleFunc(w http.ResponseWriter, r *http.Request) {
 		log.Logf("[http2] %s <- %s : %s", r.RemoteAddr, target, err)
 	}
 	log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
+}
+
+type http2Listener struct {
+	ln net.Listener
+}
+
+// HTTP2Listener creates a Listener for server using HTTP2 as transport.
+func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
+	var ln net.Listener
+	var err error
+
+	if config != nil {
+		ln, err = tls.Listen("tcp", addr, config)
+	} else {
+		ln, err = net.Listen("tcp", addr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ln, err
+	//return &http2Listener{ln: ln}, nil
+}
+
+type http2Session struct {
+	conn       net.Conn
+	clientConn *http2.ClientConn
+	closeChan  chan struct{}
+	pingChan   chan struct{}
+}
+
+func newHTTP2Session(conn net.Conn, clientConn *http2.ClientConn, interval time.Duration) *http2Session {
+	session := &http2Session{
+		conn:       conn,
+		clientConn: clientConn,
+		closeChan:  make(chan struct{}),
+	}
+	if interval > 0 {
+		session.pingChan = make(chan struct{})
+		go session.Ping(interval)
+	}
+	return session
+}
+
+func (s *http2Session) Ping(interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+
+	defer close(s.pingChan)
+	log.Log("[http2] ping is enabled, interval:", interval)
+
+	baseCtx := context.Background()
+	t := time.NewTicker(interval)
+	retries := PingRetries
+	for {
+		select {
+		case <-t.C:
+			if Debug {
+				log.Log("[http2] sending ping")
+			}
+			if !s.clientConn.CanTakeNewRequest() {
+				log.Logf("[http2] connection is dead")
+				return
+			}
+			ctx, cancel := context.WithTimeout(baseCtx, PingTimeout)
+			if err := s.clientConn.Ping(ctx); err != nil {
+				log.Logf("[http2] ping: %s", err)
+				if retries > 0 {
+					retries--
+					log.Log("[http2] retry ping")
+					cancel()
+					continue
+				}
+
+				cancel()
+				return
+			}
+
+			if Debug {
+				log.Log("[http2] ping OK")
+			}
+			cancel()
+			retries = PingRetries
+
+		case <-s.closeChan:
+			return
+		}
+	}
+}
+
+func (s *http2Session) Healthy() bool {
+	select {
+	case <-s.pingChan:
+		return false
+	default:
+	}
+	return s.clientConn.CanTakeNewRequest()
+}
+
+func (s *http2Session) Close() error {
+	select {
+	case <-s.closeChan:
+	default:
+		close(s.closeChan)
+	}
+	return nil
 }
 
 // HTTP2 connection, wrapped up just like a net.Conn

@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"crypto/tls"
 	"net"
 )
 
@@ -22,13 +23,13 @@ func NewClient(c Connector, tr Transporter) *Client {
 }
 
 // Dial connects to the target address.
-func (c *Client) Dial(addr string) (net.Conn, error) {
-	return c.Transporter.Dial(addr)
+func (c *Client) Dial(addr string, options ...DialOption) (net.Conn, error) {
+	return c.Transporter.Dial(addr, options...)
 }
 
 // Handshake performs a handshake with the proxy over connection conn.
-func (c *Client) Handshake(conn net.Conn) (net.Conn, error) {
-	return c.Transporter.Handshake(conn)
+func (c *Client) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	return c.Transporter.Handshake(conn, options...)
 }
 
 // Connect connects to the address addr via the proxy over connection conn.
@@ -40,13 +41,13 @@ func (c *Client) Connect(conn net.Conn, addr string) (net.Conn, error) {
 var DefaultClient = NewClient(HTTPConnector(nil), TCPTransporter())
 
 // Dial connects to the address addr via the DefaultClient.
-func Dial(addr string) (net.Conn, error) {
-	return DefaultClient.Dial(addr)
+func Dial(addr string, options ...DialOption) (net.Conn, error) {
+	return DefaultClient.Dial(addr, options...)
 }
 
 // Handshake performs a handshake via the DefaultClient.
-func Handshake(conn net.Conn) (net.Conn, error) {
-	return DefaultClient.Handshake(conn)
+func Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	return DefaultClient.Handshake(conn, options...)
 }
 
 // Connect connects to the address addr via the DefaultClient.
@@ -61,8 +62,8 @@ type Connector interface {
 
 // Transporter is responsible for handshaking with the proxy server.
 type Transporter interface {
-	Dial(addr string) (net.Conn, error)
-	Handshake(conn net.Conn) (net.Conn, error)
+	Dial(addr string, options ...DialOption) (net.Conn, error)
+	Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error)
 	// Indicate that the Transporter supports multiplex
 	Multiplex() bool
 }
@@ -75,14 +76,56 @@ func TCPTransporter() Transporter {
 	return &tcpTransporter{}
 }
 
-func (tr *tcpTransporter) Dial(addr string) (net.Conn, error) {
+func (tr *tcpTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
 	return net.Dial("tcp", addr)
 }
 
-func (tr *tcpTransporter) Handshake(conn net.Conn) (net.Conn, error) {
+func (tr *tcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
 	return conn, nil
 }
 
 func (tr *tcpTransporter) Multiplex() bool {
 	return false
+}
+
+// DialOptions describes the options for dialing.
+type DialOptions struct {
+}
+
+// DialOption allows a common way to set dial options.
+type DialOption func(opts *DialOptions)
+
+// HandshakeOptions describes the options for handshake.
+type HandshakeOptions struct {
+	Addr      string
+	TLSConfig *tls.Config
+	WSOptions *WSOptions
+	KCPConfig *KCPConfig
+}
+
+// HandshakeOption allows a common way to set handshake options.
+type HandshakeOption func(opts *HandshakeOptions)
+
+func AddrHandshakeOption(addr string) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.Addr = addr
+	}
+}
+
+func TLSConfigHandshakeOption(config *tls.Config) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.TLSConfig = config
+	}
+}
+
+func WSOptionsHandshakeOption(options *WSOptions) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.WSOptions = options
+	}
+}
+
+func KCPConfigHandshakeOption(config *KCPConfig) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.KCPConfig = config
+	}
 }

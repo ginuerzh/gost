@@ -189,8 +189,8 @@ func http2Server() {
 	s.Handle(gost.HTTP2Handler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-	ln, err := gost.TLSListener(":1443", tlsConfig())
-	// ln, err := gost.TCPListener(":1443")
+	ln, err := gost.TLSListener(":1443", tlsConfig()) // HTTP2 h2 mode
+	// ln, err := gost.TCPListener(":1443") // HTTP2 h2c mode
 	if err != nil {
 		log.Fatal(err)
 	}

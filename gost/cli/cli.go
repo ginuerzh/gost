@@ -89,15 +89,15 @@ func main() {
 			},
 		*/
 
-		// http2
+		// http2+tls, http2+tcp
 		gost.Node{
 			Addr: "127.0.0.1:1443",
 			Client: gost.NewClient(
 				gost.HTTP2Connector(url.UserPassword("admin", "123456")),
 				gost.HTTP2Transporter(
 					nil,
-					&tls.Config{InsecureSkipVerify: true},
-					time.Second*60,
+					&tls.Config{InsecureSkipVerify: true}, // or nil, will use h2c mode (http2+tcp).
+					time.Second*1,
 				),
 			),
 		},
@@ -138,6 +138,6 @@ func main() {
 		rb, _ = httputil.DumpResponse(resp, true)
 		log.Println(string(rb))
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 }

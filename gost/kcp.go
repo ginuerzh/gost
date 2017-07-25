@@ -179,25 +179,23 @@ func KCPTransporter(config *KCPConfig) Transporter {
 	}
 }
 
-func (tr *kcpTransporter) Dial(addr string) (conn net.Conn, err error) {
+func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
 	tr.sessionMutex.Lock()
+	defer tr.sessionMutex.Unlock()
+
 	session, ok := tr.sessions[addr]
 	if !ok {
 		session, err = tr.dial(addr, tr.config)
 		if err != nil {
-			tr.sessionMutex.Unlock()
 			return
 		}
 		tr.sessions[addr] = session
 	}
-	tr.sessionMutex.Unlock()
 
 	conn, err = session.GetConn()
 	if err != nil {
-		tr.sessionMutex.Lock()
 		session.Close()
 		delete(tr.sessions, addr) // TODO: we could obtain a new session automatically.
-		tr.sessionMutex.Unlock()
 	}
 	return
 }
@@ -241,7 +239,7 @@ func (tr *kcpTransporter) dial(addr string, config *KCPConfig) (*kcpSession, err
 	return &kcpSession{conn: conn, session: session}, nil
 }
 
-func (tr *kcpTransporter) Handshake(conn net.Conn) (net.Conn, error) {
+func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
 	return conn, nil
 }
 
