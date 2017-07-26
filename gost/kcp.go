@@ -320,19 +320,21 @@ func KCPListener(addr string, config *KCPConfig) (Listener, error) {
 		config:   config,
 		ln:       ln,
 		connChan: make(chan net.Conn, 1024),
-		errChan:  make(chan error),
+		errChan:  make(chan error, 1),
 	}
-	go l.acceptLoop()
+	go l.listenLoop()
 
 	return l, nil
 }
 
-func (l *kcpListener) acceptLoop() {
+func (l *kcpListener) listenLoop() {
 	for {
 		conn, err := l.ln.AcceptKCP()
 		if err != nil {
 			log.Log("[kcp] accept:", err)
-			continue
+			l.errChan <- err
+			close(l.errChan)
+			return
 		}
 		conn.SetStreamMode(true)
 		conn.SetNoDelay(l.config.NoDelay, l.config.Interval, l.config.Resend, l.config.NoCongestion)
@@ -345,9 +347,13 @@ func (l *kcpListener) acceptLoop() {
 }
 
 func (l *kcpListener) Accept() (conn net.Conn, err error) {
+	var ok bool
 	select {
 	case conn = <-l.connChan:
-	case err = <-l.errChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
+		}
 	}
 	return
 }

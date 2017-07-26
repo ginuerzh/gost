@@ -154,20 +154,24 @@ func request(chain *gost.Chain, start <-chan struct{}) {
 
 	conn, err := chain.Dial("localhost:10000")
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	defer conn.Close()
 	//conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 	req, err := http.NewRequest(http.MethodGet, "http://localhost:10000/pkg", nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	if err := req.Write(conn); err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	defer resp.Body.Close()
 
