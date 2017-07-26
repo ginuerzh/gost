@@ -76,9 +76,7 @@ type httpHandler struct {
 // HTTPHandler creates a server Handler for HTTP proxy server.
 func HTTPHandler(opts ...HandlerOption) Handler {
 	h := &httpHandler{
-		options: &HandlerOptions{
-			Chain: new(Chain),
-		},
+		options: &HandlerOptions{},
 	}
 	for _, opt := range opts {
 		opt(h.options)

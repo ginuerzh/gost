@@ -1,18 +1,29 @@
 package gost
 
-import "log"
+import (
+	"log"
+)
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
-type logger struct {
+type LogLogger struct {
 }
 
-func (l *logger) Log(v ...interface{}) {
+func (l *LogLogger) Log(v ...interface{}) {
 	log.Println(v...)
 }
 
-func (l *logger) Logf(format string, v ...interface{}) {
+func (l *LogLogger) Logf(format string, v ...interface{}) {
 	log.Printf(format, v...)
+}
+
+type NopLogger struct {
+}
+
+func (l *NopLogger) Log(v ...interface{}) {
+}
+
+func (l *NopLogger) Logf(format string, v ...interface{}) {
 }

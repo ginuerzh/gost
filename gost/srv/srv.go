@@ -2,31 +2,42 @@ package main
 
 import (
 	"crypto/tls"
+	"flag"
 	"log"
-
 	"net/url"
 
 	"github.com/ginuerzh/gost/gost"
 )
 
+var (
+	quiet bool
+)
+
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	gost.Debug = true
+
+	flag.BoolVar(&quiet, "q", false, "quiet mode")
+	flag.BoolVar(&gost.Debug, "d", false, "debug mode")
+	flag.Parse()
+
+	if quiet {
+		gost.SetLogger(&gost.NopLogger{})
+	}
 }
 
 func main() {
-	// go httpServer()
-	// go socks5Server()
-	// go tlsServer()
-	// go shadowServer()
-	// go wsServer()
-	// go wssServer()
-	// go kcpServer()
+	go httpServer()
+	go socks5Server()
+	go tlsServer()
+	go shadowServer()
+	go wsServer()
+	go wssServer()
+	go kcpServer()
 	// go tcpForwardServer()
 	// go rtcpForwardServer()
 	// go rudpForwardServer()
 	// go tcpRedirectServer()
-	go http2Server()
+	// go http2Server()
 
 	select {}
 }
@@ -36,7 +47,7 @@ func httpServer() {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-	ln, err := gost.TCPListener(":8080")
+	ln, err := gost.TCPListener(":18080")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,7 +60,7 @@ func socks5Server() {
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 		gost.TLSConfigHandlerOption(tlsConfig()),
 	))
-	ln, err := gost.TCPListener(":1080")
+	ln, err := gost.TCPListener(":11080")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +72,7 @@ func shadowServer() {
 	s.Handle(gost.ShadowHandler(
 		gost.UsersHandlerOption(url.UserPassword("chacha20", "123456")),
 	))
-	ln, err := gost.TCPListener(":8338")
+	ln, err := gost.TCPListener(":18338")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,7 +84,7 @@ func tlsServer() {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-	ln, err := gost.TLSListener(":1443", tlsConfig())
+	ln, err := gost.TLSListener(":11443", tlsConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +96,7 @@ func wsServer() {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-	ln, err := gost.WSListener(":8000", nil)
+	ln, err := gost.WSListener(":18000", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -97,7 +108,7 @@ func wssServer() {
 	s.Handle(gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	))
-	ln, err := gost.WSSListener(":8443", &gost.WSOptions{TLSConfig: tlsConfig()})
+	ln, err := gost.WSSListener(":18443", &gost.WSOptions{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,7 +118,7 @@ func wssServer() {
 func kcpServer() {
 	s := &gost.Server{}
 	s.Handle(gost.HTTPHandler())
-	ln, err := gost.KCPListener(":8388", nil)
+	ln, err := gost.KCPListener(":18388", nil)
 	if err != nil {
 		log.Fatal(err)
 	}

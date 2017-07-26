@@ -2,28 +2,43 @@ package main
 
 import (
 	"bufio"
-	"crypto/tls"
+	"flag"
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
-
+	"sync"
 	"time"
 
 	"github.com/ginuerzh/gost/gost"
 )
 
+var (
+	requests, concurrency int
+	quiet                 bool
+	swg, ewg              sync.WaitGroup
+)
+
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	gost.Debug = true
+
+	flag.IntVar(&requests, "n", 1, "Number of requests to perform")
+	flag.IntVar(&concurrency, "c", 1, "Number of multiple requests to make at a time")
+	flag.BoolVar(&quiet, "q", false, "quiet mode")
+	flag.BoolVar(&gost.Debug, "d", false, "debug mode")
+	flag.Parse()
+
+	if quiet {
+		gost.SetLogger(&gost.NopLogger{})
+	}
 }
 
 func main() {
 	chain := gost.NewChain(
+
 		/*
 			// http+tcp
 			gost.Node{
-				Addr: "127.0.0.1:8080",
+				Addr: "127.0.0.1:18080",
 				Client: gost.NewClient(
 					gost.HTTPConnector(url.UserPassword("admin", "123456")),
 					gost.TCPTransporter(),
@@ -34,7 +49,7 @@ func main() {
 		/*
 			// socks5+tcp
 			gost.Node{
-				Addr: "127.0.0.1:1080",
+				Addr: "127.0.0.1:11080",
 				Client: gost.NewClient(
 					gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
 					gost.TCPTransporter(),
@@ -45,7 +60,7 @@ func main() {
 		/*
 			// ss+tcp
 			gost.Node{
-				Addr: "127.0.0.1:8338",
+				Addr: "127.0.0.1:18338",
 				Client: gost.NewClient(
 					gost.ShadowConnector(url.UserPassword("chacha20", "123456")),
 					gost.TCPTransporter(),
@@ -56,10 +71,10 @@ func main() {
 		/*
 			// http+ws
 			gost.Node{
-				Addr: "127.0.0.1:8000",
+				Addr: "127.0.0.1:18000",
 				Client: gost.NewClient(
 					gost.HTTPConnector(url.UserPassword("admin", "123456")),
-					gost.WSTransporter("127.0.0.1:8000", nil),
+					gost.WSTransporter(nil),
 				),
 			},
 		*/
@@ -67,13 +82,10 @@ func main() {
 		/*
 			// http+wss
 			gost.Node{
-				Addr: "127.0.0.1:8443",
+				Addr: "127.0.0.1:18443",
 				Client: gost.NewClient(
 					gost.HTTPConnector(url.UserPassword("admin", "123456")),
-					gost.WSSTransporter(
-						"127.0.0.1:8443",
-						&gost.WSOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}},
-					),
+					gost.WSSTransporter(nil),
 				),
 			},
 		*/
@@ -81,63 +93,88 @@ func main() {
 		/*
 			// http+tls
 			gost.Node{
-				Addr: "127.0.0.1:1443",
+				Addr: "127.0.0.1:11443",
 				Client: gost.NewClient(
 					gost.HTTPConnector(url.UserPassword("admin", "123456")),
-					gost.TLSTransporter(&tls.Config{InsecureSkipVerify: true}),
+					gost.TLSTransporter(),
 				),
 			},
 		*/
-
-		// http2+tls, http2+tcp
-		gost.Node{
-			Addr: "127.0.0.1:1443",
-			Client: gost.NewClient(
-				gost.HTTP2Connector(url.UserPassword("admin", "123456")),
-				gost.HTTP2Transporter(
-					nil,
-					&tls.Config{InsecureSkipVerify: true}, // or nil, will use h2c mode (http2+tcp).
-					time.Second*1,
-				),
-			),
-		},
 
 		/*
-			// http+kcp
+			// http2+tls, http2+tcp
 			gost.Node{
-				Addr: "127.0.0.1:8388",
+				Addr: "127.0.0.1:1443",
 				Client: gost.NewClient(
-					gost.HTTPConnector(nil),
-					gost.KCPTransporter(nil),
+					gost.HTTP2Connector(url.UserPassword("admin", "123456")),
+					gost.HTTP2Transporter(
+						nil,
+						&tls.Config{InsecureSkipVerify: true}, // or nil, will use h2c mode (http2+tcp).
+						time.Second*1,
+					),
 				),
 			},
 		*/
+
+		// http+kcp
+		gost.Node{
+			Addr: "127.0.0.1:18388",
+			Client: gost.NewClient(
+				gost.HTTPConnector(nil),
+				gost.KCPTransporter(nil),
+			),
+		},
 	)
 
-	for i := 0; i < 10; i++ {
-		conn, err := chain.Dial("localhost:10000")
-		if err != nil {
-			log.Fatal(err)
+	total := 0
+	for total < requests {
+		startChan := make(chan struct{})
+		for i := 0; i < concurrency; i++ {
+			swg.Add(1)
+			ewg.Add(1)
+			go request(chain, startChan)
 		}
-		//conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-		req, err := http.NewRequest(http.MethodGet, "http://localhost:10000/pkg", nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := req.Write(conn); err != nil {
-			log.Fatal(err)
-		}
-		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer resp.Body.Close()
 
+		start := time.Now()
+		swg.Wait()       // wait for workers ready
+		close(startChan) // start signal
+		ewg.Wait()       // wait for workers done
+
+		duration := time.Since(start)
+		total += concurrency
+		log.Printf("%d/%d/%d requests done (%v/%v)", total, requests, concurrency, duration, duration/time.Duration(concurrency))
+	}
+}
+
+func request(chain *gost.Chain, start <-chan struct{}) {
+	defer ewg.Done()
+
+	swg.Done()
+	<-start
+
+	conn, err := chain.Dial("localhost:10000")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+	//conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	req, err := http.NewRequest(http.MethodGet, "http://localhost:10000/pkg", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := req.Write(conn); err != nil {
+		log.Fatal(err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if !quiet {
 		rb, _ := httputil.DumpRequest(req, true)
 		log.Println(string(rb))
 		rb, _ = httputil.DumpResponse(resp, true)
 		log.Println(string(rb))
-
-		time.Sleep(1000 * time.Millisecond)
 	}
 }

@@ -98,6 +98,7 @@ func (c *websocketConn) SetWriteDeadline(t time.Time) error {
 }
 
 type wsTransporter struct {
+	*tcpTransporter
 	options *WSOptions
 }
 
@@ -106,10 +107,6 @@ func WSTransporter(opts *WSOptions) Transporter {
 	return &wsTransporter{
 		options: opts,
 	}
-}
-
-func (tr *wsTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	return net.Dial("tcp", addr)
 }
 
 func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
@@ -130,6 +127,7 @@ func (tr *wsTransporter) Multiplex() bool {
 }
 
 type wssTransporter struct {
+	*tcpTransporter
 	options *WSOptions
 }
 
@@ -138,10 +136,6 @@ func WSSTransporter(opts *WSOptions) Transporter {
 	return &wssTransporter{
 		options: opts,
 	}
-}
-
-func (tr *wssTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	return net.Dial("tcp", addr)
 }
 
 func (tr *wssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
@@ -189,7 +183,7 @@ func WSListener(addr string, options *WSOptions) (Listener, error) {
 			CheckOrigin:       func(r *http.Request) bool { return true },
 			EnableCompression: options.EnableCompression,
 		},
-		connChan: make(chan net.Conn, 128),
+		connChan: make(chan net.Conn, 1024),
 		errChan:  make(chan error, 1),
 	}
 
@@ -274,7 +268,7 @@ func WSSListener(addr string, options *WSOptions) (Listener, error) {
 				CheckOrigin:       func(r *http.Request) bool { return true },
 				EnableCompression: options.EnableCompression,
 			},
-			connChan: make(chan net.Conn, 128),
+			connChan: make(chan net.Conn, 1024),
 			errChan:  make(chan error, 1),
 		},
 	}

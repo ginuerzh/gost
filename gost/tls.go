@@ -6,16 +6,13 @@ import (
 )
 
 type tlsTransporter struct {
+	*tcpTransporter
 }
 
 // TLSTransporter creates a Transporter that is used by TLS proxy client.
 // It accepts a TLS config for TLS handshake.
 func TLSTransporter() Transporter {
 	return &tlsTransporter{}
-}
-
-func (tr *tlsTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	return net.Dial("tcp", addr)
 }
 
 func (tr *tlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {

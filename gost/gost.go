@@ -37,5 +37,9 @@ var (
 )
 
 func init() {
-	log.DefaultLogger = &logger{}
+	log.DefaultLogger = &LogLogger{}
+}
+
+func SetLogger(logger log.Logger) {
+	log.DefaultLogger = logger
 }

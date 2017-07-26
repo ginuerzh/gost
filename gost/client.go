@@ -3,6 +3,7 @@ package gost
 import (
 	"crypto/tls"
 	"net"
+	"time"
 )
 
 // Client is a proxy client.
@@ -77,7 +78,14 @@ func TCPTransporter() Transporter {
 }
 
 func (tr *tcpTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	return net.Dial("tcp", addr)
+	opts := &DialOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	if opts.Chain == nil {
+		return net.DialTimeout("tcp", addr, opts.Timeout)
+	}
+	return opts.Chain.Dial(addr)
 }
 
 func (tr *tcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
@@ -90,14 +98,29 @@ func (tr *tcpTransporter) Multiplex() bool {
 
 // DialOptions describes the options for dialing.
 type DialOptions struct {
+	Timeout time.Duration
+	Chain   *Chain
 }
 
 // DialOption allows a common way to set dial options.
 type DialOption func(opts *DialOptions)
 
+func TimeoutDialOption(timeout time.Duration) DialOption {
+	return func(opts *DialOptions) {
+		opts.Timeout = timeout
+	}
+}
+
+func ChainDialOption(chain *Chain) DialOption {
+	return func(opts *DialOptions) {
+		opts.Chain = chain
+	}
+}
+
 // HandshakeOptions describes the options for handshake.
 type HandshakeOptions struct {
 	Addr      string
+	Timeout   time.Duration
 	TLSConfig *tls.Config
 	WSOptions *WSOptions
 	KCPConfig *KCPConfig
@@ -109,6 +132,12 @@ type HandshakeOption func(opts *HandshakeOptions)
 func AddrHandshakeOption(addr string) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Addr = addr
+	}
+}
+
+func TimeoutHandshakeOption(timeout time.Duration) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.Timeout = timeout
 	}
 }
 

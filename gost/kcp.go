@@ -3,6 +3,7 @@ package gost
 import (
 	"crypto/sha1"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -180,29 +181,61 @@ func KCPTransporter(config *KCPConfig) Transporter {
 }
 
 func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
+	uaddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
 	if !ok {
-		session, err = tr.dial(addr, tr.config)
-		if err != nil {
-			return
-		}
-		tr.sessions[addr] = session
+		return net.DialUDP("udp", nil, uaddr)
 	}
-
-	conn, err = session.GetConn()
-	if err != nil {
-		session.Close()
-		delete(tr.sessions, addr) // TODO: we could obtain a new session automatically.
-	}
-	return
+	return session.conn, nil
 }
 
-func (tr *kcpTransporter) dial(addr string, config *KCPConfig) (*kcpSession, error) {
-	kcpconn, err := kcp.DialWithOptions(addr,
-		blockCrypt(config.Key, config.Crypt, KCPSalt), config.DataShard, config.ParityShard)
+func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	opts := &HandshakeOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	config := tr.config
+	if opts.KCPConfig != nil {
+		config = opts.KCPConfig
+	}
+	tr.sessionMutex.Lock()
+	defer tr.sessionMutex.Unlock()
+
+	session, ok := tr.sessions[opts.Addr]
+	if !ok {
+		s, err := tr.initSession(opts.Addr, conn, config)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		session = s
+		tr.sessions[opts.Addr] = session
+	}
+	cc, err := session.GetConn()
+	if err != nil {
+		session.Close()
+		delete(tr.sessions, opts.Addr)
+		return nil, err
+	}
+
+	return cc, nil
+}
+
+func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPConfig) (*kcpSession, error) {
+	pc, ok := conn.(net.PacketConn)
+	if !ok {
+		return nil, errors.New("wrong connection type")
+	}
+
+	kcpconn, err := kcp.NewConn(addr,
+		blockCrypt(config.Key, config.Crypt, KCPSalt), config.DataShard, config.ParityShard, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -227,20 +260,15 @@ func (tr *kcpTransporter) dial(addr string, config *KCPConfig) (*kcpSession, err
 	// stream multiplex
 	smuxConfig := smux.DefaultConfig()
 	smuxConfig.MaxReceiveBuffer = config.SockBuf
-	var conn net.Conn = kcpconn
+	var cc net.Conn = kcpconn
 	if !config.NoComp {
-		conn = newCompStreamConn(kcpconn)
+		cc = newCompStreamConn(kcpconn)
 	}
-	session, err := smux.Client(conn, smuxConfig)
+	session, err := smux.Client(cc, smuxConfig)
 	if err != nil {
-		conn.Close()
 		return nil, err
 	}
 	return &kcpSession{conn: conn, session: session}, nil
-}
-
-func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
-	return conn, nil
 }
 
 func (tr *kcpTransporter) Multiplex() bool {
@@ -284,7 +312,7 @@ func KCPListener(addr string, config *KCPConfig) (Listener, error) {
 	l := &kcpListener{
 		config:   config,
 		ln:       ln,
-		connChan: make(chan net.Conn, 128),
+		connChan: make(chan net.Conn, 1024),
 		errChan:  make(chan error),
 	}
 	go l.acceptLoop()
