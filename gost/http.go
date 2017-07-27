@@ -132,7 +132,11 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	//	return
 	// }
 
-	cc, err := h.options.Chain.Dial(req.Host)
+	host := req.Host
+	if !strings.Contains(req.Host, ":") {
+		host += ":80"
+	}
+	cc, err := h.options.Chain.Dial(host)
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 

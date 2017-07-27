@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -186,6 +187,9 @@ func (h *http2Handler) handleFunc(w http.ResponseWriter, r *http.Request) {
 	target := r.Header.Get("Gost-Target") // compitable with old version
 	if target == "" {
 		target = r.Host
+	}
+	if !strings.Contains(target, ":") {
+		target += ":80"
 	}
 
 	log.Logf("[http2] %s %s - %s %s", r.Method, r.RemoteAddr, target, r.Proto)
