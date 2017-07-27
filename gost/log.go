@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"fmt"
 	"log"
 )
 
@@ -12,11 +13,11 @@ type LogLogger struct {
 }
 
 func (l *LogLogger) Log(v ...interface{}) {
-	log.Println(v...)
+	log.Output(3, fmt.Sprintln(v...))
 }
 
 func (l *LogLogger) Logf(format string, v ...interface{}) {
-	log.Printf(format, v...)
+	log.Output(3, fmt.Sprintf(format, v...))
 }
 
 type NopLogger struct {
