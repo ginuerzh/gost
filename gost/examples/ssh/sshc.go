@@ -38,7 +38,7 @@ func main() {
 	)
 
 	s := &gost.Server{}
-	s.Handle(gost.HTTPHandler(gost.ChainHandlerOption(chain)))
+	s.Handle(gost.SOCKS5Handler(gost.ChainHandlerOption(chain)))
 	ln, err := gost.TCPListener(laddr)
 	if err != nil {
 		log.Fatal(err)
