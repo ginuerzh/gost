@@ -34,6 +34,12 @@
 			"revisionTime": "2017-02-05T06:05:58Z"
 		},
 		{
+			"checksumSHA1": "fBx0fqiyrl26gkGo14J9pJ8zB2Y=",
+			"path": "github.com/go-log/log",
+			"revision": "37e2e1f19306361e1fc152a1839f1236149cb4e4",
+			"revisionTime": "2017-05-15T17:08:25Z"
+		},
+		{
 			"checksumSHA1": "URsJa4y/sUUw/STmbeYx9EKqaYE=",
 			"path": "github.com/golang/glog",
 			"revision": "44145f04b68cf362d9c4df2182967c2275eaefed",
