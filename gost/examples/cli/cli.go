@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"sync"
 	"time"
 
@@ -116,12 +117,23 @@ func main() {
 			},
 		*/
 
-		// http+kcp
+		/*
+			// http+kcp
+			gost.Node{
+				Addr: "127.0.0.1:18388",
+				Client: gost.NewClient(
+					gost.HTTPConnector(nil),
+					gost.KCPTransporter(nil),
+				),
+			},
+		*/
+
+		// http+ssh
 		gost.Node{
-			Addr: "127.0.0.1:18388",
+			Addr: "127.0.0.1:12222",
 			Client: gost.NewClient(
-				gost.HTTPConnector(nil),
-				gost.KCPTransporter(nil),
+				gost.HTTPConnector(url.UserPassword("admin", "123456")),
+				gost.SSHTunnelTransporter(),
 			),
 		},
 	)
@@ -143,6 +155,7 @@ func main() {
 		duration := time.Since(start)
 		total += concurrency
 		log.Printf("%d/%d/%d requests done (%v/%v)", total, requests, concurrency, duration, duration/time.Duration(concurrency))
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

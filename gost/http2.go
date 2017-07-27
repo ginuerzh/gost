@@ -32,7 +32,7 @@ func HTTP2Connector(user *url.Userinfo) Connector {
 func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 	cc, ok := conn.(*http2DummyConn)
 	if !ok {
-		return nil, errors.New("conn must be a conn wrapper")
+		return nil, errors.New("wrong connection type")
 	}
 
 	pr, pw := io.Pipe()
@@ -155,10 +155,8 @@ type http2Handler struct {
 // HTTP2Handler creates a server Handler for HTTP2 proxy server.
 func HTTP2Handler(opts ...HandlerOption) Handler {
 	h := &http2Handler{
-		server: new(http2.Server),
-		options: &HandlerOptions{
-			Chain: new(Chain),
-		},
+		server:  new(http2.Server),
+		options: new(HandlerOptions),
 	}
 	for _, opt := range opts {
 		opt(h.options)

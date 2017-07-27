@@ -26,10 +26,6 @@ func (tr *tlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	return tls.Client(conn, opts.TLSConfig), nil
 }
 
-func (tr *tlsTransporter) Multiplex() bool {
-	return false
-}
-
 type tlsListener struct {
 	net.Listener
 }

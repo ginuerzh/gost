@@ -122,10 +122,6 @@ func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (n
 	return websocketClientConn(url.String(), conn, nil, wsOptions)
 }
 
-func (tr *wsTransporter) Multiplex() bool {
-	return false
-}
-
 type wssTransporter struct {
 	*tcpTransporter
 	options *WSOptions
@@ -152,10 +148,6 @@ func (tr *wssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	}
 	url := url.URL{Scheme: "wss", Host: opts.Addr, Path: "/ws"}
 	return websocketClientConn(url.String(), conn, opts.TLSConfig, wsOptions)
-}
-
-func (tr *wssTransporter) Multiplex() bool {
-	return false
 }
 
 type wsListener struct {

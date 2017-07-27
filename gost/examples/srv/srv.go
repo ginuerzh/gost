@@ -37,6 +37,8 @@ func main() {
 	// go rtcpForwardServer()
 	// go rudpForwardServer()
 	// go tcpRedirectServer()
+	// go sshForwardServer()
+	go sshTunnelServer()
 	// go http2Server()
 
 	select {}
@@ -187,6 +189,38 @@ func tcpRedirectServer() {
 	s := &gost.Server{}
 	s.Handle(gost.TCPRedirectHandler())
 	ln, err := gost.TCPListener(":8008")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func sshForwardServer() {
+	s := &gost.Server{}
+	s.Handle(
+		gost.SSHForwardHandler(
+			gost.AddrHandlerOption(":1222"),
+			gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+			gost.TLSConfigHandlerOption(tlsConfig()),
+		),
+	)
+
+	ln, err := gost.TCPListener(":1222")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func sshTunnelServer() {
+	s := &gost.Server{}
+	s.Handle(
+		gost.HTTPHandler(
+			gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+		),
+	)
+
+	ln, err := gost.SSHTunnelListener(":12222", &gost.SSHConfig{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
 	}

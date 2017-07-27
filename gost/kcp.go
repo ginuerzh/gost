@@ -214,10 +214,15 @@ func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
+	if session != nil && session.conn != conn {
+		conn.Close()
+		return nil, errors.New("kcp: unrecognized connection")
+	}
 	if !ok || session.session == nil {
 		s, err := tr.initSession(opts.Addr, conn, config)
 		if err != nil {
 			conn.Close()
+			delete(tr.sessions, opts.Addr)
 			return nil, err
 		}
 		session = s
@@ -236,7 +241,7 @@ func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPConfig) (*kcpSession, error) {
 	udpConn, ok := conn.(*net.UDPConn)
 	if !ok {
-		return nil, errors.New("wrong connection type")
+		return nil, errors.New("kcp: wrong connection type")
 	}
 
 	kcpconn, err := kcp.NewConn(addr,

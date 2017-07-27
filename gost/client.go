@@ -3,6 +3,7 @@ package gost
 import (
 	"crypto/tls"
 	"net"
+	"net/url"
 	"time"
 )
 
@@ -120,7 +121,9 @@ func ChainDialOption(chain *Chain) DialOption {
 // HandshakeOptions describes the options for handshake.
 type HandshakeOptions struct {
 	Addr      string
+	User      *url.Userinfo
 	Timeout   time.Duration
+	Interval  time.Duration
 	TLSConfig *tls.Config
 	WSOptions *WSOptions
 	KCPConfig *KCPConfig
@@ -135,9 +138,21 @@ func AddrHandshakeOption(addr string) HandshakeOption {
 	}
 }
 
+func UserHandshakeOption(user *url.Userinfo) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.User = user
+	}
+}
+
 func TimeoutHandshakeOption(timeout time.Duration) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Timeout = timeout
+	}
+}
+
+func IntervalHandshakeOption(interval time.Duration) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.Interval = interval
 	}
 }
 

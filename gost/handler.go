@@ -13,6 +13,7 @@ type Handler interface {
 
 // HandlerOptions describes the options for Handler.
 type HandlerOptions struct {
+	Addr      string
 	Chain     *Chain
 	Users     []*url.Userinfo
 	TLSConfig *tls.Config
@@ -20,6 +21,13 @@ type HandlerOptions struct {
 
 // HandlerOption allows a common way to set handler options.
 type HandlerOption func(opts *HandlerOptions)
+
+// AddrHandlerOption sets the Addr option of HandlerOptions.
+func AddrHandlerOption(addr string) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Addr = addr
+	}
+}
 
 // ChainHandlerOption sets the Chain option of HandlerOptions.
 func ChainHandlerOption(chain *Chain) HandlerOption {
