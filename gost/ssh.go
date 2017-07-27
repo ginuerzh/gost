@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"weed-fs/go/glog"
 
 	"github.com/go-log/log"
 	"golang.org/x/crypto/ssh"
@@ -253,17 +252,17 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 	for {
 		select {
 		case <-t.C:
-			if Debug {
-				log.Log("[ssh] sending ping")
-			}
+			//if Debug {
+			log.Log("[ssh] sending ping")
+			//}
 			_, _, err := s.client.SendRequest("ping", true, nil)
 			if err != nil {
 				log.Log("[ssh] ping:", err)
 				return
 			}
-			if Debug {
-				log.Log("[ssh] ping OK")
-			}
+			//if Debug {
+			log.Log("[ssh] ping OK")
+			//}
 
 		case <-s.closed:
 			return
@@ -459,7 +458,6 @@ func (h *sshForwardHandler) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Reque
 				}
 
 				p.Port2 = uint32(portnum)
-				glog.V(3).Info(p)
 				ch, reqs, err := sshConn.OpenChannel(ForwardedTCPReturnRequest, ssh.Marshal(p))
 				if err != nil {
 					log.Log("[ssh-rtcp] open forwarded channel:", err)
