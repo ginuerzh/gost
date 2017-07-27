@@ -140,6 +140,9 @@ func main() {
 
 	total := 0
 	for total < requests {
+		if total + concurrency > requests {
+			concurrency = requests - total
+		}
 		startChan := make(chan struct{})
 		for i := 0; i < concurrency; i++ {
 			swg.Add(1)
@@ -155,7 +158,6 @@ func main() {
 		duration := time.Since(start)
 		total += concurrency
 		log.Printf("%d/%d/%d requests done (%v/%v)", total, requests, concurrency, duration, duration/time.Duration(concurrency))
-		time.Sleep(500 * time.Millisecond)
 	}
 }
 
@@ -188,7 +190,7 @@ func request(chain *gost.Chain, start <-chan struct{}) {
 	}
 	defer resp.Body.Close()
 
-	if !quiet {
+	if gost.Debug {
 		rb, _ := httputil.DumpRequest(req, true)
 		log.Println(string(rb))
 		rb, _ = httputil.DumpResponse(resp, true)

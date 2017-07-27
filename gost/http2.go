@@ -192,8 +192,8 @@ func (h *http2Handler) handleFunc(w http.ResponseWriter, r *http.Request) {
 		target += ":80"
 	}
 
-	log.Logf("[http2] %s %s - %s %s", r.Method, r.RemoteAddr, target, r.Proto)
 	if Debug {
+		log.Logf("[http2] %s %s - %s %s", r.Method, r.RemoteAddr, target, r.Proto)
 		dump, _ := httputil.DumpRequest(r, false)
 		log.Log("[http2]", string(dump))
 	}

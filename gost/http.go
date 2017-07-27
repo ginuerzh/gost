@@ -93,9 +93,8 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	log.Logf("[http] %s %s -> %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
-
 	if Debug {
+		log.Logf("[http] %s %s - %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
 		dump, _ := httputil.DumpRequest(req, false)
 		log.Logf(string(dump))
 	}

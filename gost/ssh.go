@@ -252,6 +252,7 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 	for {
 		select {
 		case <-t.C:
+			start := time.Now()
 			//if Debug {
 			log.Log("[ssh] sending ping")
 			//}
@@ -261,7 +262,7 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 				return
 			}
 			//if Debug {
-			log.Log("[ssh] ping OK")
+			log.Log("[ssh] ping OK, RTT:", time.Since(start))
 			//}
 
 		case <-s.closed:

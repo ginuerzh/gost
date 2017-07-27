@@ -375,23 +375,19 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 	}
 
 	if Debug {
-		log.Logf("[socks5] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, req)
+		log.Logf("[socks5] %s - %s\n%s", conn.RemoteAddr(), req.Addr, req)
 	}
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
-		log.Logf("[socks5-connect] %s -> %s", conn.RemoteAddr(), req.Addr)
 		h.handleConnect(conn, req)
 
 	case gosocks5.CmdBind:
-		log.Logf("[socks5-bind] %s - %s", conn.RemoteAddr(), req.Addr)
 		h.handleBind(conn, req)
 
 	case gosocks5.CmdUdp:
-		log.Logf("[socks5-udp] %s - %s", conn.RemoteAddr(), req.Addr)
 		h.handleUDPRelay(conn, req)
 
 	case CmdUDPTun:
-		log.Logf("[socks5-rudp] %s - %s", conn.RemoteAddr(), req.Addr)
 		h.handleUDPTunnel(conn, req)
 
 	default:
