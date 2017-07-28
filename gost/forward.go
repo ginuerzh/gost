@@ -1,7 +1,6 @@
 package gost
 
 import (
-	"crypto/tls"
 	"errors"
 	"net"
 	"time"
@@ -218,10 +217,9 @@ func (l *udpForwardListener) Close() error {
 }
 
 type rtcpForwardListener struct {
-	addr     net.Addr
-	chain    *Chain
-	selector *clientSelector
-	close    chan struct{}
+	addr  net.Addr
+	chain *Chain
+	close chan struct{}
 }
 
 // RTCPForwardListener creates a Listener for TCP remote port forwarding server.
@@ -230,24 +228,11 @@ func RTCPForwardListener(addr string, chain *Chain) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if chain.IsEmpty() || chain.LastNode().Protocol != "socks5" {
-		return nil, errors.New("invalid chain")
-	}
-	selector := &clientSelector{
-		TLSConfig: &tls.Config{InsecureSkipVerify: true},
-		User:      chain.LastNode().User,
-	}
-	selector.AddMethod(
-		gosocks5.MethodNoAuth,
-		gosocks5.MethodUserPass,
-		MethodTLS,
-	)
 
 	return &rtcpForwardListener{
-		addr:     laddr,
-		chain:    chain,
-		selector: selector,
-		close:    make(chan struct{}),
+		addr:  laddr,
+		chain: chain,
+		close: make(chan struct{}),
 	}, nil
 }
 
@@ -256,10 +241,6 @@ func (l *rtcpForwardListener) Accept() (net.Conn, error) {
 	case <-l.close:
 		return nil, errors.New("closed")
 	default:
-	}
-
-	if l.chain.IsEmpty() || l.chain.LastNode().Protocol != "socks5" {
-		return nil, errors.New("invalid chain")
 	}
 
 	conn, err := l.chain.Conn()
@@ -276,12 +257,10 @@ func (l *rtcpForwardListener) Accept() (net.Conn, error) {
 }
 
 func (l *rtcpForwardListener) handshake(conn net.Conn) (net.Conn, error) {
-	cc := gosocks5.ClientConn(conn, l.selector)
-	if err := cc.Handleshake(); err != nil {
+	conn, err := socks5Handshake(conn, l.chain.LastNode().User)
+	if err != nil {
 		return nil, err
 	}
-	conn = cc
-
 	req := gosocks5.NewRequest(gosocks5.CmdBind, toSocksAddr(l.addr))
 	if err := req.Write(conn); err != nil {
 		log.Log("[rtcp] SOCKS5 BIND request: ", err)
@@ -327,10 +306,9 @@ func (l *rtcpForwardListener) Close() error {
 }
 
 type rudpForwardListener struct {
-	addr     net.Addr
-	chain    *Chain
-	selector *clientSelector
-	close    chan struct{}
+	addr  net.Addr
+	chain *Chain
+	close chan struct{}
 }
 
 // RUDPForwardListener creates a Listener for UDP remote port forwarding server.
@@ -339,24 +317,11 @@ func RUDPForwardListener(addr string, chain *Chain) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if chain.IsEmpty() || chain.LastNode().Protocol != "socks5" {
-		return nil, errors.New("invalid chain")
-	}
-	selector := &clientSelector{
-		TLSConfig: &tls.Config{InsecureSkipVerify: true},
-		User:      chain.LastNode().User,
-	}
-	selector.AddMethod(
-		gosocks5.MethodNoAuth,
-		gosocks5.MethodUserPass,
-		MethodTLS,
-	)
 
 	return &rudpForwardListener{
-		addr:     laddr,
-		chain:    chain,
-		selector: selector,
-		close:    make(chan struct{}),
+		addr:  laddr,
+		chain: chain,
+		close: make(chan struct{}),
 	}, nil
 }
 
@@ -382,12 +347,10 @@ func (l *rudpForwardListener) Accept() (net.Conn, error) {
 }
 
 func (l *rudpForwardListener) handshake(conn net.Conn) (net.Conn, error) {
-	cc := gosocks5.ClientConn(conn, l.selector)
-	if err := cc.Handleshake(); err != nil {
+	conn, err := socks5Handshake(conn, l.chain.LastNode().User)
+	if err != nil {
 		return nil, err
 	}
-	conn = cc
-
 	req := gosocks5.NewRequest(CmdUDPTun, toSocksAddr(l.addr))
 	if err := req.Write(conn); err != nil {
 		log.Log("[rudp] SOCKS5 UDP relay request: ", err)

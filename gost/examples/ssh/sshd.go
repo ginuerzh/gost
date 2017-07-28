@@ -34,7 +34,7 @@ func main() {
 func sshTunnelServer() {
 	s := &gost.Server{}
 	s.Handle(
-		gost.HTTPHandler(),
+		gost.SOCKS5Handler(gost.TLSConfigHandlerOption(tlsConfig())),
 	)
 
 	ln, err := gost.SSHTunnelListener(laddr, &gost.SSHConfig{TLSConfig: tlsConfig()})

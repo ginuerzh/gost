@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"errors"
 	"time"
 
 	"github.com/go-log/log"
@@ -34,6 +35,10 @@ var (
 	PingRetries = 3
 	// default udp node TTL in second for udp port forwarding.
 	defaultTTL = 60
+)
+
+var (
+	ErrSessionDead = errors.New("session is dead")
 )
 
 func init() {

@@ -822,7 +822,7 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 		bindAddr, _ := net.ResolveUDPAddr("udp", addr)
 		uc, err := net.ListenUDP("udp", bindAddr)
 		if err != nil {
-			log.Logf("[socks5-rudp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+			log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			return
 		}
 		defer uc.Close()
@@ -831,38 +831,59 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 		socksAddr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
 		reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 		if err := reply.Write(conn); err != nil {
-			log.Logf("[socks5-rudp] %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
+			log.Logf("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
 			return
 		}
 		if Debug {
-			log.Logf("[socks5-rudp] %s <- %s\n%s", conn.RemoteAddr(), socksAddr, reply)
+			log.Logf("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), socksAddr, reply)
 		}
-		log.Logf("[socks5-rudp] %s <-> %s", conn.RemoteAddr(), socksAddr)
+		log.Logf("[socks5-udp] %s <-> %s", conn.RemoteAddr(), socksAddr)
 		h.tunnelServerUDP(conn, uc)
-		log.Logf("[socks5-rudp] %s >-< %s", conn.RemoteAddr(), socksAddr)
+		log.Logf("[socks5-udp] %s >-< %s", conn.RemoteAddr(), socksAddr)
 		return
 	}
 
 	cc, err := h.options.Chain.Conn()
 	// connection error
 	if err != nil {
-		log.Logf("[socks5-rudp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
 		reply.Write(conn)
-		log.Logf("[socks5-rudp] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, reply)
+		log.Logf("[socks5-udp] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, reply)
 		return
 	}
-
 	defer cc.Close()
 
+	cc, err = socks5Handshake(cc, h.options.Chain.LastNode().User)
+	if err != nil {
+		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+		return
+	}
 	// tunnel <-> tunnel, direct forwarding
 	// note: this type of request forwarding is defined when starting server
 	// so we don't need to authenticate it, as it's as explicit as whitelisting
 	req.Write(cc)
 
-	log.Logf("[socks5-rudp] %s <-> %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
+	log.Logf("[socks5-udp] %s <-> %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
 	transport(conn, cc)
-	log.Logf("[socks5-rudp] %s >-< %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
+	log.Logf("[socks5-udp] %s >-< %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
+}
+
+func socks5Handshake(conn net.Conn, user *url.Userinfo) (net.Conn, error) {
+	selector := &clientSelector{
+		TLSConfig: &tls.Config{InsecureSkipVerify: true},
+		User:      user,
+	}
+	selector.AddMethod(
+		gosocks5.MethodNoAuth,
+		gosocks5.MethodUserPass,
+		MethodTLS,
+	)
+	cc := gosocks5.ClientConn(conn, selector)
+	if err := cc.Handleshake(); err != nil {
+		return nil, err
+	}
+	return cc, nil
 }
 
 func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error) {
@@ -874,7 +895,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
 			if err != nil {
-				log.Logf("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), addr, err)
+				// log.Logf("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), addr, err)
 				errc <- err
 				return
 			}
@@ -897,7 +918,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 		for {
 			dgram, err := gosocks5.ReadUDPDatagram(cc)
 			if err != nil {
-				log.Logf("[udp-tun] %s -> 0 : %s", cc.RemoteAddr(), err)
+				// log.Logf("[udp-tun] %s -> 0 : %s", cc.RemoteAddr(), err)
 				errc <- err
 				return
 			}

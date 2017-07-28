@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
@@ -145,7 +146,10 @@ func (tr *sshTunnelTransporter) Dial(addr string, options ...DialOption) (conn n
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
-	if !ok {
+	if !ok || session.Closed() {
+		if session != nil {
+			session.client.Close()
+		}
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
 		} else {
@@ -206,18 +210,17 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 		}
 		tr.sessions[opts.Addr] = session
 		go session.Ping(opts.Interval, 1)
+		go session.Wait()
 	}
 
-	if session.Dead() {
+	if session.Closed() {
+		session.client.Close()
 		delete(tr.sessions, opts.Addr)
-		return nil, errors.New("ssh: session is dead")
+		return nil, ErrSessionDead
 	}
 
 	channel, reqs, err := session.client.OpenChannel(GostSSHTunnelRequest, nil)
 	if err != nil {
-		session.client.Close()
-		close(session.closed)
-		delete(tr.sessions, opts.Addr)
 		return nil, err
 	}
 	go ssh.DiscardRequests(reqs)
@@ -242,10 +245,9 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 		return
 	}
 	defer close(s.deaded)
-	defer s.client.Close()
 
 	log.Log("[ssh] ping is enabled, interval:", interval)
-	// baseCtx := context.Background()
+	baseCtx := context.Background()
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
@@ -256,7 +258,14 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 			//if Debug {
 			log.Log("[ssh] sending ping")
 			//}
-			_, _, err := s.client.SendRequest("ping", true, nil)
+			ctx, cancel := context.WithTimeout(baseCtx, time.Second*30)
+			var err error
+			select {
+			case err = <-s.sendPing():
+			case <-ctx.Done():
+				err = errors.New("Timeout")
+			}
+			cancel()
 			if err != nil {
 				log.Log("[ssh] ping:", err)
 				return
@@ -271,9 +280,25 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 	}
 }
 
-func (s *sshSession) Dead() bool {
+func (s *sshSession) sendPing() <-chan error {
+	ch := make(chan error, 1)
+	if _, _, err := s.client.SendRequest("ping", true, nil); err != nil {
+		ch <- err
+	}
+	close(ch)
+	return ch
+}
+
+func (s *sshSession) Wait() error {
+	defer close(s.closed)
+	return s.client.Wait()
+}
+
+func (s *sshSession) Closed() bool {
 	select {
 	case <-s.deaded:
+		return true
+	case <-s.closed:
 		return true
 	default:
 	}
