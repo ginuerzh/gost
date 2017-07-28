@@ -279,10 +279,12 @@ func (s *sshSession) Ping(interval time.Duration, retries int) {
 
 func (s *sshSession) sendPing() <-chan error {
 	ch := make(chan error, 1)
-	if _, _, err := s.client.SendRequest("ping", true, nil); err != nil {
-		ch <- err
-	}
-	close(ch)
+	go func() {
+		if _, _, err := s.client.SendRequest("ping", true, nil); err != nil {
+			ch <- err
+		}
+		close(ch)
+	}()
 	return ch
 }
 
