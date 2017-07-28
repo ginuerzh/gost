@@ -613,9 +613,14 @@ func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
 		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), socksAddr, err)
 		return
 	}
-
 	// forward udp local <-> tunnel
 	defer cc.Close()
+
+	cc, err = socks5Handshake(cc, h.options.Chain.LastNode().User)
+	if err != nil {
+		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), socksAddr, err)
+		return
+	}
 
 	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
 	r := gosocks5.NewRequest(CmdUDPTun, nil)

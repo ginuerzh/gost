@@ -147,9 +147,6 @@ func (tr *sshTunnelTransporter) Dial(addr string, options ...DialOption) (conn n
 
 	session, ok := tr.sessions[addr]
 	if !ok || session.Closed() {
-		if session != nil {
-			session.client.Close()
-		}
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
 		} else {
@@ -210,11 +207,11 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 		}
 		tr.sessions[opts.Addr] = session
 		go session.Ping(opts.Interval, 1)
-		go session.Wait()
+		go session.waitServer()
+		go session.waitClose()
 	}
 
 	if session.Closed() {
-		session.client.Close()
 		delete(tr.sessions, opts.Addr)
 		return nil, ErrSessionDead
 	}
@@ -289,9 +286,18 @@ func (s *sshSession) sendPing() <-chan error {
 	return ch
 }
 
-func (s *sshSession) Wait() error {
+func (s *sshSession) waitServer() error {
 	defer close(s.closed)
 	return s.client.Wait()
+}
+
+func (s *sshSession) waitClose() {
+	defer s.client.Close()
+
+	select {
+	case <-s.deaded:
+	case <-s.closed:
+	}
 }
 
 func (s *sshSession) Closed() bool {

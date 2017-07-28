@@ -41,6 +41,7 @@ func sshTunnelServer() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("server listen on", laddr)
 	log.Fatal(s.Serve(ln))
 }
 
