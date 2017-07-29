@@ -89,6 +89,9 @@ const (
 	EmptyStreamFrameNoFin ErrorCode = 50
 	// We received invalid data on the headers stream.
 	InvalidHeadersStreamData ErrorCode = 56
+	// Invalid data on the headers stream received because of decompression
+	// failure.
+	HeadersStreamDataDecompressFailure ErrorCode = 97
 	// The peer received too much data, violating flow control.
 	FlowControlReceivedTooMuchData ErrorCode = 59
 	// The peer sent too much data, violating flow control.

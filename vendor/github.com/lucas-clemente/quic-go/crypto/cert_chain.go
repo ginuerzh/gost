@@ -55,30 +55,59 @@ func (c *certChain) GetLeafCert(sni string) ([]byte, error) {
 	return cert.Certificate[0], nil
 }
 
-func (c *certChain) getCertForSNI(sni string) (*tls.Certificate, error) {
-	if c.config.GetCertificate != nil {
-		cert, err := c.config.GetCertificate(&tls.ClientHelloInfo{ServerName: sni})
-		if err != nil {
-			return nil, err
+func (cc *certChain) getCertForSNI(sni string) (*tls.Certificate, error) {
+	c := cc.config
+	c, err := maybeGetConfigForClient(c, sni)
+	if err != nil {
+		return nil, err
+	}
+	// The rest of this function is mostly copied from crypto/tls.getCertificate
+
+	if c.GetCertificate != nil {
+		cert, err := c.GetCertificate(&tls.ClientHelloInfo{ServerName: sni})
+		if cert != nil || err != nil {
+			return cert, err
 		}
-		if cert != nil {
+	}
+
+	if len(c.Certificates) == 0 {
+		return nil, errNoMatchingCertificate
+	}
+
+	if len(c.Certificates) == 1 || c.NameToCertificate == nil {
+		// There's only one choice, so no point doing any work.
+		return &c.Certificates[0], nil
+	}
+
+	name := strings.ToLower(sni)
+	for len(name) > 0 && name[len(name)-1] == '.' {
+		name = name[:len(name)-1]
+	}
+
+	if cert, ok := c.NameToCertificate[name]; ok {
+		return cert, nil
+	}
+
+	// try replacing labels in the name with wildcards until we get a
+	// match.
+	labels := strings.Split(name, ".")
+	for i := range labels {
+		labels[i] = "*"
+		candidate := strings.Join(labels, ".")
+		if cert, ok := c.NameToCertificate[candidate]; ok {
 			return cert, nil
 		}
 	}
 
-	if len(c.config.NameToCertificate) != 0 {
-		if cert, ok := c.config.NameToCertificate[sni]; ok {
-			return cert, nil
-		}
-		wildcardSNI := "*" + strings.TrimLeftFunc(sni, func(r rune) bool { return r != '.' })
-		if cert, ok := c.config.NameToCertificate[wildcardSNI]; ok {
-			return cert, nil
-		}
-	}
+	// If nothing matches, return the first certificate.
+	return &c.Certificates[0], nil
+}
 
-	if len(c.config.Certificates) != 0 {
-		return &c.config.Certificates[0], nil
+func maybeGetConfigForClient(c *tls.Config, sni string) (*tls.Config, error) {
+	if c.GetConfigForClient == nil {
+		return c, nil
 	}
-
-	return nil, errNoMatchingCertificate
+	return c.GetConfigForClient(&tls.ClientHelloInfo{
+		ServerName: sni,
+	})
 }

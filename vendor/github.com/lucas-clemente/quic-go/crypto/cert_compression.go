@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	"github.com/lucas-clemente/quic-go/utils"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type entryType uint8
@@ -142,7 +142,7 @@ func decompressChain(data []byte) ([][]byte, error) {
 	}
 
 	if numCerts == 0 {
-		return make([][]byte, 0, 0), nil
+		return make([][]byte, 0), nil
 	}
 
 	if hasCompressedCerts {
@@ -255,7 +255,7 @@ func splitHashes(hashes []byte) ([]uint64, error) {
 }
 
 func getCommonCertificateHashes() []byte {
-	ccs := make([]byte, 8*len(certSets), 8*len(certSets))
+	ccs := make([]byte, 8*len(certSets))
 	i := 0
 	for certSetHash := range certSets {
 		binary.LittleEndian.PutUint64(ccs[i*8:(i+1)*8], certSetHash)

@@ -128,19 +128,30 @@ func main() {
 			},
 		*/
 
-		// http+ssh
+		/*
+			// http+ssh
+			gost.Node{
+				Addr: "127.0.0.1:12222",
+				Client: gost.NewClient(
+					gost.HTTPConnector(url.UserPassword("admin", "123456")),
+					gost.SSHTunnelTransporter(),
+				),
+			},
+		*/
+
+		// http+quic
 		gost.Node{
-			Addr: "127.0.0.1:12222",
+			Addr: "localhost:6121",
 			Client: gost.NewClient(
 				gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				gost.SSHTunnelTransporter(),
+				gost.QUICTransporter(nil),
 			),
 		},
 	)
 
 	total := 0
 	for total < requests {
-		if total + concurrency > requests {
+		if total+concurrency > requests {
 			concurrency = requests - total
 		}
 		startChan := make(chan struct{})

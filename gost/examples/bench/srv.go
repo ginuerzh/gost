@@ -40,7 +40,7 @@ func main() {
 	// go sshForwardServer()
 	go sshTunnelServer()
 	// go http2Server()
-
+	go quicServer()
 	select {}
 }
 
@@ -236,6 +236,18 @@ func http2Server() {
 	))
 	ln, err := gost.TLSListener(":1443", tlsConfig()) // HTTP2 h2 mode
 	// ln, err := gost.TCPListener(":1443") // HTTP2 h2c mode
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Fatal(s.Serve(ln))
+}
+
+func quicServer() {
+	s := &gost.Server{}
+	s.Handle(gost.HTTPHandler(
+		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+	))
+	ln, err := gost.QUICListener("localhost:6121", &gost.QUICConfig{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
 	}

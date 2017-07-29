@@ -3,8 +3,8 @@ package congestion
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 const (
@@ -125,24 +125,13 @@ func (c *cubicSender) SlowstartThreshold() protocol.PacketNumber {
 	return c.slowstartThreshold
 }
 
-// OnCongestionEvent indicates an update to the congestion state, caused either by an incoming
-// ack or loss event timeout.  |rttUpdated| indicates whether a new
-// latest_rtt sample has been taken, |byte_in_flight| the bytes in flight
-// prior to the congestion event.  |ackedPackets| and |lostPackets| are
-// any packets considered acked or lost as a result of the congestion event.
-func (c *cubicSender) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, ackedPackets PacketVector, lostPackets PacketVector) {
-	if rttUpdated && c.InSlowStart() && c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/protocol.DefaultTCPMSS) {
+func (c *cubicSender) MaybeExitSlowStart() {
+	if c.InSlowStart() && c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/protocol.DefaultTCPMSS) {
 		c.ExitSlowstart()
-	}
-	for _, i := range lostPackets {
-		c.onPacketLost(i.Number, i.Length, bytesInFlight)
-	}
-	for _, i := range ackedPackets {
-		c.onPacketAcked(i.Number, i.Length, bytesInFlight)
 	}
 }
 
-func (c *cubicSender) onPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+func (c *cubicSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
 	c.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.InRecovery() {
 		// PRR is used when in recovery.
@@ -155,7 +144,7 @@ func (c *cubicSender) onPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 	}
 }
 
-func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+func (c *cubicSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
 	// TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
 	// already sent should be treated as a single loss event, since it's expected.
 	if packetNumber <= c.largestSentAtLastCutback {

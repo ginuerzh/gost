@@ -120,13 +120,14 @@ func ChainDialOption(chain *Chain) DialOption {
 
 // HandshakeOptions describes the options for handshake.
 type HandshakeOptions struct {
-	Addr      string
-	User      *url.Userinfo
-	Timeout   time.Duration
-	Interval  time.Duration
-	TLSConfig *tls.Config
-	WSOptions *WSOptions
-	KCPConfig *KCPConfig
+	Addr       string
+	User       *url.Userinfo
+	Timeout    time.Duration
+	Interval   time.Duration
+	TLSConfig  *tls.Config
+	WSOptions  *WSOptions
+	KCPConfig  *KCPConfig
+	QUICConfig *QUICConfig
 }
 
 // HandshakeOption allows a common way to set handshake options.

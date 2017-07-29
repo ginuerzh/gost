@@ -10,6 +10,7 @@ const (
 	_ErrorCode_name_2 = "InvalidHeaderIDInvalidNegotiatedValueDecompressionFailureNetworkIdleTimeoutErrorMigratingAddressPacketWriteErrorHandshakeFailedCryptoTagsOutOfOrderCryptoTooManyEntriesCryptoInvalidValueLengthCryptoMessageAfterHandshakeCompleteInvalidCryptoMessageTypeInvalidCryptoMessageParameterCryptoMessageParameterNotFoundCryptoMessageParameterNoOverlapCryptoMessageIndexNotFoundCryptoInternalErrorCryptoVersionNotSupportedCryptoNoSupportCryptoTooManyRejectsProofInvalidCryptoDuplicateTagCryptoEncryptionLevelIncorrectCryptoServerConfigExpiredInvalidStreamData"
 	_ErrorCode_name_3 = "MissingPayloadInvalidPriorityEmptyStreamFrameNoFinPacketReadErrorInvalidChannelIDSignatureCryptoSymmetricKeySetupFailedCryptoMessageWhileValidatingClientHelloVersionNegotiationMismatchInvalidHeadersStreamDataInvalidWindowUpdateDataInvalidBlockedDataFlowControlReceivedTooMuchDataInvalidStopWaitingDataUnencryptedStreamDataConnectionIPPooledFlowControlSentTooMuchDataFlowControlInvalidWindowCryptoUpdateBeforeHandshakeComplete"
 	_ErrorCode_name_4 = "HandshakeTimeoutTooManyOutstandingSentPacketsTooManyOutstandingReceivedPacketsConnectionCancelledBadPacketLossRateCryptoHandshakeStatelessRejectPublicResetsPostHandshakeTimeoutsWithOpenStreamsFailedToSerializePacketTooManyAvailableStreamsUnencryptedFecDataInvalidPathCloseDataBadMultipathFlagIPAddressChangedConnectionMigrationNoMigratableStreamsConnectionMigrationTooManyChangesConnectionMigrationNoNewNetworkConnectionMigrationNonMigratableStreamTooManyRtosErrorMigratingPortOverlappingStreamDataAttemptToSendUnencryptedStreamData"
+	_ErrorCode_name_5 = "HeadersStreamDataDecompressFailure"
 )
 
 var (
@@ -18,12 +19,13 @@ var (
 	_ErrorCode_index_2 = [...]uint16{0, 15, 37, 57, 75, 96, 112, 127, 147, 167, 191, 226, 250, 279, 309, 340, 366, 385, 410, 425, 445, 457, 475, 505, 530, 547}
 	_ErrorCode_index_3 = [...]uint16{0, 14, 29, 50, 65, 90, 119, 158, 184, 208, 231, 249, 279, 301, 322, 340, 366, 390, 425}
 	_ErrorCode_index_4 = [...]uint16{0, 16, 45, 78, 97, 114, 144, 169, 192, 215, 238, 256, 276, 292, 308, 346, 379, 410, 448, 459, 477, 498, 532}
+	_ErrorCode_index_5 = [...]uint8{0, 34}
 )
 
 func (i ErrorCode) String() string {
 	switch {
 	case 1 <= i && i <= 14:
-		i--
+		i -= 1
 		return _ErrorCode_name_0[_ErrorCode_index_0[i]:_ErrorCode_index_0[i+1]]
 	case 16 <= i && i <= 20:
 		i -= 16
@@ -37,6 +39,8 @@ func (i ErrorCode) String() string {
 	case 67 <= i && i <= 88:
 		i -= 67
 		return _ErrorCode_name_4[_ErrorCode_index_4[i]:_ErrorCode_index_4[i+1]]
+	case i == 97:
+		return _ErrorCode_name_5
 	default:
 		return fmt.Sprintf("ErrorCode(%d)", i)
 	}

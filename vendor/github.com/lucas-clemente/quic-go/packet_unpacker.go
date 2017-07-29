@@ -5,21 +5,29 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
+type unpackedPacket struct {
+	encryptionLevel protocol.EncryptionLevel
+	frames          []frames.Frame
+}
+
+type quicAEAD interface {
+	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
+}
+
 type packetUnpacker struct {
 	version protocol.VersionNumber
-	aead    crypto.AEAD
+	aead    quicAEAD
 }
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
 	buf := getPacketBuffer()
 	defer putPacketBuffer(buf)
-	decrypted, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
+	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
@@ -33,9 +41,11 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 	fs := make([]frames.Frame, 0, 2)
 
 	// Read all frames in the packet
-ReadLoop:
 	for r.Len() > 0 {
 		typeByte, _ := r.ReadByte()
+		if typeByte == 0x0 { // PADDING frame
+			continue
+		}
 		r.UnreadByte()
 
 		var frame frames.Frame
@@ -43,6 +53,11 @@ ReadLoop:
 			frame, err = frames.ParseStreamFrame(r)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
+			} else {
+				streamID := frame.(*frames.StreamFrame).StreamID
+				if streamID != 1 && encryptionLevel <= protocol.EncryptionUnencrypted {
+					err = qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", streamID))
+				}
 			}
 		} else if typeByte&0xc0 == 0x40 {
 			frame, err = frames.ParseAckFrame(r, u.version)
@@ -53,8 +68,6 @@ ReadLoop:
 			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
 			switch typeByte {
-			case 0x0: // PAD, end of frames
-				break ReadLoop
 			case 0x01:
 				frame, err = frames.ParseRstStreamFrame(r)
 				if err != nil {
@@ -100,6 +113,7 @@ ReadLoop:
 	}
 
 	return &unpackedPacket{
-		frames: fs,
+		encryptionLevel: encryptionLevel,
+		frames:          fs,
 	}, nil
 }

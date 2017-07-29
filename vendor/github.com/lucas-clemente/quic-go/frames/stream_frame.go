@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A StreamFrame of QUIC
@@ -64,7 +64,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		return nil, qerr.Error(qerr.InvalidStreamData, "data len too large")
 	}
 
-	if dataLen == 0 {
+	if !frame.DataLenPresent {
 		// The rest of the packet is data
 		dataLen = uint16(r.Len())
 	}
@@ -79,7 +79,11 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		}
 	}
 
-	if !frame.FinBit && len(frame.Data) == 0 {
+	if frame.Offset+frame.DataLen() < frame.Offset {
+		return nil, qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")
+	}
+
+	if !frame.FinBit && frame.DataLen() == 0 {
 		return nil, qerr.EmptyStreamFrameNoFin
 	}
 

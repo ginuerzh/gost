@@ -351,18 +351,6 @@ func (l *kcpListener) listenLoop() {
 	}
 }
 
-func (l *kcpListener) Accept() (conn net.Conn, err error) {
-	var ok bool
-	select {
-	case conn = <-l.connChan:
-	case err, ok = <-l.errChan:
-		if !ok {
-			err = errors.New("accpet on closed listener")
-		}
-	}
-	return
-}
-
 func (l *kcpListener) mux(conn net.Conn) {
 	smuxConfig := smux.DefaultConfig()
 	smuxConfig.MaxReceiveBuffer = l.config.SockBuf
@@ -393,11 +381,22 @@ func (l *kcpListener) mux(conn net.Conn) {
 		select {
 		case l.connChan <- newKCPConn(conn, stream):
 		default:
-			log.Logf("[kcp] %s - %s: connection queue is full", conn.RemoteAddr(), l.Addr())
+			log.Logf("[kcp] %s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
 		}
 	}
 }
 
+func (l *kcpListener) Accept() (conn net.Conn, err error) {
+	var ok bool
+	select {
+	case conn = <-l.connChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
+		}
+	}
+	return
+}
 func (l *kcpListener) Addr() net.Addr {
 	return l.ln.Addr()
 }

@@ -10,11 +10,10 @@ import (
 // A Packet is a packet
 // +gen linkedlist
 type Packet struct {
-	PacketNumber protocol.PacketNumber
-	Frames       []frames.Frame
-	Length       protocol.ByteCount
-
-	MissingReports uint8
+	PacketNumber    protocol.PacketNumber
+	Frames          []frames.Frame
+	Length          protocol.ByteCount
+	EncryptionLevel protocol.EncryptionLevel
 
 	SendTime time.Time
 }

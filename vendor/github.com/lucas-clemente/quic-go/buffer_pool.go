@@ -13,7 +13,7 @@ func getPacketBuffer() []byte {
 }
 
 func putPacketBuffer(buf []byte) {
-	if cap(buf) != int(protocol.MaxPacketSize) {
+	if cap(buf) != int(protocol.MaxReceivePacketSize) {
 		panic("putPacketBuffer called with packet of wrong size!")
 	}
 	bufferPool.Put(buf[:0])
@@ -21,6 +21,6 @@ func putPacketBuffer(buf []byte) {
 
 func init() {
 	bufferPool.New = func() interface{} {
-		return make([]byte, 0, protocol.MaxPacketSize)
+		return make([]byte, 0, protocol.MaxReceivePacketSize)
 	}
 }

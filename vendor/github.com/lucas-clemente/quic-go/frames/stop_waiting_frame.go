@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A StopWaitingFrame in QUIC
@@ -56,8 +56,7 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber
 
 // MinLength of a written frame
 func (f *StopWaitingFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	var minLength protocol.ByteCount
-	minLength = 1 // typeByte
+	minLength := protocol.ByteCount(1) // typeByte
 
 	if f.PacketNumberLen == protocol.PacketNumberLenInvalid {
 		return 0, errPacketNumberLenNotSet

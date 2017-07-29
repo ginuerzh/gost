@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
 )
 
-// The PublicHeader of a QUIC packet
+// The PublicHeader of a QUIC packet. Warning: This struct should not be considered stable and will change soon.
 type PublicHeader struct {
 	Raw                  []byte
 	ConnectionID         protocol.ConnectionID
@@ -31,7 +31,7 @@ type PublicHeader struct {
 	DiversificationNonce []byte
 }
 
-// Write writes a public header
+// Write writes a public header. Warning: This API should not be considered stable and will change soon.
 func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pers protocol.Perspective) error {
 	publicFlagByte := uint8(0x00)
 
@@ -109,8 +109,9 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	return nil
 }
 
-// ParsePublicHeader parses a QUIC packet's public header
-// the packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient
+// ParsePublicHeader parses a QUIC packet's public header.
+// The packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient.
+// Warning: This API should not be considered stable and will change soon.
 func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
@@ -128,7 +129,8 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	// 	return nil, errors.New("diversification nonces should only be sent by servers")
 	// }
 
-	if publicFlagByte&0x08 == 0 {
+	header.TruncateConnectionID = publicFlagByte&0x08 == 0
+	if header.TruncateConnectionID && packetSentBy == protocol.PerspectiveClient {
 		return nil, errReceivedTruncatedConnectionID
 	}
 
@@ -146,14 +148,16 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	}
 
 	// Connection ID
-	connID, err := utils.ReadUint64(b)
-	if err != nil {
-		return nil, err
-	}
-
-	header.ConnectionID = protocol.ConnectionID(connID)
-	if header.ConnectionID == 0 {
-		return nil, errInvalidConnectionID
+	if !header.TruncateConnectionID {
+		var connID uint64
+		connID, err = utils.ReadUint64(b)
+		if err != nil {
+			return nil, err
+		}
+		header.ConnectionID = protocol.ConnectionID(connID)
+		if header.ConnectionID == 0 {
+			return nil, errInvalidConnectionID
+		}
 	}
 
 	if packetSentBy == protocol.PerspectiveServer && publicFlagByte&0x04 > 0 {
@@ -181,9 +185,9 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 				}
 				header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 			} else { // parse the version negotiaton packet
-			if b.Len()%4 != 0 {
-				return nil, qerr.InvalidVersionNegotiationPacket
-			}
+				if b.Len()%4 != 0 {
+					return nil, qerr.InvalidVersionNegotiationPacket
+				}
 				header.SupportedVersions = make([]protocol.VersionNumber, 0)
 				for {
 					var versionTag uint32
@@ -192,9 +196,6 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 						break
 					}
 					v := protocol.VersionTagToNumber(versionTag)
-					if !protocol.IsSupportedVersion(v) {
-						v = protocol.VersionUnsupported
-					}
 					header.SupportedVersions = append(header.SupportedVersions, v)
 				}
 			}
@@ -213,8 +214,8 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	return header, nil
 }
 
-// GetLength gets the length of the publicHeader in bytes
-// can only be called for regular packets
+// GetLength gets the length of the publicHeader in bytes.
+// It can only be called for regular packets.
 func (h *PublicHeader) GetLength(pers protocol.Perspective) (protocol.ByteCount, error) {
 	if h.VersionFlag && h.ResetFlag {
 		return 0, errResetAndVersionFlagSet

@@ -172,7 +172,8 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 	}
 
 	config := ssh.ClientConfig{
-		Timeout: opts.Timeout,
+		Timeout:         opts.Timeout,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	if opts.User != nil {
 		config.User = opts.User.Username()

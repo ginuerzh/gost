@@ -2,6 +2,17 @@ package protocol
 
 import "time"
 
+// MaxPacketSize is the maximum packet size, including the public header, that we use for sending packets
+// This is the value used by Chromium for a QUIC packet sent using IPv6 (for IPv4 it would be 1370)
+const MaxPacketSize ByteCount = 1350
+
+// MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
+const MaxFrameAndPublicHeaderSize = MaxPacketSize - 12 /*crypto signature*/
+
+// NonForwardSecurePacketSizeReduction is the number of bytes a non forward-secure packet has to be smaller than a forward-secure packet
+// This makes sure that those packets can always be retransmitted without splitting the contained StreamFrames
+const NonForwardSecurePacketSizeReduction = 50
+
 // DefaultMaxCongestionWindow is the default for the max congestion window
 const DefaultMaxCongestionWindow = 1000
 
@@ -11,6 +22,10 @@ const InitialCongestionWindow = 32
 // MaxUndecryptablePackets limits the number of undecryptable packets that a
 // session queues for later until it sends a public reset.
 const MaxUndecryptablePackets = 10
+
+// PublicResetTimeout is the time to wait before sending a Public Reset when receiving too many undecryptable packets during the handshake
+// This timeout allows the Go scheduler to switch to the Go rountine that reads the crypto stream and to escalate the crypto
+const PublicResetTimeout = 500 * time.Millisecond
 
 // AckSendDelay is the maximum delay that can be applied to an ACK for a retransmittable packet
 // This is the value Chromium is using
@@ -24,21 +39,25 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 10) * 32 // 32 kB
 // This is the value that Google servers are using
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 10) * 48 // 48 kB
 
-// MaxReceiveStreamFlowControlWindowServer is the maximum stream-level flow control window for receiving data
+// DefaultMaxReceiveStreamFlowControlWindowServer is the default maximum stream-level flow control window for receiving data, for the server
 // This is the value that Google servers are using
-const MaxReceiveStreamFlowControlWindowServer ByteCount = 1 * (1 << 20) // 1 MB
+const DefaultMaxReceiveStreamFlowControlWindowServer ByteCount = 1 * (1 << 20) // 1 MB
 
-// MaxReceiveConnectionFlowControlWindowServer is the connection-level flow control window for receiving data
+// DefaultMaxReceiveConnectionFlowControlWindowServer is the default connection-level flow control window for receiving data, for the server
 // This is the value that Google servers are using
-const MaxReceiveConnectionFlowControlWindowServer ByteCount = 1.5 * (1 << 20) // 1.5 MB
+const DefaultMaxReceiveConnectionFlowControlWindowServer ByteCount = 1.5 * (1 << 20) // 1.5 MB
 
-// MaxReceiveStreamFlowControlWindowClient is the maximum stream-level flow control window for receiving data, for the client
+// DefaultMaxReceiveStreamFlowControlWindowClient is the default maximum stream-level flow control window for receiving data, for the client
 // This is the value that Chromium is using
-const MaxReceiveStreamFlowControlWindowClient ByteCount = 6 * (1 << 20) // 6 MB
+const DefaultMaxReceiveStreamFlowControlWindowClient ByteCount = 6 * (1 << 20) // 6 MB
 
-// MaxReceiveConnectionFlowControlWindowClient is the connection-level flow control window for receiving data, for the server
+// DefaultMaxReceiveConnectionFlowControlWindowClient is the default connection-level flow control window for receiving data, for the client
 // This is the value that Google servers are using
-const MaxReceiveConnectionFlowControlWindowClient ByteCount = 15 * (1 << 20) // 15 MB
+const DefaultMaxReceiveConnectionFlowControlWindowClient ByteCount = 15 * (1 << 20) // 15 MB
+
+// ConnectionFlowControlMultiplier determines how much larger the connection flow control windows needs to be relative to any stream's flow control window
+// This is the value that Chromium is using
+const ConnectionFlowControlMultiplier = 1.5
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 const MaxStreamsPerConnection = 100
@@ -59,17 +78,14 @@ const MaxNewStreamIDDelta = 4 * MaxStreamsPerConnection
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow
 
-// RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
-const RetransmissionThreshold = 3
-
 // SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
 const SkipPacketAveragePeriodLength PacketNumber = 500
 
 // MaxTrackedSkippedPackets is the maximum number of skipped packet numbers the SentPacketHandler keep track of for Optimistic ACK attack mitigation
 const MaxTrackedSkippedPackets = 10
 
-// STKExpiryTimeSec is the valid time of a source address token in seconds
-const STKExpiryTimeSec = 24 * 60 * 60
+// STKExpiryTime is the valid time of a source address token
+const STKExpiryTime = 24 * time.Hour
 
 // MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
 const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
@@ -112,8 +128,8 @@ const MaxIdleTimeoutServer = 1 * time.Minute
 // MaxIdleTimeoutClient is the idle timeout that the client suggests to the server
 const MaxIdleTimeoutClient = 2 * time.Minute
 
-// MaxTimeForCryptoHandshake is the default timeout for a connection until the crypto handshake succeeds.
-const MaxTimeForCryptoHandshake = 10 * time.Second
+// DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
+const DefaultHandshakeTimeout = 10 * time.Second
 
 // ClosedSessionDeleteTimeout the server ignores packets arriving on a connection that is already closed
 // after this time all information about the old connection will be deleted

@@ -1,34 +1,22 @@
 package protocol
 
-import (
-	"bytes"
-	"encoding/binary"
-	"strconv"
-)
-
 // VersionNumber is a version number as int
 type VersionNumber int
 
 // The version numbers, making grepping easier
 const (
-	Version34 VersionNumber = 34 + iota
-	Version35
+	Version35 VersionNumber = 35 + iota
 	Version36
-	VersionWhatever    = 0 // for when the version doesn't matter
-	VersionUnsupported = -1
+	Version37
+	VersionWhatever    VersionNumber = 0 // for when the version doesn't matter
+	VersionUnsupported VersionNumber = -1
 )
 
 // SupportedVersions lists the versions that the server supports
-// must be in sorted order
+// must be in sorted descending order
 var SupportedVersions = []VersionNumber{
-	Version34, Version35, Version36,
+	Version37, Version36, Version35,
 }
-
-// SupportedVersionsAsTags is needed for the SHLO crypto message
-var SupportedVersionsAsTags []byte
-
-// SupportedVersionsAsString is needed for the Alt-Scv HTTP header
-var SupportedVersionsAsString string
 
 // VersionNumberToTag maps version numbers ('32') to tags ('Q032')
 func VersionNumberToTag(vn VersionNumber) uint32 {
@@ -42,8 +30,8 @@ func VersionTagToNumber(v uint32) VersionNumber {
 }
 
 // IsSupportedVersion returns true if the server supports this version
-func IsSupportedVersion(v VersionNumber) bool {
-	for _, t := range SupportedVersions {
+func IsSupportedVersion(supported []VersionNumber, v VersionNumber) bool {
+	for _, t := range supported {
 		if t == v {
 			return true
 		}
@@ -51,41 +39,17 @@ func IsSupportedVersion(v VersionNumber) bool {
 	return false
 }
 
-// HighestSupportedVersion finds the highest version number that is both present in other and in SupportedVersions
-// the versions in other do not need to be ordered
-// it returns true and the version number, if there is one, otherwise false
-func HighestSupportedVersion(other []VersionNumber) (bool, VersionNumber) {
-	var otherSupported []VersionNumber
-	for _, ver := range other {
-		if ver != VersionUnsupported {
-			otherSupported = append(otherSupported, ver)
-		}
-	}
-
-	for i := len(SupportedVersions) - 1; i >= 0; i-- {
-		for _, ver := range otherSupported {
-			if ver == SupportedVersions[i] {
-				return true, ver
+// ChooseSupportedVersion finds the best version in the overlap of ours and theirs
+// ours is a slice of versions that we support, sorted by our preference (descending)
+// theirs is a slice of versions offered by the peer. The order does not matter
+// if no suitable version is found, it returns VersionUnsupported
+func ChooseSupportedVersion(ours, theirs []VersionNumber) VersionNumber {
+	for _, ourVer := range ours {
+		for _, theirVer := range theirs {
+			if ourVer == theirVer {
+				return ourVer
 			}
 		}
 	}
-
-	return false, 0
-}
-
-func init() {
-	var b bytes.Buffer
-	for _, v := range SupportedVersions {
-		s := make([]byte, 4)
-		binary.LittleEndian.PutUint32(s, VersionNumberToTag(v))
-		b.Write(s)
-	}
-	SupportedVersionsAsTags = b.Bytes()
-
-	for i := len(SupportedVersions) - 1; i >= 0; i-- {
-		SupportedVersionsAsString += strconv.Itoa(int(SupportedVersions[i]))
-		if i != 0 {
-			SupportedVersionsAsString += ","
-		}
-	}
+	return VersionUnsupported
 }

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var (
@@ -29,14 +29,14 @@ func getEphermalKEX() (res crypto.KeyExchange) {
 	res = kexCurrent
 	t := kexCurrentTime
 	kexMutex.RUnlock()
-	if res != nil && time.Now().Sub(t) < kexLifetime {
+	if res != nil && time.Since(t) < kexLifetime {
 		return res
 	}
 
 	kexMutex.Lock()
 	defer kexMutex.Unlock()
 	// Check if still unfulfilled
-	if kexCurrent == nil || time.Now().Sub(kexCurrentTime) > kexLifetime {
+	if kexCurrent == nil || time.Since(kexCurrentTime) > kexLifetime {
 		kex, err := crypto.NewCurve25519KEX()
 		if err != nil {
 			utils.Errorf("could not set KEX: %s", err.Error())

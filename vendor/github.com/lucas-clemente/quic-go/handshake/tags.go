@@ -50,6 +50,11 @@ const (
 	// TagSFCW is the initial stream flow control receive window.
 	TagSFCW Tag = 'S' + 'F'<<8 + 'C'<<16 + 'W'<<24
 
+	// TagFHL2 forces head of line blocking.
+	// Chrome experiment (see https://codereview.chromium.org/2115033002)
+	// unsupported by quic-go
+	TagFHL2 Tag = 'F' + 'H'<<8 + 'L'<<16 + '2'<<24
+
 	// TagSTK is the source-address token
 	TagSTK Tag = 'S' + 'T'<<8 + 'K'<<16
 	// TagSNO is the server nonce

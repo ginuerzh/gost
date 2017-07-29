@@ -7,35 +7,51 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
+	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
 
 type streamCreator interface {
-	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
-	Close(error) error
-	RemoteAddr() *net.UDPAddr
+	quic.Session
+	GetOrOpenStream(protocol.StreamID) (quic.Stream, error)
 }
+
+type remoteCloser interface {
+	CloseRemote(protocol.ByteCount)
+}
+
+// allows mocking of quic.Listen and quic.ListenAddr
+var (
+	quicListen     = quic.Listen
+	quicListenAddr = quic.ListenAddr
+)
 
 // Server is a HTTP2 server listening for QUIC connections.
 type Server struct {
 	*http.Server
+
+	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
+	// If nil, it uses reasonable default values.
+	QuicConfig *quic.Config
 
 	// Private flag for demo, do not use
 	CloseAfterFirstRequest bool
 
 	port uint32 // used atomically
 
-	server      *quic.Server
-	serverMutex sync.Mutex
+	listenerMutex sync.Mutex
+	listener      quic.Listener
+
+	supportedVersionsAsString string
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
@@ -63,39 +79,51 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 }
 
 // Serve an existing UDP connection.
-func (s *Server) Serve(conn *net.UDPConn) error {
+func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }
 
-func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
+func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
-	s.serverMutex.Lock()
-	if s.server != nil {
-		s.serverMutex.Unlock()
+	s.listenerMutex.Lock()
+	if s.listener != nil {
+		s.listenerMutex.Unlock()
 		return errors.New("ListenAndServe may only be called once")
 	}
+
+	var ln quic.Listener
 	var err error
-	server, err := quic.NewServer(s.Addr, tlsConfig, s.handleStreamCb)
+	if conn == nil {
+		ln, err = quicListenAddr(s.Addr, tlsConfig, s.QuicConfig)
+	} else {
+		ln, err = quicListen(conn, tlsConfig, s.QuicConfig)
+	}
 	if err != nil {
-		s.serverMutex.Unlock()
+		s.listenerMutex.Unlock()
 		return err
 	}
-	s.server = server
-	s.serverMutex.Unlock()
-	if conn == nil {
-		return server.ListenAndServe()
+	s.listener = ln
+	s.listenerMutex.Unlock()
+
+	for {
+		sess, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+		go s.handleHeaderStream(sess.(streamCreator))
 	}
-	return server.Serve(conn)
 }
 
-func (s *Server) handleStreamCb(session *quic.Session, stream utils.Stream) {
-	s.handleStream(session, stream)
-}
-
-func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
+func (s *Server) handleHeaderStream(session streamCreator) {
+	stream, err := session.AcceptStream()
+	if err != nil {
+		session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
+		return
+	}
 	if stream.StreamID() != 3 {
+		session.Close(qerr.Error(qerr.InternalError, "h2quic server BUG: header stream does not have stream ID 3"))
 		return
 	}
 
@@ -112,17 +140,17 @@ func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
 				if _, ok := err.(*qerr.QuicError); !ok {
 					utils.Errorf("error handling h2 request: %s", err.Error())
 				}
-				session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
+				session.Close(err)
 				return
 			}
 		}
 	}()
 }
 
-func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
+func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
-		return err
+		return qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 	}
 	h2headersFrame, ok := h2frame.(*http2.HeadersFrame)
 	if !ok {
@@ -154,10 +182,14 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
+	// this can happen if the client immediately closes the data stream after sending the request and the runtime processes the reset before the request
+	if dataStream == nil {
+		return nil
+	}
 
 	var streamEnded bool
 	if h2headersFrame.StreamEnded() {
-		dataStream.CloseRemote(0)
+		dataStream.(remoteCloser).CloseRemote(0)
 		streamEnded = true
 		_, _ = dataStream.Read([]byte{0}) // read the eof
 	}
@@ -209,11 +241,11 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
 // Close in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) Close() error {
-	s.serverMutex.Lock()
-	defer s.serverMutex.Unlock()
-	if s.server != nil {
-		err := s.server.Close()
-		s.server = nil
+	s.listenerMutex.Lock()
+	defer s.listenerMutex.Unlock()
+	if s.listener != nil {
+		err := s.listener.Close()
+		s.listener = nil
 		return err
 	}
 	return nil
@@ -228,7 +260,6 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 
 // SetQuicHeaders can be used to set the proper headers that announce that this server supports QUIC.
 // The values that are set depend on the port information from s.Server.Addr, and currently look like this (if Addr has port 443):
-//  Alternate-Protocol: 443:quic
 //  Alt-Svc: quic=":443"; ma=2592000; v="33,32,31,30"
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	port := atomic.LoadUint32(&s.port)
@@ -247,8 +278,16 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		atomic.StoreUint32(&s.port, port)
 	}
 
-	hdr.Add("Alternate-Protocol", fmt.Sprintf("%d:quic", port))
-	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, protocol.SupportedVersionsAsString))
+	if s.supportedVersionsAsString == "" {
+		for i, v := range protocol.SupportedVersions {
+			s.supportedVersionsAsString += strconv.Itoa(int(v))
+			if i != len(protocol.SupportedVersions)-1 {
+				s.supportedVersionsAsString += ","
+			}
+		}
+	}
+
+	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, s.supportedVersionsAsString))
 
 	return nil
 }

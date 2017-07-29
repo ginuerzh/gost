@@ -6,8 +6,8 @@ import (
 	"errors"
 
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type publicReset struct {
@@ -32,15 +32,15 @@ func writePublicReset(connectionID protocol.ConnectionID, rejectedPacketNumber p
 
 func parsePublicReset(r *bytes.Reader) (*publicReset, error) {
 	pr := publicReset{}
-	tag, tagMap, err := handshake.ParseHandshakeMessage(r)
+	msg, err := handshake.ParseHandshakeMessage(r)
 	if err != nil {
 		return nil, err
 	}
-	if tag != handshake.TagPRST {
+	if msg.Tag != handshake.TagPRST {
 		return nil, errors.New("wrong public reset tag")
 	}
 
-	rseq, ok := tagMap[handshake.TagRSEQ]
+	rseq, ok := msg.Data[handshake.TagRSEQ]
 	if !ok {
 		return nil, errors.New("RSEQ missing")
 	}
@@ -49,7 +49,7 @@ func parsePublicReset(r *bytes.Reader) (*publicReset, error) {
 	}
 	pr.rejectedPacketNumber = protocol.PacketNumber(binary.LittleEndian.Uint64(rseq))
 
-	rnon, ok := tagMap[handshake.TagRNON]
+	rnon, ok := msg.Data[handshake.TagRNON]
 	if !ok {
 		return nil, errors.New("RNON missing")
 	}

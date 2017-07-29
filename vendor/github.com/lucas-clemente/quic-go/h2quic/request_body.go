@@ -3,18 +3,18 @@ package h2quic
 import (
 	"io"
 
-	"github.com/lucas-clemente/quic-go/utils"
+	quic "github.com/lucas-clemente/quic-go"
 )
 
 type requestBody struct {
 	requestRead bool
-	dataStream  utils.Stream
+	dataStream  quic.Stream
 }
 
 // make sure the requestBody can be used as a http.Request.Body
 var _ io.ReadCloser = &requestBody{}
 
-func newRequestBody(stream utils.Stream) *requestBody {
+func newRequestBody(stream quic.Stream) *requestBody {
 	return &requestBody{dataStream: stream}
 }
 

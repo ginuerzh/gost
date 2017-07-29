@@ -4,8 +4,8 @@ coverage:
     - ackhandler/packet_linkedlist.go
     - h2quic/gzipreader.go
     - h2quic/response.go
-    - utils/byteinterval_linkedlist.go
-    - utils/packetinterval_linkedlist.go
+    - internal/utils/byteinterval_linkedlist.go
+    - internal/utils/packetinterval_linkedlist.go
   status:
     project:
       default:

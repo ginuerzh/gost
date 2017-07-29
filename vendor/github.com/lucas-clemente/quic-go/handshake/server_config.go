@@ -13,7 +13,6 @@ type ServerConfig struct {
 	certChain crypto.CertChain
 	ID        []byte
 	obit      []byte
-	stkSource crypto.StkSource
 }
 
 // NewServerConfig creates a new server config
@@ -24,18 +23,8 @@ func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*Serve
 		return nil, err
 	}
 
-	stkSecret := make([]byte, 32)
-	if _, err = rand.Read(stkSecret); err != nil {
-		return nil, err
-	}
-
 	obit := make([]byte, 8)
 	if _, err = rand.Read(obit); err != nil {
-		return nil, err
-	}
-
-	stkSource, err := crypto.NewStkSource(stkSecret)
-	if err != nil {
 		return nil, err
 	}
 
@@ -44,21 +33,24 @@ func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*Serve
 		certChain: certChain,
 		ID:        id,
 		obit:      obit,
-		stkSource: stkSource,
 	}, nil
 }
 
 // Get the server config binary representation
 func (s *ServerConfig) Get() []byte {
 	var serverConfig bytes.Buffer
-	WriteHandshakeMessage(&serverConfig, TagSCFG, map[Tag][]byte{
-		TagSCID: s.ID,
-		TagKEXS: []byte("C255"),
-		TagAEAD: []byte("AESG"),
-		TagPUBS: append([]byte{0x20, 0x00, 0x00}, s.kex.PublicKey()...),
-		TagOBIT: s.obit,
-		TagEXPY: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-	})
+	msg := HandshakeMessage{
+		Tag: TagSCFG,
+		Data: map[Tag][]byte{
+			TagSCID: s.ID,
+			TagKEXS: []byte("C255"),
+			TagAEAD: []byte("AESG"),
+			TagPUBS: append([]byte{0x20, 0x00, 0x00}, s.kex.PublicKey()...),
+			TagOBIT: s.obit,
+			TagEXPY: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		},
+	}
+	msg.Write(&serverConfig)
 	return serverConfig.Bytes()
 }
 

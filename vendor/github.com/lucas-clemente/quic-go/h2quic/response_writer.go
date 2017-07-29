@@ -7,17 +7,18 @@ import (
 	"strings"
 	"sync"
 
+	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
 
 type responseWriter struct {
 	dataStreamID protocol.StreamID
-	dataStream   utils.Stream
+	dataStream   quic.Stream
 
-	headerStream      utils.Stream
+	headerStream      quic.Stream
 	headerStreamMutex *sync.Mutex
 
 	header        http.Header
@@ -25,7 +26,7 @@ type responseWriter struct {
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream utils.Stream, headerStreamMutex *sync.Mutex, dataStream utils.Stream, dataStreamID protocol.StreamID) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,
@@ -82,8 +83,14 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 func (w *responseWriter) Flush() {}
 
+// TODO: Implement a functional CloseNotify method.
+func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
+
 // test that we implement http.Flusher
 var _ http.Flusher = &responseWriter{}
+
+// test that we implement http.CloseNotifier
+var _ http.CloseNotifier = &responseWriter{}
 
 // copied from http2/http2.go
 // bodyAllowedForStatus reports whether a given response status code

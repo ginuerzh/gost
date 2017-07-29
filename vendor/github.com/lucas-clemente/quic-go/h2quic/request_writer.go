@@ -12,13 +12,14 @@ import (
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/net/lex/httplex"
 
+	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type requestWriter struct {
 	mutex        sync.Mutex
-	headerStream utils.Stream
+	headerStream quic.Stream
 
 	henc *hpack.Encoder
 	hbuf bytes.Buffer // HPACK encoder writes into this
@@ -26,7 +27,7 @@ type requestWriter struct {
 
 const defaultUserAgent = "quic-go"
 
-func newRequestWriter(headerStream utils.Stream) *requestWriter {
+func newRequestWriter(headerStream quic.Stream) *requestWriter {
 	rw := &requestWriter{
 		headerStream: headerStream,
 	}

@@ -4,8 +4,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // This cubic implementation is based on the one found in Chromiums's QUIC
@@ -184,9 +184,19 @@ func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow protocol.Packet
 	elapsedTime := int64((currentTime.Add(delayMin).Sub(c.epoch)/time.Microsecond)<<10) / 1000000
 
 	offset := int64(c.timeToOriginPoint) - elapsedTime
+	// Right-shifts of negative, signed numbers have
+	// implementation-dependent behavior.  Force the offset to be
+	// positive, similar to the kernel implementation.
+	if offset < 0 {
+		offset = -offset
+	}
 	deltaCongestionWindow := protocol.PacketNumber((cubeCongestionWindowScale * offset * offset * offset) >> cubeScale)
-	targetCongestionWindow := c.originPointCongestionWindow - deltaCongestionWindow
-
+	var targetCongestionWindow protocol.PacketNumber
+	if elapsedTime > int64(c.timeToOriginPoint) {
+		targetCongestionWindow = c.originPointCongestionWindow + deltaCongestionWindow
+	} else {
+		targetCongestionWindow = c.originPointCongestionWindow - deltaCongestionWindow
+	}
 	// With dynamic beta/alpha based on number of active streams, it is possible
 	// for the required_ack_count to become much lower than acked_packets_count_
 	// suddenly, leading to more than one iteration through the following loop.

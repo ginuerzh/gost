@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var (
@@ -222,7 +222,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 		utils.WriteUint48(b, uint64(f.LargestAcked))
 	}
 
-	f.DelayTime = time.Now().Sub(f.PacketReceivedTime)
+	f.DelayTime = time.Since(f.PacketReceivedTime)
 	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
 	var numRanges uint64
@@ -332,8 +332,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 
 // MinLength of a written frame
 func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	var length protocol.ByteCount
-	length = 1 + 2 + 1 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
+	length := protocol.ByteCount(1 + 2 + 1) // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
 
 	missingSequenceNumberDeltaLen := protocol.ByteCount(f.getMissingSequenceNumberDeltaLen())
@@ -351,10 +350,7 @@ func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount
 
 // HasMissingRanges returns if this frame reports any missing packets
 func (f *AckFrame) HasMissingRanges() bool {
-	if len(f.AckRanges) > 0 {
-		return true
-	}
-	return false
+	return len(f.AckRanges) > 0
 }
 
 func (f *AckFrame) validateAckRanges() bool {
