@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,29 +27,86 @@ const (
 	GostSSHTunnelRequest = "gost-tunnel" // extended request type for ssh tunnel
 )
 
-type sshForwardConnector struct {
+type sshDirectForwardConnector struct {
 }
 
-func SSHForwardConnector() Connector {
-	return &sshForwardConnector{}
+func SSHDirectForwardConnector() Connector {
+	return &sshDirectForwardConnector{}
 }
 
-func (c *sshForwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
-	cc, ok := conn.(*sshNopConn)
+func (c *sshDirectForwardConnector) Connect(conn net.Conn, raddr string) (net.Conn, error) {
+	cc, ok := conn.(*sshNopConn) // TODO: this is an ugly type assertion, need to find a better solution.
 	if !ok {
 		return nil, errors.New("ssh: wrong connection type")
 	}
-	conn, err := cc.session.client.Dial("tcp", addr)
+	conn, err := cc.session.client.Dial("tcp", raddr)
 	if err != nil {
-		log.Logf("[ssh-tcp] %s -> %s : %s", cc.session.addr, addr, err)
+		log.Logf("[ssh-tcp] %s -> %s : %s", cc.session.addr, raddr, err)
 		return nil, err
 	}
 	return conn, nil
 }
 
+type sshRemoteForwardConnector struct {
+}
+
+func SSHRemoteForwardConnector() Connector {
+	return &sshRemoteForwardConnector{}
+}
+
+func (c *sshRemoteForwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+	cc, ok := conn.(*sshNopConn) // TODO: this is an ugly type assertion, need to find a better solution.
+	if !ok {
+		return nil, errors.New("ssh: wrong connection type")
+	}
+
+	cc.session.once.Do(func() {
+		go func() {
+			defer log.Log("ssh-rtcp: session is closed")
+			defer close(cc.session.connChan)
+
+			if cc.session == nil || cc.session.client == nil {
+				return
+			}
+			if strings.HasPrefix(addr, ":") {
+				addr = "0.0.0.0" + addr
+			}
+			ln, err := cc.session.client.Listen("tcp", addr)
+			if err != nil {
+				return
+			}
+			for {
+				rc, err := ln.Accept()
+				if err != nil {
+					log.Logf("[ssh-rtcp] %s <-> %s accpet : %s", ln.Addr(), addr, err)
+					return
+				}
+
+				select {
+				case cc.session.connChan <- rc:
+				default:
+					log.Logf("[ssh-rtcp] %s - %s: connection queue is full", ln.Addr(), addr)
+				}
+			}
+		}()
+	})
+
+	sc, ok := <-cc.session.connChan
+	if !ok {
+		return nil, errors.New("ssh-rtcp: connection is closed")
+	}
+	return sc, nil
+}
+
 type sshForwardTransporter struct {
 	sessions     map[string]*sshSession
 	sessionMutex sync.Mutex
+}
+
+func SSHForwardTransporter() Transporter {
+	return &sshForwardTransporter{
+		sessions: make(map[string]*sshSession),
+	}
 }
 
 func (tr *sshForwardTransporter) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
@@ -61,7 +119,7 @@ func (tr *sshForwardTransporter) Dial(addr string, options ...DialOption) (conn 
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
-	if !ok {
+	if !ok || session.Closed() {
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
 		} else {
@@ -87,7 +145,8 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 	}
 
 	config := ssh.ClientConfig{
-		Timeout: opts.Timeout,
+		Timeout:         opts.Timeout,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	if opts.User != nil {
 		config.User = opts.User.Username()
@@ -101,6 +160,10 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
+	if session != nil && session.conn != conn {
+		conn.Close()
+		return nil, errors.New("ssh: unrecognized connection")
+	}
 	if !ok || session.client == nil {
 		sshConn, chans, reqs, err := ssh.NewClientConn(conn, opts.Addr, &config)
 		if err != nil {
@@ -110,13 +173,23 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 		}
 
 		session = &sshSession{
-			addr:   opts.Addr,
-			conn:   conn,
-			client: ssh.NewClient(sshConn, chans, reqs),
-			closed: make(chan struct{}),
+			addr:     opts.Addr,
+			conn:     conn,
+			client:   ssh.NewClient(sshConn, chans, reqs),
+			closed:   make(chan struct{}),
+			deaded:   make(chan struct{}),
+			connChan: make(chan net.Conn, 1024),
 		}
 		tr.sessions[opts.Addr] = session
+		go session.Ping(opts.Interval, 1)
+		go session.waitServer()
+		go session.waitClose()
 	}
+	if session.Closed() {
+		delete(tr.sessions, opts.Addr)
+		return nil, ErrSessionDead
+	}
+
 	return &sshNopConn{session: session}, nil
 }
 
@@ -230,11 +303,13 @@ func (tr *sshTunnelTransporter) Multiplex() bool {
 }
 
 type sshSession struct {
-	addr   string
-	conn   net.Conn
-	client *ssh.Client
-	closed chan struct{}
-	deaded chan struct{}
+	addr     string
+	conn     net.Conn
+	client   *ssh.Client
+	closed   chan struct{}
+	deaded   chan struct{}
+	once     sync.Once
+	connChan chan net.Conn
 }
 
 func (s *sshSession) Ping(interval time.Duration, retries int) {
@@ -334,7 +409,7 @@ func SSHForwardHandler(opts ...HandlerOption) Handler {
 	if h.options.TLSConfig != nil && len(h.options.TLSConfig.Certificates) > 0 {
 		signer, err := ssh.NewSignerFromKey(h.options.TLSConfig.Certificates[0].PrivateKey)
 		if err != nil {
-			log.Log("[sshf]", err)
+			log.Log("[ssh-forward]", err)
 		}
 		h.config.AddHostKey(signer)
 	}
@@ -345,15 +420,15 @@ func SSHForwardHandler(opts ...HandlerOption) Handler {
 func (h *sshForwardHandler) Handle(conn net.Conn) {
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, h.config)
 	if err != nil {
-		log.Logf("[sshf] %s -> %s : %s", conn.RemoteAddr(), h.options.Addr, err)
+		log.Logf("[ssh-forward] %s -> %s : %s", conn.RemoteAddr(), h.options.Addr, err)
 		conn.Close()
 		return
 	}
 	defer sshConn.Close()
 
-	log.Logf("[sshf] %s <-> %s", conn.RemoteAddr(), h.options.Addr)
+	log.Logf("[ssh-forward] %s <-> %s", conn.RemoteAddr(), h.options.Addr)
 	h.handleForward(sshConn, chans, reqs)
-	log.Logf("[sshf] %s >-< %s", conn.RemoteAddr(), h.options.Addr)
+	log.Logf("[ssh-forward] %s >-< %s", conn.RemoteAddr(), h.options.Addr)
 }
 
 func (h *sshForwardHandler) handleForward(conn ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request) {
@@ -366,7 +441,7 @@ func (h *sshForwardHandler) handleForward(conn ssh.Conn, chans <-chan ssh.NewCha
 			case RemoteForwardRequest:
 				go h.tcpipForwardRequest(conn, req, quit)
 			default:
-				log.Log("[ssh] unknown channel type:", req.Type)
+				// log.Log("[ssh] unknown channel type:", req.Type)
 				if req.WantReply {
 					req.Reply(false, nil)
 				}

@@ -2,51 +2,24 @@ package main
 
 import (
 	"crypto/tls"
-	"flag"
 	"log"
 
 	"github.com/ginuerzh/gost/gost"
 )
 
-var (
-	laddr, faddr string
-	quiet        bool
-)
-
-func init() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	flag.StringVar(&laddr, "L", ":18080", "listen address")
-	flag.StringVar(&faddr, "F", ":12222", "forward address")
-	flag.BoolVar(&quiet, "q", false, "quiet mode")
-	flag.BoolVar(&gost.Debug, "d", false, "debug mode")
-	flag.Parse()
-
-	if quiet {
-		gost.SetLogger(&gost.NopLogger{})
-	}
+func main() {
+	sshRemoteForwardServer()
 }
 
-func main() {
-	chain := gost.NewChain(
-		gost.Node{
-			Protocol:  "socks5",
-			Transport: "ssh",
-			Addr:      faddr,
-			Client: &gost.Client{
-				Connector:   gost.SOCKS5Connector(nil),
-				Transporter: gost.SSHTunnelTransporter(),
-			},
-		},
-	)
-
+func sshRemoteForwardServer() {
 	s := &gost.Server{}
-	ln, err := gost.TCPListener(laddr)
+	ln, err := gost.TCPListener(":11222")
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := gost.SOCKS5Handler(
-		gost.ChainHandlerOption(chain),
+	h := gost.SSHForwardHandler(
+		gost.AddrHandlerOption(":11222"),
+		// gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 		gost.TLSConfigHandlerOption(tlsConfig()),
 	)
 	log.Fatal(s.Serve(ln, h))

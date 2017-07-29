@@ -19,7 +19,6 @@ type WSOptions struct {
 	WriteBufferSize   int
 	HandshakeTimeout  time.Duration
 	EnableCompression bool
-	TLSConfig         *tls.Config
 }
 
 type websocketConn struct {
@@ -243,7 +242,7 @@ type wssListener struct {
 }
 
 // WSSListener creates a Listener for websocket secure proxy server.
-func WSSListener(addr string, options *WSOptions) (Listener, error) {
+func WSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Listener, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -269,7 +268,7 @@ func WSSListener(addr string, options *WSOptions) (Listener, error) {
 	mux.Handle("/ws", http.HandlerFunc(l.upgrade))
 	l.srv = &http.Server{
 		Addr:      addr,
-		TLSConfig: options.TLSConfig,
+		TLSConfig: tlsConfig,
 		Handler:   mux,
 	}
 
@@ -279,7 +278,7 @@ func WSSListener(addr string, options *WSOptions) (Listener, error) {
 	}
 
 	go func() {
-		err := l.srv.Serve(tls.NewListener(tcpKeepAliveListener{ln}, options.TLSConfig))
+		err := l.srv.Serve(tls.NewListener(tcpKeepAliveListener{ln}, tlsConfig))
 		if err != nil {
 			l.errChan <- err
 		}

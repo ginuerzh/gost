@@ -74,16 +74,14 @@ func (h *udpForwardHandler) Handle(conn net.Conn) {
 }
 
 type rtcpForwardHandler struct {
-	laddr   string
 	raddr   string
 	options *HandlerOptions
 }
 
 // RTCPForwardHandler creates a server Handler for TCP remote port forwarding server.
 // The raddr is the remote address that the server will forward to.
-func RTCPForwardHandler(laddr, raddr string, opts ...HandlerOption) Handler {
+func RTCPForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &rtcpForwardHandler{
-		laddr:   laddr,
 		raddr:   raddr,
 		options: &HandlerOptions{},
 	}
@@ -98,14 +96,14 @@ func (h *rtcpForwardHandler) Handle(conn net.Conn) {
 
 	cc, err := net.DialTimeout("tcp", h.raddr, DialTimeout)
 	if err != nil {
-		log.Logf("[rtcp] %s -> %s : %s", h.laddr, h.raddr, err)
+		log.Logf("[rtcp] %s -> %s : %s", conn.LocalAddr(), h.raddr, err)
 		return
 	}
 	defer cc.Close()
 
-	log.Logf("[rtcp] %s <-> %s", h.laddr, h.raddr)
+	log.Logf("[rtcp] %s <-> %s", conn.LocalAddr(), h.raddr)
 	transport(cc, conn)
-	log.Logf("[rtcp] %s >-< %s", h.laddr, h.raddr)
+	log.Logf("[rtcp] %s >-< %s", conn.LocalAddr(), h.raddr)
 }
 
 type rudpForwardHandler struct {
@@ -217,9 +215,9 @@ func (l *udpForwardListener) Close() error {
 }
 
 type rtcpForwardListener struct {
-	addr  net.Addr
-	chain *Chain
-	close chan struct{}
+	addr   net.Addr
+	chain  *Chain
+	closed chan struct{}
 }
 
 // RTCPForwardListener creates a Listener for TCP remote port forwarding server.
@@ -230,33 +228,59 @@ func RTCPForwardListener(addr string, chain *Chain) (Listener, error) {
 	}
 
 	return &rtcpForwardListener{
-		addr:  laddr,
-		chain: chain,
-		close: make(chan struct{}),
+		addr:   laddr,
+		chain:  chain,
+		closed: make(chan struct{}),
 	}, nil
 }
 
 func (l *rtcpForwardListener) Accept() (net.Conn, error) {
 	select {
-	case <-l.close:
+	case <-l.closed:
 		return nil, errors.New("closed")
 	default:
 	}
 
-	conn, err := l.chain.Conn()
-	if err != nil {
-		return nil, err
+	var tempDelay time.Duration
+	for {
+		conn, err := l.accept()
+		if err != nil {
+			if tempDelay == 0 {
+				tempDelay = 1000 * time.Millisecond
+			} else {
+				tempDelay *= 2
+			}
+			if max := 6 * time.Second; tempDelay > max {
+				tempDelay = max
+			}
+			log.Logf("[ssh-rtcp] Accept error: %v; retrying in %v", err, tempDelay)
+			time.Sleep(tempDelay)
+			continue
+		}
+		return conn, nil
 	}
-	cc, err := l.handshake(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	return cc, nil
 }
 
-func (l *rtcpForwardListener) handshake(conn net.Conn) (net.Conn, error) {
+func (l *rtcpForwardListener) accept() (conn net.Conn, err error) {
+	lastNode := l.chain.LastNode()
+	if lastNode.Protocol == "forward" && lastNode.Transport == "ssh" {
+		conn, err = l.chain.Dial(l.addr.String())
+	} else if lastNode.Protocol == "socks5" {
+		cc, er := l.chain.Conn()
+		if er != nil {
+			return nil, er
+		}
+		conn, err = l.waitConnectSOCKS5(cc)
+		if err != nil {
+			cc.Close()
+		}
+	} else {
+		err = errors.New("invalid chain")
+	}
+	return
+}
+
+func (l *rtcpForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, error) {
 	conn, err := socks5Handshake(conn, l.chain.LastNode().User)
 	if err != nil {
 		return nil, err
@@ -301,7 +325,7 @@ func (l *rtcpForwardListener) Addr() net.Addr {
 }
 
 func (l *rtcpForwardListener) Close() error {
-	close(l.close)
+	close(l.closed)
 	return nil
 }
 

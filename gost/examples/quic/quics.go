@@ -33,16 +33,13 @@ func main() {
 
 func quicServer() {
 	s := &gost.Server{}
-	s.Handle(
-		gost.SOCKS5Handler(gost.TLSConfigHandlerOption(tlsConfig())),
-	)
-
 	ln, err := gost.QUICListener(laddr, &gost.QUICConfig{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
 	}
+	h := gost.SOCKS5Handler(gost.TLSConfigHandlerOption(tlsConfig()))
 	log.Println("server listen on", laddr)
-	log.Fatal(s.Serve(ln))
+	log.Fatal(s.Serve(ln, h))
 }
 
 var (

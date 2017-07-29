@@ -16,14 +16,6 @@ type Client struct {
 	Transporter Transporter
 }
 
-// NewClient creates a proxy client.
-func NewClient(c Connector, tr Transporter) *Client {
-	return &Client{
-		Connector:   c,
-		Transporter: tr,
-	}
-}
-
 // Dial connects to the target address.
 func (c *Client) Dial(addr string, options ...DialOption) (net.Conn, error) {
 	return c.Transporter.Dial(addr, options...)
@@ -40,7 +32,7 @@ func (c *Client) Connect(conn net.Conn, addr string) (net.Conn, error) {
 }
 
 // DefaultClient is a standard HTTP proxy client.
-var DefaultClient = NewClient(HTTPConnector(nil), TCPTransporter())
+var DefaultClient = &Client{Connector: HTTPConnector(nil), Transporter: TCPTransporter()}
 
 // Dial connects to the address addr via the DefaultClient.
 func Dial(addr string, options ...DialOption) (net.Conn, error) {
@@ -172,5 +164,11 @@ func WSOptionsHandshakeOption(options *WSOptions) HandshakeOption {
 func KCPConfigHandshakeOption(config *KCPConfig) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.KCPConfig = config
+	}
+}
+
+func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.QUICConfig = config
 	}
 }

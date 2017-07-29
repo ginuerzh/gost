@@ -10,18 +10,22 @@ import (
 
 // Server is a proxy server.
 type Server struct {
-	l       net.Listener
-	handler Handler
-}
-
-// Handle sets a handler for the server.
-func (s *Server) Handle(h Handler) {
-	s.handler = h
 }
 
 // Serve serves as a proxy server.
-func (s *Server) Serve(l net.Listener) error {
+func (s *Server) Serve(l net.Listener, h Handler) error {
 	defer l.Close()
+
+	if l == nil {
+		ln, err := TCPListener(":8080")
+		if err != nil {
+			return err
+		}
+		l = ln
+	}
+	if h == nil {
+		h = HTTPHandler()
+	}
 
 	var tempDelay time.Duration
 	for {
@@ -43,7 +47,7 @@ func (s *Server) Serve(l net.Listener) error {
 			return e
 		}
 		tempDelay = 0
-		go s.handler.Handle(conn)
+		go h.Handle(conn)
 	}
 
 }

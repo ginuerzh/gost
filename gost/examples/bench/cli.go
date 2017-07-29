@@ -142,10 +142,10 @@ func main() {
 		// http+quic
 		gost.Node{
 			Addr: "localhost:6121",
-			Client: gost.NewClient(
-				gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				gost.QUICTransporter(nil),
-			),
+			Client: &gost.Client{
+				Connector:   gost.HTTPConnector(url.UserPassword("admin", "123456")),
+				Transporter: gost.QUICTransporter(nil),
+			},
 		},
 	)
 

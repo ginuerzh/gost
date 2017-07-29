@@ -9,6 +9,7 @@ type Node struct {
 	Addr      string
 	Protocol  string
 	Transport string
-	User *url.Userinfo
+	User      *url.Userinfo
 	Client    *Client
+	Server    *Server
 }
