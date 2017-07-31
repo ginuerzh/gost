@@ -191,9 +191,12 @@ func (l *quicListener) sessionLoop(session quic.Session) {
 			log.Log("[quic] accept stream:", err)
 			return
 		}
+
+		cc := &quicConn{Stream: stream, laddr: session.LocalAddr(), raddr: session.RemoteAddr()}
 		select {
-		case l.connChan <- &quicConn{Stream: stream, laddr: session.LocalAddr(), raddr: session.RemoteAddr()}:
+		case l.connChan <- cc:
 		default:
+			cc.Close()
 			log.Logf("[quic] %s - %s: connection queue is full", session.RemoteAddr(), session.LocalAddr())
 		}
 	}

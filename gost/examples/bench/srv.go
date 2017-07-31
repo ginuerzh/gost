@@ -156,7 +156,10 @@ func rtcpForwardServer() {
 	if err != nil {
 		log.Fatal()
 	}
-	h := gost.RTCPForwardHandler(":1222", "localhost:22")
+	h := gost.RTCPForwardHandler(
+		":1222",
+		gost.AddrHandlerOption("127.0.0.1:22"),
+	)
 	log.Fatal(s.Serve(ln, h))
 }
 

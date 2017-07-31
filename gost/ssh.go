@@ -85,6 +85,7 @@ func (c *sshRemoteForwardConnector) Connect(conn net.Conn, addr string) (net.Con
 				select {
 				case cc.session.connChan <- rc:
 				default:
+					rc.Close()
 					log.Logf("[ssh-rtcp] %s - %s: connection queue is full", ln.Addr(), addr)
 				}
 			}
@@ -670,9 +671,11 @@ func (l *sshTunnelListener) serveConn(conn net.Conn) {
 					continue
 				}
 				go ssh.DiscardRequests(requests)
+				cc := &sshConn{conn: conn, channel: channel}
 				select {
-				case l.connChan <- &sshConn{conn: conn, channel: channel}:
+				case l.connChan <- cc:
 				default:
+					cc.Close()
 					log.Logf("[ssh] %s - %s: connection queue is full", conn.RemoteAddr(), l.Addr())
 				}
 

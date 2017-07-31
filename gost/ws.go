@@ -217,6 +217,7 @@ func (l *wsListener) upgrade(w http.ResponseWriter, r *http.Request) {
 	select {
 	case l.connChan <- websocketServerConn(conn):
 	default:
+		conn.Close()
 		log.Logf("[ws] %s - %s: connection queue is full", r.RemoteAddr, l.addr)
 	}
 }

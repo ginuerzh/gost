@@ -340,9 +340,7 @@ type socks5Handler struct {
 
 // SOCKS5Handler creates a server Handler for SOCKS5 proxy server.
 func SOCKS5Handler(opts ...HandlerOption) Handler {
-	options := &HandlerOptions{
-		Chain: new(Chain),
-	}
+	options := &HandlerOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -972,9 +970,7 @@ type socks4Handler struct {
 
 // SOCKS4Handler creates a server Handler for SOCKS4(A) proxy server.
 func SOCKS4Handler(opts ...HandlerOption) Handler {
-	options := &HandlerOptions{
-		Chain: new(Chain),
-	}
+	options := &HandlerOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}

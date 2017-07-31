@@ -95,10 +95,6 @@ type kcpConn struct {
 	stream *smux.Stream
 }
 
-func newKCPConn(conn net.Conn, stream *smux.Stream) *kcpConn {
-	return &kcpConn{conn: conn, stream: stream}
-}
-
 func (c *kcpConn) Read(b []byte) (n int, err error) {
 	return c.stream.Read(b)
 }
@@ -141,7 +137,7 @@ func (session *kcpSession) GetConn() (*kcpConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newKCPConn(session.conn, stream), nil
+	return &kcpConn{conn: session.conn, stream: stream}, nil
 }
 
 func (session *kcpSession) Close() error {
@@ -378,9 +374,11 @@ func (l *kcpListener) mux(conn net.Conn) {
 			return
 		}
 
+		cc := &kcpConn{conn: conn, stream: stream}
 		select {
-		case l.connChan <- newKCPConn(conn, stream):
+		case l.connChan <- cc:
 		default:
+			cc.Close()
 			log.Logf("[kcp] %s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
 		}
 	}

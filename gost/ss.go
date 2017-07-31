@@ -95,9 +95,7 @@ type shadowHandler struct {
 // ShadowHandler creates a server Handler for shadowsocks proxy server.
 func ShadowHandler(opts ...HandlerOption) Handler {
 	h := &shadowHandler{
-		options: &HandlerOptions{
-			Chain: new(Chain),
-		},
+		options: &HandlerOptions{},
 	}
 	for _, opt := range opts {
 		opt(h.options)
