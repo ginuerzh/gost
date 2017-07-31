@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"net/url"
 	"time"
 
 	"github.com/ginuerzh/gost/gost"
@@ -33,24 +32,26 @@ func main() {
 
 func udpForwardServer() {
 	s := &gost.Server{}
-	ln, err := gost.UDPForwardListener(laddr, time.Second*3)
+	ln, err := gost.UDPForwardListener(laddr, time.Second*30)
 	if err != nil {
 		log.Fatal(err)
 	}
 	h := gost.UDPForwardHandler(
 		faddr,
-		gost.ChainHandlerOption(gost.NewChain(gost.Node{
-			Protocol:  "socks5",
-			Transport: "tcp",
-			Addr:      ":11080",
-			User:      url.UserPassword("admin", "123456"),
-			Client: &gost.Client{
-				Connector: gost.SOCKS5Connector(
-					url.UserPassword("admin", "123456"),
-				),
-				Transporter: gost.TCPTransporter(),
-			},
-		})),
+		/*
+			gost.ChainHandlerOption(gost.NewChain(gost.Node{
+				Protocol:  "socks5",
+				Transport: "tcp",
+				Addr:      ":11080",
+				User:      url.UserPassword("admin", "123456"),
+				Client: &gost.Client{
+					Connector: gost.SOCKS5Connector(
+						url.UserPassword("admin", "123456"),
+					),
+					Transporter: gost.TCPTransporter(),
+				},
+			})),
+		*/
 	)
 	log.Fatal(s.Serve(ln, h))
 }
