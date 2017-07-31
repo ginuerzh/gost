@@ -872,23 +872,6 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 	log.Logf("[socks5-udp] %s >-< %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
 }
 
-func socks5Handshake(conn net.Conn, user *url.Userinfo) (net.Conn, error) {
-	selector := &clientSelector{
-		TLSConfig: &tls.Config{InsecureSkipVerify: true},
-		User:      user,
-	}
-	selector.AddMethod(
-		gosocks5.MethodNoAuth,
-		gosocks5.MethodUserPass,
-		MethodTLS,
-	)
-	cc := gosocks5.ClientConn(conn, selector)
-	if err := cc.Handleshake(); err != nil {
-		return nil, err
-	}
-	return cc, nil
-}
-
 func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error) {
 	errc := make(chan error, 2)
 
@@ -1072,4 +1055,55 @@ func (h *socks4Handler) handleBind(conn net.Conn, req *gosocks4.Request) {
 	log.Logf("[socks4-bind] %s <-> %s", conn.RemoteAddr(), cc.RemoteAddr())
 	transport(conn, cc)
 	log.Logf("[socks4-bind] %s >-< %s", conn.RemoteAddr(), cc.RemoteAddr())
+}
+
+func getSOCKS5UDPTunnel(chain *Chain) (net.Conn, error) {
+	conn, err := chain.Conn()
+	if err != nil {
+		return nil, err
+	}
+	cc, err := socks5Handshake(conn, chain.LastNode().User)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn = cc
+
+	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	if err = gosocks5.NewRequest(CmdUDPTun, nil).Write(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn.SetWriteDeadline(time.Time{})
+
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	reply, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	if reply.Rep != gosocks5.Succeeded {
+		conn.Close()
+		return nil, errors.New("UDP tunnel failure")
+	}
+	return conn, nil
+}
+
+func socks5Handshake(conn net.Conn, user *url.Userinfo) (net.Conn, error) {
+	selector := &clientSelector{
+		TLSConfig: &tls.Config{InsecureSkipVerify: true},
+		User:      user,
+	}
+	selector.AddMethod(
+		gosocks5.MethodNoAuth,
+		gosocks5.MethodUserPass,
+		MethodTLS,
+	)
+	cc := gosocks5.ClientConn(conn, selector)
+	if err := cc.Handleshake(); err != nil {
+		return nil, err
+	}
+	return cc, nil
 }
