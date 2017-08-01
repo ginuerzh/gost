@@ -41,6 +41,7 @@ func main() {
 	go sshTunnelServer()
 	// go http2Server()
 	go quicServer()
+	go shadowUDPServer()
 	select {}
 }
 
@@ -235,6 +236,16 @@ func quicServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
+	log.Fatal(s.Serve(ln, h))
+}
+
+func shadowUDPServer() {
+	s := &gost.Server{}
+	ln, err := gost.ShadowUDPListener(":18338", url.UserPassword("chacha20", "123456"), 30*time.Second)
+	if err != nil {
+		log.Fatal(err)
+	}
+	h := gost.ShadowUDPdHandler()
 	log.Fatal(s.Serve(ln, h))
 }
 

@@ -48,7 +48,6 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 
 type udpDirectForwardHandler struct {
 	raddr   string
-	ttl     time.Duration
 	options *HandlerOptions
 }
 
@@ -168,7 +167,7 @@ func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {
 }
 
 type udpDirectForwardListener struct {
-	ln       *net.UDPConn
+	ln       net.PacketConn
 	conns    map[string]*udpServerConn
 	connChan chan net.Conn
 	errChan  chan error
@@ -199,7 +198,7 @@ func UDPDirectForwardListener(addr string, ttl time.Duration) (Listener, error) 
 func (l *udpDirectForwardListener) listenLoop() {
 	for {
 		b := make([]byte, mediumBufferSize)
-		n, raddr, err := l.ln.ReadFromUDP(b)
+		n, raddr, err := l.ln.ReadFrom(b)
 		if err != nil {
 			log.Logf("[udp] peer -> %s : %s", l.Addr(), err)
 			l.ln.Close()
@@ -226,7 +225,7 @@ func (l *udpDirectForwardListener) listenLoop() {
 		select {
 		case conn.rChan <- b[:n]:
 		default:
-			log.Logf("[udp] %s -> %s : write queue is full", raddr, l.Addr())
+			log.Logf("[udp] %s -> %s : read queue is full", raddr, l.Addr())
 		}
 	}
 }
