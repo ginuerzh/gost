@@ -24,11 +24,11 @@ func sshRemoteForward() {
 	)
 
 	s := &gost.Server{}
-	ln, err := gost.RTCPForwardListener(":11800", chain)
+	ln, err := gost.TCPRemoteForwardListener(":11800", chain)
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := gost.RTCPForwardHandler(
+	h := gost.TCPRemoteForwardHandler(
 		"localhost:10000",
 	)
 	log.Fatal(s.Serve(ln, h))

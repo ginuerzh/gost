@@ -747,7 +747,7 @@ func (h *socks5Handler) tunnelClientUDP(uc *net.UDPConn, cc net.Conn) (err error
 	var clientAddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, largeBufferSize)
+		b := make([]byte, mediumBufferSize)
 
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
@@ -876,12 +876,12 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 	errc := make(chan error, 2)
 
 	go func() {
-		b := make([]byte, largeBufferSize)
+		b := make([]byte, mediumBufferSize)
 
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
 			if err != nil {
-				// log.Logf("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), addr, err)
+				log.Logf("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), addr, err)
 				errc <- err
 				return
 			}
@@ -904,7 +904,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 		for {
 			dgram, err := gosocks5.ReadUDPDatagram(cc)
 			if err != nil {
-				// log.Logf("[udp-tun] %s -> 0 : %s", cc.RemoteAddr(), err)
+				log.Logf("[udp-tun] %s -> 0 : %s", cc.RemoteAddr(), err)
 				errc <- err
 				return
 			}
@@ -1057,7 +1057,7 @@ func (h *socks4Handler) handleBind(conn net.Conn, req *gosocks4.Request) {
 	log.Logf("[socks4-bind] %s >-< %s", conn.RemoteAddr(), cc.RemoteAddr())
 }
 
-func getSOCKS5UDPTunnel(chain *Chain) (net.Conn, error) {
+func getSOCKS5UDPTunnel(chain *Chain, addr net.Addr) (net.Conn, error) {
 	conn, err := chain.Conn()
 	if err != nil {
 		return nil, err
@@ -1070,9 +1070,13 @@ func getSOCKS5UDPTunnel(chain *Chain) (net.Conn, error) {
 	conn = cc
 
 	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	if err = gosocks5.NewRequest(CmdUDPTun, nil).Write(conn); err != nil {
+	req := gosocks5.NewRequest(CmdUDPTun, toSocksAddr(addr))
+	if err := req.Write(conn); err != nil {
 		conn.Close()
 		return nil, err
+	}
+	if Debug {
+		log.Log("[socks5]", req)
 	}
 	conn.SetWriteDeadline(time.Time{})
 
@@ -1083,6 +1087,9 @@ func getSOCKS5UDPTunnel(chain *Chain) (net.Conn, error) {
 		return nil, err
 	}
 	conn.SetReadDeadline(time.Time{})
+	if Debug {
+		log.Log("[socks5]", reply)
+	}
 
 	if reply.Rep != gosocks5.Succeeded {
 		conn.Close()
@@ -1106,4 +1113,48 @@ func socks5Handshake(conn net.Conn, user *url.Userinfo) (net.Conn, error) {
 		return nil, err
 	}
 	return cc, nil
+}
+
+type udpTunnelConn struct {
+	raddr string
+	net.Conn
+}
+
+func (c *udpTunnelConn) Read(b []byte) (n int, err error) {
+	dgram, err := gosocks5.ReadUDPDatagram(c.Conn)
+	if err != nil {
+		return
+	}
+	n = copy(b, dgram.Data)
+	return
+}
+
+func (c *udpTunnelConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+	dgram, err := gosocks5.ReadUDPDatagram(c.Conn)
+	if err != nil {
+		return
+	}
+	n = copy(b, dgram.Data)
+	addr, err = net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+	return
+}
+
+func (c *udpTunnelConn) Write(b []byte) (n int, err error) {
+	addr, err := net.ResolveUDPAddr("udp", c.raddr)
+	if err != nil {
+		return
+	}
+	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(addr)), b)
+	if err = dgram.Write(c.Conn); err != nil {
+		return
+	}
+	return len(b), nil
+}
+
+func (c *udpTunnelConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(addr)), b)
+	if err = dgram.Write(c.Conn); err != nil {
+		return
+	}
+	return len(b), nil
 }

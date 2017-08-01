@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/ginuerzh/gost/gost"
 )
@@ -132,13 +133,13 @@ func tcpForwardServer() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := gost.TCPForwardHandler("localhost:22")
+	h := gost.TCPDirectForwardHandler("localhost:22")
 	log.Fatal(s.Serve(ln, h))
 }
 
 func rtcpForwardServer() {
 	s := &gost.Server{}
-	ln, err := gost.RTCPForwardListener(
+	ln, err := gost.TCPRemoteForwardListener(
 		":1222",
 		gost.NewChain(
 			gost.Node{
@@ -156,7 +157,7 @@ func rtcpForwardServer() {
 	if err != nil {
 		log.Fatal()
 	}
-	h := gost.RTCPForwardHandler(
+	h := gost.TCPRemoteForwardHandler(
 		":1222",
 		gost.AddrHandlerOption("127.0.0.1:22"),
 	)
@@ -165,7 +166,7 @@ func rtcpForwardServer() {
 
 func rudpForwardServer() {
 	s := &gost.Server{}
-	ln, err := gost.RUDPForwardListener(
+	ln, err := gost.UDPRemoteForwardListener(
 		":10053",
 		gost.NewChain(
 			gost.Node{
@@ -179,11 +180,12 @@ func rudpForwardServer() {
 				},
 			},
 		),
+		30*time.Second,
 	)
 	if err != nil {
 		log.Fatal()
 	}
-	h := gost.RUDPForwardHandler(":10053", "localhost:53")
+	h := gost.UDPRemoteForwardHandler("localhost:53")
 	log.Fatal(s.Serve(ln, h))
 }
 

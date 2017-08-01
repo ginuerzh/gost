@@ -27,19 +27,15 @@ func init() {
 	}
 }
 func main() {
-	udpForwardServer()
+	udpRemoteForwardServer()
 }
 
-func udpForwardServer() {
+func udpRemoteForwardServer() {
 	s := &gost.Server{}
-	ln, err := gost.UDPForwardListener(laddr, time.Second*30)
-	if err != nil {
-		log.Fatal(err)
-	}
-	h := gost.UDPForwardHandler(
-		faddr,
+	ln, err := gost.UDPRemoteForwardListener(
+		laddr,
 		/*
-			gost.ChainHandlerOption(gost.NewChain(gost.Node{
+			gost.NewChain(gost.Node{
 				Protocol:  "socks5",
 				Transport: "tcp",
 				Addr:      ":11080",
@@ -50,8 +46,15 @@ func udpForwardServer() {
 					),
 					Transporter: gost.TCPTransporter(),
 				},
-			})),
+			}),
 		*/
+		nil,
+		time.Second*30)
+	if err != nil {
+		log.Fatal(err)
+	}
+	h := gost.UDPRemoteForwardHandler(
+		faddr,
 	)
 	log.Fatal(s.Serve(ln, h))
 }

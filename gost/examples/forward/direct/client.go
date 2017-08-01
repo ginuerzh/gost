@@ -26,7 +26,7 @@ func tcpForward() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := gost.TCPForwardHandler(
+	h := gost.TCPDirectForwardHandler(
 		"localhost:22",
 		gost.ChainHandlerOption(chain),
 	)

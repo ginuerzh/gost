@@ -4,6 +4,7 @@
 package gosocks5
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -658,10 +659,14 @@ func (d *UDPDatagram) Write(w io.Writer) error {
 	if h == nil {
 		h = &UDPHeader{}
 	}
-	if err := h.Write(w); err != nil {
+	buf := bytes.Buffer{}
+	if err := h.Write(&buf); err != nil {
 		return err
 	}
-	_, err := w.Write(d.Data)
+	if _, err := buf.Write(d.Data); err != nil {
+		return err
+	}
 
+	_, err := buf.WriteTo(w)
 	return err
 }
