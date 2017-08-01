@@ -19,7 +19,8 @@ func ssuClient() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	conn, err := net.ListenUDP("udp", nil)
+	laddr, _ := net.ResolveUDPAddr("udp", ":10800")
+	conn, err := net.ListenUDP("udp", laddr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -29,13 +30,22 @@ func ssuClient() {
 	}
 	cc := ss.NewSecurePacketConn(conn, cp, false)
 
-	raddr, _ := net.ResolveTCPAddr("udp", ":8080")
+	raddr, _ := net.ResolveUDPAddr("udp", ":8080")
 	msg := []byte(`abcdefghijklmnopqrstuvwxyz`)
 	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, toSocksAddr(raddr)), msg)
 	buf := bytes.Buffer{}
 	dgram.Write(&buf)
-	if _, err := cc.WriteTo(buf.Bytes()[3:], addr); err != nil {
-		log.Fatal(err)
+	for {
+		log.Printf("%# x", buf.Bytes()[3:])
+		if _, err := cc.WriteTo(buf.Bytes()[3:], addr); err != nil {
+			log.Fatal(err)
+		}
+		b := make([]byte, 1024)
+		n, adr, err := cc.ReadFrom(b)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("%s: %# x", adr, b[:n])
 	}
 }
 

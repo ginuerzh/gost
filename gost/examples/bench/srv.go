@@ -245,7 +245,22 @@ func shadowUDPServer() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := gost.ShadowUDPdHandler()
+	h := gost.ShadowUDPdHandler(
+	/*
+		gost.ChainHandlerOption(gost.NewChain(
+			gost.Node{
+				Protocol:  "socks5",
+				Transport: "tcp",
+				Addr:      "localhost:11080",
+				User:      url.UserPassword("admin", "123456"),
+				Client: &gost.Client{
+					Connector:   gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+					Transporter: gost.TCPTransporter(),
+				},
+			},
+		)),
+	*/
+	)
 	log.Fatal(s.Serve(ln, h))
 }
 
