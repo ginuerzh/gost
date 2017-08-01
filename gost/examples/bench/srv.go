@@ -34,8 +34,8 @@ func main() {
 	go wsServer()
 	go wssServer()
 	go kcpServer()
-	// go tcpForwardServer()
-	// go rtcpForwardServer()
+	go tcpForwardServer()
+	go tcpRemoteForwardServer()
 	// go rudpForwardServer()
 	// go tcpRedirectServer()
 	go sshTunnelServer()
@@ -138,29 +138,32 @@ func tcpForwardServer() {
 	log.Fatal(s.Serve(ln, h))
 }
 
-func rtcpForwardServer() {
+func tcpRemoteForwardServer() {
 	s := &gost.Server{}
 	ln, err := gost.TCPRemoteForwardListener(
 		":1222",
-		gost.NewChain(
-			gost.Node{
-				Protocol:  "socks5",
-				Transport: "tcp",
-				Addr:      "localhost:12345",
-				User:      url.UserPassword("admin", "123456"),
-				Client: &gost.Client{
-					Connector:   gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
-					Transporter: gost.TCPTransporter(),
+		/*
+			gost.NewChain(
+				gost.Node{
+					Protocol:  "socks5",
+					Transport: "tcp",
+					Addr:      "localhost:12345",
+					User:      url.UserPassword("admin", "123456"),
+					Client: &gost.Client{
+						Connector:   gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+						Transporter: gost.TCPTransporter(),
+					},
 				},
-			},
-		),
+			),
+		*/
+		nil,
 	)
 	if err != nil {
 		log.Fatal()
 	}
 	h := gost.TCPRemoteForwardHandler(
-		":1222",
-		gost.AddrHandlerOption("127.0.0.1:22"),
+		":22",
+		//gost.AddrHandlerOption("127.0.0.1:22"),
 	)
 	log.Fatal(s.Serve(ln, h))
 }

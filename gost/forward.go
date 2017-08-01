@@ -405,6 +405,7 @@ func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
 type tcpRemoteForwardListener struct {
 	addr   net.Addr
 	chain  *Chain
+	ln     net.Listener
 	closed chan struct{}
 }
 
@@ -463,7 +464,13 @@ func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 			cc.Close()
 		}
 	} else {
-		err = errors.New("invalid chain")
+		if l.ln == nil {
+			l.ln, err = net.Listen("tcp", l.addr.String())
+			if err != nil {
+				return
+			}
+		}
+		conn, err = l.ln.Accept()
 	}
 	return
 }
