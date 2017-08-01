@@ -184,10 +184,11 @@ func (h *http2Handler) Handle(conn net.Conn) {
 }
 
 func (h *http2Handler) handleFunc(w http.ResponseWriter, r *http.Request) {
-	target := r.Header.Get("Gost-Target") // compitable with old version
-	if target == "" {
-		target = r.Host
-	}
+	// target := r.Header.Get("Gost-Target") // compitable with old version
+	// if target == "" {
+	// 	target = r.Host
+	// }
+	target := r.Host
 	if !strings.Contains(target, ":") {
 		target += ":80"
 	}
@@ -289,27 +290,6 @@ func (h *http2Handler) handleFunc(w http.ResponseWriter, r *http.Request) {
 		log.Logf("[http2] %s <- %s : %s", r.RemoteAddr, target, err)
 	}
 	log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
-}
-
-type http2Listener struct {
-	ln net.Listener
-}
-
-// HTTP2Listener creates a Listener for server using HTTP2 as transport.
-func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
-	var ln net.Listener
-	var err error
-
-	if config != nil {
-		ln, err = tls.Listen("tcp", addr, config)
-	} else {
-		ln, err = net.Listen("tcp", addr)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return ln, err
-	//return &http2Listener{ln: ln}, nil
 }
 
 type http2Session struct {

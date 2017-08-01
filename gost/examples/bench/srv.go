@@ -39,7 +39,7 @@ func main() {
 	// go rudpForwardServer()
 	// go tcpRedirectServer()
 	go sshTunnelServer()
-	// go http2Server()
+	go http2Server()
 	go quicServer()
 	go shadowUDPServer()
 	select {}
