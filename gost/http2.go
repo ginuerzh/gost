@@ -148,7 +148,99 @@ func (tr *http2Transporter) Multiplex() bool {
 	return true
 }
 
+type h2Transporter struct {
+	clients     map[string]*http.Client
+	clientMutex sync.Mutex
+	tlsConfig   *tls.Config
+}
+
+func H2Transporter() Transporter {
+	return &h2Transporter{
+		clients:   make(map[string]*http.Client),
+		tlsConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+}
+
+func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
+	opts := &DialOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	tr.clientMutex.Lock()
+	client, ok := tr.clients[addr]
+	if !ok {
+		transport := http2.Transport{
+			TLSClientConfig: tr.tlsConfig,
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				conn, err := opts.Chain.Dial(addr)
+				if err != nil {
+					return nil, err
+				}
+				if cfg == nil {
+					return conn, nil
+				}
+				return wrapTLSClient(conn, cfg)
+			},
+		}
+		client = &http.Client{Transport: &transport}
+		tr.clients[addr] = client
+	}
+	tr.clientMutex.Unlock()
+
+	pr, pw := io.Pipe()
+	req := &http.Request{
+		Method:        http.MethodConnect,
+		URL:           &url.URL{Scheme: "https", Host: addr},
+		Header:        make(http.Header),
+		Proto:         "HTTP/2.0",
+		ProtoMajor:    2,
+		ProtoMinor:    0,
+		Body:          pr,
+		Host:          addr,
+		ContentLength: -1,
+	}
+	if Debug {
+		dump, _ := httputil.DumpRequest(req, false)
+		log.Log("[http2]", string(dump))
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if Debug {
+		dump, _ := httputil.DumpResponse(resp, false)
+		log.Log("[http2]", string(dump))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, errors.New(resp.Status)
+	}
+	conn := &http2Conn{
+		r:      resp.Body,
+		w:      pw,
+		closed: make(chan struct{}),
+	}
+	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", addr)
+	conn.localAddr = &net.TCPAddr{IP: net.IPv4zero, Port: 0}
+	return conn, nil
+}
+
+func (tr *h2Transporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	opts := &HandshakeOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	return conn, nil
+}
+
+func (tr *h2Transporter) Multiplex() bool {
+	return true
+}
+
 type http2Handler struct {
+	base    *http.Server
 	server  *http2.Server
 	options *HandlerOptions
 }
@@ -156,17 +248,30 @@ type http2Handler struct {
 // HTTP2Handler creates a server Handler for HTTP2 proxy server.
 func HTTP2Handler(opts ...HandlerOption) Handler {
 	h := &http2Handler{
-		server:  new(http2.Server),
 		options: new(HandlerOptions),
 	}
 	for _, opt := range opts {
 		opt(h.options)
+	}
+
+	h.base = &http.Server{
+		Addr:      h.options.Addr,
+		TLSConfig: h.options.TLSConfig,
+		Handler:   http.HandlerFunc(h.handleFunc),
+	}
+	h.server = new(http2.Server)
+	if err := http2.ConfigureServer(h.base, h.server); err != nil {
+		log.Log("[http2]", err)
 	}
 	return h
 }
 
 func (h *http2Handler) Handle(conn net.Conn) {
 	defer conn.Close()
+
+	if h.options.TLSConfig != nil {
+		conn = tls.Server(conn, h.options.TLSConfig)
+	}
 
 	if tc, ok := conn.(*tls.Conn); ok {
 		// NOTE: HTTP2 server will check the TLS version,
@@ -178,7 +283,8 @@ func (h *http2Handler) Handle(conn net.Conn) {
 	}
 
 	opt := http2.ServeConnOpts{
-		Handler: http.HandlerFunc(h.handleFunc),
+		BaseConfig: h.base,
+		Handler:    http.HandlerFunc(h.handleFunc),
 	}
 	h.server.ServeConn(conn, &opt)
 }
@@ -292,6 +398,132 @@ func (h *http2Handler) handleFunc(w http.ResponseWriter, r *http.Request) {
 	log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
 }
 
+type h2Listener struct {
+	net.Listener
+	server    *http2.Server
+	tlsConfig *tls.Config
+	connChan  chan net.Conn
+	errChan   chan error
+}
+
+func H2Listener(addr string, config *tls.Config) (Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	l := &h2Listener{
+		Listener: ln,
+		server: &http2.Server{
+			MaxConcurrentStreams:         1000,
+			PermitProhibitedCipherSuites: true,
+		},
+		tlsConfig: config,
+		connChan:  make(chan net.Conn, 1024),
+		errChan:   make(chan error, 1),
+	}
+	go l.listenLoop()
+
+	return l, nil
+}
+
+func H2CListener(addr string) (Listener, error) {
+	return H2Listener(addr, nil)
+}
+
+func (l *h2Listener) listenLoop() {
+	for {
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			log.Log("[http2] accept:", err)
+			l.errChan <- err
+			close(l.errChan)
+			return
+		}
+		go l.handleLoop(conn)
+	}
+}
+
+func (l *h2Listener) handleLoop(conn net.Conn) {
+	if l.tlsConfig != nil {
+		conn = tls.Server(conn, l.tlsConfig)
+	}
+
+	if tc, ok := conn.(*tls.Conn); ok {
+		// NOTE: HTTP2 server will check the TLS version,
+		// so we must ensure that the TLS connection is handshake completed.
+		if err := tc.Handshake(); err != nil {
+			log.Logf("[http2] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+			return
+		}
+	}
+
+	opt := http2.ServeConnOpts{
+		Handler: http.HandlerFunc(l.handleFunc),
+	}
+	l.server.ServeConn(conn, &opt)
+}
+
+func (l *h2Listener) handleFunc(w http.ResponseWriter, r *http.Request) {
+	log.Logf("[http2] %s %s - %s %s", r.Method, r.RemoteAddr, r.Host, r.Proto)
+	if Debug {
+		dump, _ := httputil.DumpRequest(r, false)
+		log.Log("[http2]", string(dump))
+	}
+	w.Header().Set("Proxy-Agent", "gost/"+Version)
+	conn, err := l.upgrade(w, r)
+	if err != nil {
+		log.Logf("[http2] %s %s - %s %s", r.Method, r.RemoteAddr, r.Host, r.Proto)
+		return
+	}
+	select {
+	case l.connChan <- conn:
+	default:
+		conn.Close()
+		log.Logf("[http2] %s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
+	}
+
+	<-conn.closed // wait for streaming
+}
+
+func (l *h2Listener) upgrade(w http.ResponseWriter, r *http.Request) (*http2Conn, error) {
+	if r.Method != http.MethodConnect {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return nil, errors.New("Method not allowed")
+	}
+	w.WriteHeader(http.StatusOK)
+	if fw, ok := w.(http.Flusher); ok {
+		fw.Flush() // write header to client
+	}
+
+	remoteAddr, _ := net.ResolveTCPAddr("tcp", r.RemoteAddr)
+	if remoteAddr == nil {
+		remoteAddr = &net.TCPAddr{
+			IP:   net.IPv4zero,
+			Port: 0,
+		}
+	}
+	conn := &http2Conn{
+		r:          r.Body,
+		w:          flushWriter{w},
+		localAddr:  l.Listener.Addr(),
+		remoteAddr: remoteAddr,
+		closed:     make(chan struct{}),
+	}
+	return conn, nil
+}
+
+func (l *h2Listener) Accept() (conn net.Conn, err error) {
+	var ok bool
+	select {
+	case conn = <-l.connChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
+		}
+	}
+	return
+}
+
 type http2Session struct {
 	conn       net.Conn
 	clientConn *http2.ClientConn
@@ -383,6 +615,7 @@ type http2Conn struct {
 	w          io.Writer
 	remoteAddr net.Addr
 	localAddr  net.Addr
+	closed     chan struct{}
 }
 
 func (c *http2Conn) Read(b []byte) (n int, err error) {
@@ -394,6 +627,12 @@ func (c *http2Conn) Write(b []byte) (n int, err error) {
 }
 
 func (c *http2Conn) Close() (err error) {
+	select {
+	case <-c.closed:
+		return
+	default:
+		close(c.closed)
+	}
 	if rc, ok := c.r.(io.Closer); ok {
 		err = rc.Close()
 	}
@@ -470,6 +709,7 @@ func (fw flushWriter) Write(p []byte) (n int, err error) {
 		if r := recover(); r != nil {
 			if s, ok := r.(string); ok {
 				err = errors.New(s)
+				log.Log("[http2]", err)
 				return
 			}
 			err = r.(error)

@@ -89,7 +89,7 @@ func (h *httpHandler) Handle(conn net.Conn) {
 
 	req, err := http.ReadRequest(bufio.NewReader(conn))
 	if err != nil {
-		log.Log("[http]", err)
+		log.Logf("[http] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 

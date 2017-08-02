@@ -45,8 +45,17 @@ func main() {
 func http2Server() {
 
 	s := &gost.Server{}
-	var err error
-	var ln gost.Listener
+	ln, err := gost.TCPListener(laddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var users []*url.Userinfo
+	if user != "" || passwd != "" {
+		users = append(users, url.UserPassword(user, passwd))
+	}
+
+	var tlsConfig *tls.Config
 	if tlsEnabled {
 		cert, er := tls.LoadX509KeyPair(certFile, keyFile)
 		if er != nil {
@@ -56,20 +65,12 @@ func http2Server() {
 				panic(er)
 			}
 		}
-		ln, err = gost.TLSListener(laddr, &tls.Config{Certificates: []tls.Certificate{cert}}) // HTTP2 h2 mode
-	} else {
-		ln, err = gost.TCPListener(laddr)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var users []*url.Userinfo
-	if user != "" || passwd != "" {
-		users = append(users, url.UserPassword(user, passwd))
+		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 	}
 	h := gost.HTTP2Handler(
 		gost.UsersHandlerOption(users...),
+		gost.AddrHandlerOption(laddr),
+		gost.TLSConfigHandlerOption(tlsConfig),
 	)
 	log.Fatal(s.Serve(ln, h))
 }

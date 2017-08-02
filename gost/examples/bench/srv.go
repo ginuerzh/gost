@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ginuerzh/gost/gost"
+	"golang.org/x/net/http2"
 )
 
 var (
@@ -19,6 +20,7 @@ func init() {
 
 	flag.BoolVar(&quiet, "q", false, "quiet mode")
 	flag.BoolVar(&gost.Debug, "d", false, "debug mode")
+	flag.BoolVar(&http2.VerboseLogs, "v", false, "HTTP2 verbose logs")
 	flag.Parse()
 
 	if quiet {
@@ -40,6 +42,7 @@ func main() {
 	// go tcpRedirectServer()
 	go sshTunnelServer()
 	go http2Server()
+	go http2TunnelServer()
 	go quicServer()
 	go shadowUDPServer()
 	select {}
@@ -230,6 +233,19 @@ func http2Server() {
 	log.Fatal(s.Serve(ln, h))
 }
 
+func http2TunnelServer() {
+	s := &gost.Server{}
+	ln, err := gost.H2Listener(":8443", tlsConfig()) // HTTP2 h2 mode
+	// ln, err := gost.H2Listener(":8443", nil) // HTTP2 h2c mode
+	if err != nil {
+		log.Fatal(err)
+	}
+	h := gost.HTTPHandler(
+		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+	)
+	log.Fatal(s.Serve(ln, h))
+}
+
 func quicServer() {
 	s := &gost.Server{}
 	ln, err := gost.QUICListener("localhost:6121", &gost.QUICConfig{TLSConfig: tlsConfig()})
@@ -320,5 +336,8 @@ func tlsConfig() *tls.Config {
 	if err != nil {
 		panic(err)
 	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}
+	return &tls.Config{
+		Certificates:             []tls.Certificate{cert},
+		PreferServerCipherSuites: true,
+	}
 }
