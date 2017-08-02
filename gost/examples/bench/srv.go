@@ -236,12 +236,16 @@ func http2Server() {
 func http2TunnelServer() {
 	s := &gost.Server{}
 	ln, err := gost.H2Listener(":8443", tlsConfig()) // HTTP2 h2 mode
-	// ln, err := gost.H2Listener(":8443", nil) // HTTP2 h2c mode
+	// ln, err := gost.H2CListener(":8443") // HTTP2 h2c mode
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := gost.HTTPHandler(
+	// h := gost.HTTPHandler(
+	// 	gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+	// )
+	h := gost.SOCKS5Handler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
+		gost.TLSConfigHandlerOption(tlsConfig()),
 	)
 	log.Fatal(s.Serve(ln, h))
 }

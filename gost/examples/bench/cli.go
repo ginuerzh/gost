@@ -152,8 +152,10 @@ func main() {
 		gost.Node{
 			Addr: "localhost:8443",
 			Client: &gost.Client{
-				Connector:   gost.HTTPConnector(url.UserPassword("admin", "123456")),
-				Transporter: gost.H2Transporter(),
+				// Connector: gost.HTTPConnector(url.UserPassword("admin", "123456")),
+				Connector: gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
+				// Transporter: gost.H2CTransporter(), // HTTP2 h2c mode
+				Transporter: gost.H2Transporter(), // HTTP2 h2
 			},
 		},
 	)

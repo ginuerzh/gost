@@ -16,14 +16,12 @@ var (
 	keyFile, certFile string
 	laddr             string
 	user, passwd      string
-	tlsEnabled        bool
 )
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	flag.StringVar(&laddr, "L", ":1443", "listen address")
-	flag.BoolVar(&tlsEnabled, "tls", true, "enable TLS (h2)")
 	flag.StringVar(&user, "u", "", "username")
 	flag.StringVar(&passwd, "p", "", "password")
 	flag.BoolVar(&quiet, "q", false, "quiet mode")
@@ -43,9 +41,17 @@ func main() {
 }
 
 func http2Server() {
+	cert, er := tls.LoadX509KeyPair(certFile, keyFile)
+	if er != nil {
+		log.Println(er)
+		cert, er = tls.X509KeyPair(rawCert, rawKey)
+		if er != nil {
+			panic(er)
+		}
+	}
 
 	s := &gost.Server{}
-	ln, err := gost.TCPListener(laddr)
+	ln, err := gost.HTTP2Listener(laddr, &tls.Config{Certificates: []tls.Certificate{cert}})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,22 +61,9 @@ func http2Server() {
 		users = append(users, url.UserPassword(user, passwd))
 	}
 
-	var tlsConfig *tls.Config
-	if tlsEnabled {
-		cert, er := tls.LoadX509KeyPair(certFile, keyFile)
-		if er != nil {
-			log.Println(er)
-			cert, er = tls.X509KeyPair(rawCert, rawKey)
-			if er != nil {
-				panic(er)
-			}
-		}
-		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
-	}
 	h := gost.HTTP2Handler(
 		gost.UsersHandlerOption(users...),
 		gost.AddrHandlerOption(laddr),
-		gost.TLSConfigHandlerOption(tlsConfig),
 	)
 	log.Fatal(s.Serve(ln, h))
 }
