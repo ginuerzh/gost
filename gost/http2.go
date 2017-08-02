@@ -318,8 +318,6 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cc.Close()
 
-	log.Logf("[http2] %s <-> %s", r.RemoteAddr, target)
-
 	if r.Method == http.MethodConnect {
 		w.WriteHeader(http.StatusOK)
 		if fw, ok := w.(http.Flusher); ok {
@@ -337,12 +335,13 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 			}
 			defer conn.Close()
 
-			log.Logf("[http2] %s -> %s : downgrade to HTTP/1.1", r.RemoteAddr, target)
+			log.Logf("[http2] %s <-> %s : downgrade to HTTP/1.1", r.RemoteAddr, target)
 			transport(conn, cc)
 			log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
 			return
 		}
 
+		log.Logf("[http2] %s <-> %s", r.RemoteAddr, target)
 		errc := make(chan error, 2)
 		go func() {
 			_, err := io.Copy(cc, r.Body)
@@ -361,6 +360,7 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Logf("[http2] %s <-> %s", r.RemoteAddr, target)
 	if err = r.Write(cc); err != nil {
 		log.Logf("[http2] %s -> %s : %s", r.RemoteAddr, target, err)
 		return

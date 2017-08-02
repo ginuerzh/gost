@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-log/log"
 )
@@ -118,13 +119,14 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	}
 
 	req.Header.Del("Proxy-Authorization")
+	req.Header.Del("Proxy-Connection")
 
 	// forward http request
-	//lastNode := s.Base.Chain.lastNode
-	//if lastNode != nil && lastNode.Transport == "" && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
-	//	s.forwardRequest(req)
-	//	return
-	//}
+	lastNode := h.options.Chain.LastNode()
+	if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
+		h.forwardRequest(conn, req)
+		return
+	}
 
 	// if !s.Base.Node.Can("tcp", req.Host) {
 	//	glog.Errorf("Unauthorized to tcp connect to %s", req.Host)
@@ -168,6 +170,48 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
 	transport(conn, cc)
 	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
+}
+
+func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request) {
+	if h.options.Chain.IsEmpty() {
+		return
+	}
+	lastNode := h.options.Chain.LastNode()
+
+	cc, err := h.options.Chain.Conn()
+	if err != nil {
+		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), lastNode.Addr, err)
+
+		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), lastNode.Addr, string(b))
+		}
+		conn.Write(b)
+		return
+	}
+	defer cc.Close()
+
+	if lastNode.User != nil {
+		s := lastNode.User.String()
+		if _, set := lastNode.User.Password(); !set {
+			s += ":"
+		}
+		req.Header.Set("Proxy-Authorization",
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
+	}
+
+	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	if err = req.WriteProxy(cc); err != nil {
+		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+		return
+	}
+	cc.SetWriteDeadline(time.Time{})
+
+	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
+	transport(conn, cc)
+	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
+	return
 }
 
 func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
