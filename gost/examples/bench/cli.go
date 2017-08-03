@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ginuerzh/gost/gost"
+	"golang.org/x/net/http2"
 )
 
 var (
@@ -25,6 +26,7 @@ func init() {
 	flag.IntVar(&requests, "n", 1, "Number of requests to perform")
 	flag.IntVar(&concurrency, "c", 1, "Number of multiple requests to make at a time")
 	flag.BoolVar(&quiet, "q", false, "quiet mode")
+	flag.BoolVar(&http2.VerboseLogs, "v", false, "HTTP2 verbose logs")
 	flag.BoolVar(&gost.Debug, "d", false, "debug mode")
 	flag.Parse()
 
@@ -103,17 +105,13 @@ func main() {
 		*/
 
 		/*
-			// http2+tls, http2+tcp
+			// http2
 			gost.Node{
 				Addr: "127.0.0.1:1443",
-				Client: gost.NewClient(
-					gost.HTTP2Connector(url.UserPassword("admin", "123456")),
-					gost.HTTP2Transporter(
-						nil,
-						&tls.Config{InsecureSkipVerify: true}, // or nil, will use h2c mode (http2+tcp).
-						time.Second*1,
-					),
-				),
+				Client: &gost.Client{
+					Connector:   gost.HTTP2Connector(url.UserPassword("admin", "123456")),
+					Transporter: gost.HTTP2Transporter(nil),
+				},
 			},
 		*/
 
@@ -149,13 +147,14 @@ func main() {
 				},
 			},
 		*/
+		// socks5+h2
 		gost.Node{
 			Addr: "localhost:8443",
 			Client: &gost.Client{
 				// Connector: gost.HTTPConnector(url.UserPassword("admin", "123456")),
 				Connector: gost.SOCKS5Connector(url.UserPassword("admin", "123456")),
 				// Transporter: gost.H2CTransporter(), // HTTP2 h2c mode
-				Transporter: gost.H2Transporter(), // HTTP2 h2
+				Transporter: gost.H2Transporter(nil), // HTTP2 h2
 			},
 		},
 	)

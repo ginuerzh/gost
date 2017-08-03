@@ -222,8 +222,7 @@ func http2Server() {
 	// http2.VerboseLogs = true
 
 	s := &gost.Server{}
-	ln, err := gost.TLSListener(":1443", tlsConfig()) // HTTP2 h2 mode
-	// ln, err := gost.TCPListener(":1443") // HTTP2 h2c mode
+	ln, err := gost.HTTP2Listener(":1443", tlsConfig())
 	if err != nil {
 		log.Fatal(err)
 	}

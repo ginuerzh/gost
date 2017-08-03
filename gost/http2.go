@@ -2,12 +2,10 @@ package gost
 
 import (
 	"bufio"
-	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -31,37 +29,36 @@ func HTTP2Connector(user *url.Userinfo) Connector {
 }
 
 func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
-	cc, ok := conn.(*http2DummyConn)
+	cc, ok := conn.(*http2ClientConn)
 	if !ok {
 		return nil, errors.New("wrong connection type")
 	}
 
 	pr, pw := io.Pipe()
-	u := &url.URL{
-		Host: addr,
+	req := &http.Request{
+		Method:        http.MethodConnect,
+		URL:           &url.URL{Scheme: "https", Host: addr},
+		Header:        make(http.Header),
+		Proto:         "HTTP/2.0",
+		ProtoMajor:    2,
+		ProtoMinor:    0,
+		Body:          pr,
+		Host:          addr,
+		ContentLength: -1,
 	}
-	req, err := http.NewRequest(http.MethodConnect, u.String(), ioutil.NopCloser(pr))
-	if err != nil {
-		log.Logf("[http2] %s - %s : %s", cc.raddr, addr, err)
-		return nil, err
-	}
+	// req.Header.Set("Gost-Target", addr) // Flag header to indicate the address that server connected to
 	if c.User != nil {
 		req.Header.Set("Proxy-Authorization",
 			"Basic "+base64.StdEncoding.EncodeToString([]byte(c.User.String())))
 	}
-	req.ProtoMajor = 2
-	req.ProtoMinor = 0
-
 	if Debug {
 		dump, _ := httputil.DumpRequest(req, false)
 		log.Log("[http2]", string(dump))
 	}
-	resp, err := cc.conn.RoundTrip(req)
+	resp, err := cc.client.Do(req)
 	if err != nil {
-		log.Logf("[http2] %s - %s : %s", cc.raddr, addr, err)
 		return nil, err
 	}
-
 	if Debug {
 		dump, _ := httputil.DumpResponse(resp, false)
 		log.Log("[http2]", string(dump))
@@ -71,72 +68,64 @@ func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 		resp.Body.Close()
 		return nil, errors.New(resp.Status)
 	}
-	hc := &http2Conn{r: resp.Body, w: pw}
-	hc.remoteAddr, _ = net.ResolveTCPAddr("tcp", cc.raddr)
+	hc := &http2Conn{
+		r:      resp.Body,
+		w:      pw,
+		closed: make(chan struct{}),
+	}
+	hc.remoteAddr, _ = net.ResolveTCPAddr("tcp", addr)
+	hc.localAddr, _ = net.ResolveTCPAddr("tcp", cc.addr)
+
 	return hc, nil
 }
 
 type http2Transporter struct {
-	tlsConfig    *tls.Config
-	tr           *http2.Transport
-	chain        *Chain
-	sessions     map[string]*http2Session
-	sessionMutex sync.Mutex
-	pingInterval time.Duration
+	clients     map[string]*http.Client
+	clientMutex sync.Mutex
+	tlsConfig   *tls.Config
 }
 
-// HTTP2Transporter creates a Transporter that is used by HTTP2 proxy client.
-//
-// Optional chain is a proxy chain that can be used to establish a connection with the HTTP2 server.
-//
-// Optional config is a TLS config for TLS handshake, if is nil, will use h2c mode.
-//
-// Optional ping is the ping interval, if is zero, ping will not be enabled.
-func HTTP2Transporter(chain *Chain, config *tls.Config, ping time.Duration) Transporter {
+// HTTP2Transporter creates a Transporter that is used by HTTP2 h2 proxy client.
+func HTTP2Transporter(config *tls.Config) Transporter {
+	if config == nil {
+		config = &tls.Config{InsecureSkipVerify: true}
+	}
 	return &http2Transporter{
-		tlsConfig:    config,
-		tr:           new(http2.Transport),
-		chain:        chain,
-		pingInterval: ping,
-		sessions:     make(map[string]*http2Session),
+		clients:   make(map[string]*http.Client),
+		tlsConfig: config,
 	}
 }
 
 func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	tr.sessionMutex.Lock()
-	defer tr.sessionMutex.Unlock()
+	opts := &DialOptions{}
+	for _, option := range options {
+		option(opts)
+	}
 
-	session, ok := tr.sessions[addr]
+	tr.clientMutex.Lock()
+	client, ok := tr.clients[addr]
 	if !ok {
-		conn, err := tr.chain.Dial(addr)
-		if err != nil {
-			return nil, err
+		transport := http2.Transport{
+			TLSClientConfig: tr.tlsConfig,
+			DialTLS: func(network, adr string, cfg *tls.Config) (net.Conn, error) {
+				conn, err := opts.Chain.Dial(addr)
+				if err != nil {
+					return nil, err
+				}
+				return wrapTLSClient(conn, cfg)
+			},
 		}
-
-		if tr.tlsConfig != nil {
-			tc := tls.Client(conn, tr.tlsConfig)
-			if err := tc.Handshake(); err != nil {
-				return nil, err
-			}
-			conn = tc
+		client = &http.Client{
+			Transport: &transport,
+			Timeout:   opts.Timeout,
 		}
-		cc, err := tr.tr.NewClientConn(conn)
-		if err != nil {
-			return nil, err
-		}
-		session = newHTTP2Session(conn, cc, tr.pingInterval)
-		tr.sessions[addr] = session
+		tr.clients[addr] = client
 	}
+	tr.clientMutex.Unlock()
 
-	if !session.Healthy() {
-		session.Close()
-		delete(tr.sessions, addr) // TODO: we could re-connect to the addr automatically.
-		return nil, errors.New("connection is dead")
-	}
-
-	return &http2DummyConn{
-		raddr: addr,
-		conn:  session.clientConn,
+	return &http2ClientConn{
+		addr:   addr,
+		client: client,
 	}, nil
 }
 
@@ -154,13 +143,18 @@ type h2Transporter struct {
 	tlsConfig   *tls.Config
 }
 
-func H2Transporter() Transporter {
+// H2Transporter creates a Transporter that is used by HTTP2 h2 tunnel client.
+func H2Transporter(config *tls.Config) Transporter {
+	if config == nil {
+		config = &tls.Config{InsecureSkipVerify: true}
+	}
 	return &h2Transporter{
 		clients:   make(map[string]*http.Client),
-		tlsConfig: &tls.Config{InsecureSkipVerify: true},
+		tlsConfig: config,
 	}
 }
 
+// H2CTransporter creates a Transporter that is used by HTTP2 h2c tunnel client.
 func H2CTransporter() Transporter {
 	return &h2Transporter{
 		clients: make(map[string]*http.Client),
@@ -186,7 +180,7 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 				if tr.tlsConfig == nil {
 					return conn, nil
 				}
-				return wrapTLSClient(conn, tr.tlsConfig)
+				return wrapTLSClient(conn, cfg)
 			},
 		}
 		client = &http.Client{
@@ -277,11 +271,10 @@ func (h *http2Handler) Handle(conn net.Conn) {
 }
 
 func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
-	target := r.Header.Get("Gost-Target") // compitable with old version
+	target := r.Header.Get("Gost-Target")
 	if target == "" {
 		target = r.Host
 	}
-	// target := r.Host
 	if !strings.Contains(target, ":") {
 		target += ":80"
 	}
@@ -391,6 +384,7 @@ type http2Listener struct {
 	errChan  chan error
 }
 
+// HTTP2Listener creates a Listener for HTTP2 proxy server.
 func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
 	l := &http2Listener{
 		connChan: make(chan *http2ServerConn, 1024),
@@ -596,91 +590,6 @@ func (l *h2Listener) Accept() (conn net.Conn, err error) {
 	return
 }
 
-type http2Session struct {
-	conn       net.Conn
-	clientConn *http2.ClientConn
-	closeChan  chan struct{}
-	pingChan   chan struct{}
-}
-
-func newHTTP2Session(conn net.Conn, clientConn *http2.ClientConn, interval time.Duration) *http2Session {
-	session := &http2Session{
-		conn:       conn,
-		clientConn: clientConn,
-		closeChan:  make(chan struct{}),
-	}
-	if interval > 0 {
-		session.pingChan = make(chan struct{})
-		go session.Ping(interval)
-	}
-	return session
-}
-
-func (s *http2Session) Ping(interval time.Duration) {
-	if interval <= 0 {
-		return
-	}
-
-	defer close(s.pingChan)
-	log.Log("[http2] ping is enabled, interval:", interval)
-
-	baseCtx := context.Background()
-	t := time.NewTicker(interval)
-	retries := PingRetries
-	for {
-		select {
-		case <-t.C:
-			if Debug {
-				log.Log("[http2] sending ping")
-			}
-			if !s.clientConn.CanTakeNewRequest() {
-				log.Logf("[http2] connection is dead")
-				return
-			}
-			ctx, cancel := context.WithTimeout(baseCtx, PingTimeout)
-			if err := s.clientConn.Ping(ctx); err != nil {
-				log.Logf("[http2] ping: %s", err)
-				if retries > 0 {
-					retries--
-					log.Log("[http2] retry ping")
-					cancel()
-					continue
-				}
-
-				cancel()
-				return
-			}
-
-			if Debug {
-				log.Log("[http2] ping OK")
-			}
-			cancel()
-			retries = PingRetries
-
-		case <-s.closeChan:
-			return
-		}
-	}
-}
-
-func (s *http2Session) Healthy() bool {
-	select {
-	case <-s.pingChan:
-		return false
-	default:
-	}
-	return s.clientConn.CanTakeNewRequest()
-}
-
-func (s *http2Session) Close() error {
-	select {
-	case <-s.closeChan:
-	default:
-		close(s.closeChan)
-	}
-	return nil
-}
-
 // HTTP2 connection, wrapped up just like a net.Conn
 type http2Conn struct {
 	r          io.Reader
@@ -780,41 +689,41 @@ func (c *http2ServerConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
-// Dummy HTTP2 connection.
-type http2DummyConn struct {
-	raddr string
-	conn  *http2.ClientConn
+// a dummy HTTP2 client conn used by HTTP2 client connector
+type http2ClientConn struct {
+	addr   string
+	client *http.Client
 }
 
-func (c *http2DummyConn) Read(b []byte) (n int, err error) {
+func (c *http2ClientConn) Read(b []byte) (n int, err error) {
 	return 0, &net.OpError{Op: "read", Net: "http2", Source: nil, Addr: nil, Err: errors.New("read not supported")}
 }
 
-func (c *http2DummyConn) Write(b []byte) (n int, err error) {
+func (c *http2ClientConn) Write(b []byte) (n int, err error) {
 	return 0, &net.OpError{Op: "write", Net: "http2", Source: nil, Addr: nil, Err: errors.New("write not supported")}
 }
 
-func (c *http2DummyConn) Close() error {
+func (c *http2ClientConn) Close() error {
 	return nil
 }
 
-func (c *http2DummyConn) LocalAddr() net.Addr {
+func (c *http2ClientConn) LocalAddr() net.Addr {
 	return nil
 }
 
-func (c *http2DummyConn) RemoteAddr() net.Addr {
+func (c *http2ClientConn) RemoteAddr() net.Addr {
 	return nil
 }
 
-func (c *http2DummyConn) SetDeadline(t time.Time) error {
+func (c *http2ClientConn) SetDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
-func (c *http2DummyConn) SetReadDeadline(t time.Time) error {
+func (c *http2ClientConn) SetReadDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
-func (c *http2DummyConn) SetWriteDeadline(t time.Time) error {
+func (c *http2ClientConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
