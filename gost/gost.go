@@ -13,7 +13,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.4-dev20170722"
+const Version = "2.4-dev20170803"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -39,7 +39,7 @@ var (
 	// PingRetries is the reties of ping.
 	PingRetries = 3
 	// default udp node TTL in second for udp port forwarding.
-	defaultTTL = 60
+	defaultTTL = 60 * time.Second
 )
 
 var (

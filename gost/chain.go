@@ -78,12 +78,12 @@ func (c *Chain) Conn() (net.Conn, error) {
 	}
 
 	nodes := c.nodes
-	conn, err := nodes[0].Client.Dial(nodes[0].Addr, TimeoutDialOption(DialTimeout))
+	conn, err := nodes[0].Client.Dial(nodes[0].Addr, nodes[0].DialOptions...)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err = nodes[0].Client.Handshake(conn, AddrHandshakeOption(nodes[0].Addr))
+	conn, err = nodes[0].Client.Handshake(conn, nodes[0].HandshakeOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (c *Chain) Conn() (net.Conn, error) {
 			conn.Close()
 			return nil, err
 		}
-		cc, err = next.Client.Handshake(cc, AddrHandshakeOption(next.Addr))
+		cc, err = next.Client.Handshake(cc, next.HandshakeOptions...)
 		if err != nil {
 			conn.Close()
 			return nil, err

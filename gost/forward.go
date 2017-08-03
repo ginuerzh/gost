@@ -367,12 +367,16 @@ func (c *udpServerConn) writeLoop() {
 }
 
 func (c *udpServerConn) ttlWait() {
-	timer := time.NewTimer(c.ttl)
+	ttl := c.ttl
+	if ttl == 0 {
+		ttl = defaultTTL
+	}
+	timer := time.NewTimer(ttl)
 
 	for {
 		select {
 		case <-c.nopChan:
-			timer.Reset(c.ttl)
+			timer.Reset(ttl)
 		case <-timer.C:
 			close(c.brokenChan)
 			return
@@ -452,7 +456,7 @@ func (l *tcpRemoteForwardListener) Accept() (net.Conn, error) {
 
 func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 	lastNode := l.chain.LastNode()
-	if lastNode.Protocol == "forward" && lastNode.Transport == "ssh" {
+	if lastNode.Protocol == "remote" && lastNode.Transport == "ssh" {
 		conn, err = l.chain.Dial(l.addr.String())
 	} else if lastNode.Protocol == "socks5" {
 		cc, er := l.chain.Conn()

@@ -391,6 +391,15 @@ func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
 		connChan: make(chan *http2ServerConn, 1024),
 		errChan:  make(chan error, 1),
 	}
+	if config == nil {
+		cert, err := tls.X509KeyPair(defaultRawCert, defaultRawKey)
+		if err != nil {
+			return nil, err
+		}
+		config = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
+	}
 	server := &http.Server{
 		Addr:      addr,
 		Handler:   http.HandlerFunc(l.handleFunc),
@@ -400,6 +409,7 @@ func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
 		return nil, err
 	}
 	l.server = server
+
 	go server.ListenAndServeTLS("", "")
 
 	return l, nil
@@ -462,6 +472,16 @@ func H2Listener(addr string, config *tls.Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	if config == nil {
+		cert, err := tls.X509KeyPair(defaultRawCert, defaultRawKey)
+		if err != nil {
+			return nil, err
+		}
+		config = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
+	}
+
 	l := &h2Listener{
 		Listener: ln,
 		server: &http2.Server{

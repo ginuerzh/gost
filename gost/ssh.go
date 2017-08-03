@@ -318,7 +318,6 @@ type sshSession struct {
 }
 
 func (s *sshSession) Ping(interval time.Duration, retries int) {
-	interval = 30 * time.Second
 	if interval <= 0 {
 		return
 	}
@@ -620,13 +619,24 @@ func SSHTunnelListener(addr string, config *SSHConfig) (Listener, error) {
 	if len(config.Users) == 0 {
 		sshConfig.NoClientAuth = true
 	}
-	if config.TLSConfig != nil && len(config.TLSConfig.Certificates) > 0 {
-		signer, err := ssh.NewSignerFromKey(config.TLSConfig.Certificates[0].PrivateKey)
+	if config.TLSConfig == nil {
+		cert, err := tls.X509KeyPair(defaultRawCert, defaultRawKey)
 		if err != nil {
-			log.Log("[sshf]", err)
+			ln.Close()
+			return nil, err
 		}
-		sshConfig.AddHostKey(signer)
+		config.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
 	}
+
+	signer, err := ssh.NewSignerFromKey(config.TLSConfig.Certificates[0].PrivateKey)
+	if err != nil {
+		ln.Close()
+		return nil, err
+
+	}
+	sshConfig.AddHostKey(signer)
 
 	l := &sshTunnelListener{
 		Listener: ln,
