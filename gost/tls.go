@@ -25,7 +25,7 @@ func (tr *tlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	if opts.TLSConfig == nil {
 		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	return tls.Client(conn, opts.TLSConfig), nil
+	return wrapTLSClient(conn, opts.TLSConfig)
 }
 
 type tlsListener struct {

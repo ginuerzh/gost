@@ -17,6 +17,8 @@ type HandlerOptions struct {
 	Chain     *Chain
 	Users     []*url.Userinfo
 	TLSConfig *tls.Config
+	Whitelist *Permissions
+	Blacklist *Permissions
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -47,5 +49,19 @@ func UsersHandlerOption(users ...*url.Userinfo) HandlerOption {
 func TLSConfigHandlerOption(config *tls.Config) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.TLSConfig = config
+	}
+}
+
+// WhitelistHandlerOption sets the Whitelist option of HandlerOptions.
+func WhitelistHandlerOption(whitelist *Permissions) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Whitelist = whitelist
+	}
+}
+
+// BlacklistHandlerOption sets the Blacklist option of HandlerOptions.
+func BlacklistHandlerOption(blacklist *Permissions) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Blacklist = blacklist
 	}
 }

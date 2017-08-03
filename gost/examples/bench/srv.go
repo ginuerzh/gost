@@ -3,7 +3,9 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -45,6 +47,7 @@ func main() {
 	go http2TunnelServer()
 	go quicServer()
 	go shadowUDPServer()
+	go testServer()
 	select {}
 }
 
@@ -343,4 +346,14 @@ func tlsConfig() *tls.Config {
 		Certificates:             []tls.Certificate{cert},
 		PreferServerCipherSuites: true,
 	}
+}
+
+func testServer() {
+	s := &http.Server{
+		Addr: ":18888",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "abcdefghijklmnopqrstuvwxyz")
+		}),
+	}
+	log.Fatal(s.ListenAndServe())
 }

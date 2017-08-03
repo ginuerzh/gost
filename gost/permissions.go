@@ -9,14 +9,6 @@ import (
 	glob "github.com/ryanuber/go-glob"
 )
 
-type PortRange struct {
-	Min, Max int
-}
-
-type PortSet []PortRange
-
-type StringSet []string
-
 type Permission struct {
 	Actions StringSet
 	Hosts   StringSet
@@ -37,6 +29,10 @@ func maxint(x, y int) int {
 		return x
 	}
 	return y
+}
+
+type PortRange struct {
+	Min, Max int
 }
 
 func (ir *PortRange) Contains(value int) bool {
@@ -88,6 +84,8 @@ func (ps *PortSet) Contains(value int) bool {
 	return false
 }
 
+type PortSet []PortRange
+
 func ParsePortSet(s string) (*PortSet, error) {
 	ps := &PortSet{}
 
@@ -119,6 +117,8 @@ func (ss *StringSet) Contains(subj string) bool {
 
 	return false
 }
+
+type StringSet []string
 
 func ParseStringSet(s string) (*StringSet, error) {
 	ss := &StringSet{}

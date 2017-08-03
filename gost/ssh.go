@@ -27,6 +27,10 @@ const (
 	GostSSHTunnelRequest = "gost-tunnel" // extended request type for ssh tunnel
 )
 
+var (
+	errSessionDead = errors.New("session is dead")
+)
+
 type sshDirectForwardConnector struct {
 }
 
@@ -188,7 +192,7 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 	}
 	if session.Closed() {
 		delete(tr.sessions, opts.Addr)
-		return nil, ErrSessionDead
+		return nil, errSessionDead
 	}
 
 	return &sshNopConn{session: session}, nil
@@ -288,7 +292,7 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 
 	if session.Closed() {
 		delete(tr.sessions, opts.Addr)
-		return nil, ErrSessionDead
+		return nil, errSessionDead
 	}
 
 	channel, reqs, err := session.client.OpenChannel(GostSSHTunnelRequest, nil)
@@ -485,10 +489,10 @@ func (h *sshForwardHandler) directPortForwardChannel(channel ssh.Channel, raddr 
 
 	log.Logf("[ssh-tcp] %s - %s", h.options.Addr, raddr)
 
-	//! if !s.Base.Node.Can("tcp", raddr) {
-	//! 	glog.Errorf("Unauthorized to tcp connect to %s", raddr)
-	//! 	return
-	//! }
+	if !Can("tcp", raddr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[ssh-tcp] Unauthorized to tcp connect to %s", raddr)
+		return
+	}
 
 	conn, err := h.options.Chain.Dial(raddr)
 	if err != nil {
@@ -514,11 +518,11 @@ func (h *sshForwardHandler) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Reque
 
 	addr := fmt.Sprintf("%s:%d", t.Host, t.Port)
 
-	//! if !s.Base.Node.Can("rtcp", addr) {
-	//! 	glog.Errorf("Unauthorized to tcp bind to %s", addr)
-	//! 	req.Reply(false, nil)
-	//! 	return
-	//! }
+	if !Can("rtcp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[ssh-rtcp] Unauthorized to tcp bind to %s", addr)
+		req.Reply(false, nil)
+		return
+	}
 
 	log.Log("[ssh-rtcp] listening on tcp", addr)
 	ln, err := net.Listen("tcp", addr) //tie to the client connection

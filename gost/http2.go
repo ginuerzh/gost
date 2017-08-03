@@ -287,10 +287,11 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Proxy-Agent", "gost/"+Version)
 
-	//! if !s.Base.Node.Can("tcp", target) {
-	//! 	glog.Errorf("Unauthorized to tcp connect to %s", target)
-	//! 	return
-	//! }
+	if !Can("tcp", target, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[http2] Unauthorized to tcp connect to %s", target)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 
 	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
 	if !authenticate(u, p, h.options.Users...) {

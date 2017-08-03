@@ -395,13 +395,15 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 
 func (h *socks5Handler) handleConnect(conn net.Conn, req *gosocks5.Request) {
 	addr := req.Addr.String()
-
-	//! if !s.Base.Node.Can("tcp", addr) {
-	//! 	glog.Errorf("Unauthorized to tcp connect to %s", addr)
-	//! 	rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
-	//! 	rep.Write(s.conn)
-	//! 	return
-	//! }
+	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[socks5-connect] Unauthorized to tcp connect to %s", addr)
+		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
+		rep.Write(conn)
+		if Debug {
+			log.Logf("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+		}
+		return
+	}
 
 	cc, err := h.options.Chain.Dial(addr)
 	if err != nil {
@@ -430,13 +432,12 @@ func (h *socks5Handler) handleConnect(conn net.Conn, req *gosocks5.Request) {
 
 func (h *socks5Handler) handleBind(conn net.Conn, req *gosocks5.Request) {
 	if h.options.Chain.IsEmpty() {
-
-		//! if !s.Base.Node.Can("rtcp", addr) {
-		//! 	glog.Errorf("Unauthorized to tcp bind to %s", addr)
-		//! 	return
-		//! }
-
-		h.bindOn(conn, req.Addr.String())
+		addr := req.Addr.String()
+		if !Can("rtcp", addr, h.options.Whitelist, h.options.Blacklist) {
+			log.Logf("Unauthorized to tcp bind to %s", addr)
+			return
+		}
+		h.bindOn(conn, addr)
 		return
 	}
 
@@ -554,14 +555,16 @@ func (h *socks5Handler) bindOn(conn net.Conn, addr string) {
 }
 
 func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
-	//! addr := req.Addr.String()
-	//!
-	//! if !s.Base.Node.Can("udp", addr) {
-	//! 	glog.Errorf("Unauthorized to udp connect to %s", addr)
-	//! 	rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
-	//! 	rep.Write(s.conn)
-	//! 	return
-	//! }
+	addr := req.Addr.String()
+	if !Can("udp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[socks5-udp] Unauthorized to udp connect to %s", addr)
+		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
+		rep.Write(conn)
+		if Debug {
+			log.Logf("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+		}
+		return
+	}
 
 	relay, err := net.ListenUDP("udp", nil)
 	if err != nil {
@@ -817,10 +820,10 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 	if h.options.Chain.IsEmpty() {
 		addr := req.Addr.String()
 
-		//! if !s.Base.Node.Can("rudp", addr) {
-		//! 	glog.Errorf("Unauthorized to udp bind to %s", addr)
-		//! 	return
-		//! }
+		if !Can("rudp", addr, h.options.Whitelist, h.options.Blacklist) {
+			log.Logf("[socks5-udp] Unauthorized to udp bind to %s", addr)
+			return
+		}
 
 		bindAddr, _ := net.ResolveUDPAddr("udp", addr)
 		uc, err := net.ListenUDP("udp", bindAddr)
@@ -992,12 +995,15 @@ func (h *socks4Handler) Handle(conn net.Conn) {
 func (h *socks4Handler) handleConnect(conn net.Conn, req *gosocks4.Request) {
 	addr := req.Addr.String()
 
-	//! if !s.Base.Node.Can("tcp", addr) {
-	//! 	glog.Errorf("Unauthorized to tcp connect to %s", addr)
-	//! 	rep := gosocks5.NewReply(gosocks4.Rejected, nil)
-	//! 	rep.Write(s.conn)
-	//! 	return
-	//! }
+	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[socks4-connect] Unauthorized to tcp connect to %s", addr)
+		rep := gosocks5.NewReply(gosocks4.Rejected, nil)
+		rep.Write(conn)
+		if Debug {
+			log.Logf("[socks4-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+		}
+		return
+	}
 
 	cc, err := h.options.Chain.Dial(addr)
 	if err != nil {

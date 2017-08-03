@@ -46,6 +46,8 @@ func init() {
 		fmt.Fprintf(os.Stderr, "gost %s (%s)\n", gost.Version, runtime.Version())
 		os.Exit(0)
 	}
+
+	gost.Debug = options.debugMode
 }
 
 func main() {
@@ -54,8 +56,8 @@ func main() {
 
 func buildChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
-	for _, cn := range options.chainNodes {
-		node, err := parseNode(cn)
+	for _, ns := range options.chainNodes {
+		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return nil, err
 		}
@@ -66,9 +68,60 @@ func buildChain() (*gost.Chain, error) {
 			tr = gost.TLSTransporter()
 		case "ws":
 			tr = gost.WSTransporter(nil)
+		case "wss":
+			tr = gost.WSSTransporter(nil)
+		case "kcp":
+			if !chain.IsEmpty() {
+				log.Log("KCP must be the first node in the proxy chain")
+				return nil, err
+			}
+			tr = gost.KCPTransporter(nil)
+		case "ssh":
+			if node.Protocol == "direct" || node.Protocol == "remote" {
+				tr = gost.SSHForwardTransporter()
+			} else {
+				tr = gost.SSHTunnelTransporter()
+			}
+		case "quic":
+			if !chain.IsEmpty() {
+				log.Log("QUIC must be the first node in the proxy chain")
+				return nil, err
+			}
+			tr = gost.QUICTransporter(nil)
+		case "http2":
+			tr = gost.HTTP2Transporter(nil)
+		case "h2":
+			tr = gost.H2Transporter(nil)
+		case "h2c":
+			tr = gost.H2CTransporter()
+		default:
+			tr = gost.TCPTransporter()
 		}
 
 		var connector gost.Connector
+		switch node.Protocol {
+		case "http2":
+			connector = gost.HTTP2Connector(nil)
+		case "socks", "socks5":
+			connector = gost.SOCKS5Connector(nil)
+		case "socks4":
+			connector = gost.SOCKS4Connector()
+		case "socks4a":
+			connector = gost.SOCKS4AConnector()
+		case "ss":
+			connector = gost.ShadowConnector(nil)
+		case "http":
+			fallthrough
+		default:
+			node.Protocol = "http" // default protocol is HTTP
+			connector = gost.HTTPConnector(nil)
+		}
+
+		node.Client = &gost.Client{
+			Connector:   connector,
+			Transporter: tr,
+		}
+		chain.AddNode(node)
 	}
 
 	return chain, nil

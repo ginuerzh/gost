@@ -21,7 +21,7 @@ func (l *LogLogger) Logf(format string, v ...interface{}) {
 	log.Output(3, fmt.Sprintf(format, v...))
 }
 
-// NopLogger is a null logger that discards the log outputs
+// NopLogger is a dummy logger that discards the log outputs
 type NopLogger struct {
 }
 

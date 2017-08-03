@@ -188,14 +188,14 @@ func request(chain *gost.Chain, start <-chan struct{}) {
 	swg.Done()
 	<-start
 
-	conn, err := chain.Dial("localhost:10000")
+	conn, err := chain.Dial("localhost:18888")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer conn.Close()
 	//conn = tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	req, err := http.NewRequest(http.MethodGet, "http://localhost:10000/pkg", nil)
+	req, err := http.NewRequest(http.MethodGet, "http://localhost:18888", nil)
 	if err != nil {
 		log.Println(err)
 		return

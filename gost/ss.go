@@ -110,7 +110,6 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
 	var method, password string
-
 	users := h.options.Users
 	if len(users) > 0 {
 		method = users[0].Username()
@@ -131,6 +130,11 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 		return
 	}
 	log.Logf("[ss] %s -> %s", conn.RemoteAddr(), addr)
+
+	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[ss] Unauthorized to tcp connect to %s", addr)
+		return
+	}
 
 	cc, err := h.options.Chain.Dial(addr)
 	if err != nil {
