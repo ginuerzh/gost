@@ -217,10 +217,7 @@ func serve(chain *gost.Chain) error {
 		if node.User != nil {
 			users = append(users, node.User)
 		}
-		tlsCfg, err := tlsConfig(node.Values.Get("cert"), node.Values.Get("key"))
-		if err != nil {
-			return err
-		}
+		tlsCfg, _ := tlsConfig(node.Values.Get("cert"), node.Values.Get("key"))
 
 		var ln gost.Listener
 		switch node.Transport {
@@ -359,8 +356,11 @@ func serve(chain *gost.Chain) error {
 
 // Load the certificate from cert and key files, will use the default certificate if the provided info are invalid.
 func tlsConfig(certFile, keyFile string) (*tls.Config, error) {
-	if certFile == "" || keyFile == "" {
-		return nil, nil
+	if certFile == "" {
+		certFile = "cert.pem"
+	}
+	if keyFile == "" {
+		keyFile = "key.pem"
 	}
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
