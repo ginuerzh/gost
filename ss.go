@@ -3,26 +3,23 @@ package gost
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
-	"github.com/golang/glog"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
 // Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
-// we wrap around it to make io.Copy happy
+// we wrap around it to make io.Copy happy.
 type shadowConn struct {
 	conn net.Conn
-}
-
-func ShadowConn(conn net.Conn) net.Conn {
-	return &shadowConn{conn: conn}
 }
 
 func (c *shadowConn) Read(b []byte) (n int, err error) {
@@ -59,18 +56,61 @@ func (c *shadowConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 
-type shadowHandler struct {
-	server Server
+type shadowConnector struct {
+	Cipher *url.Userinfo
 }
 
-func ShadowHandler(server Server) Handler {
-	return &shadowHandler{server: server}
+// ShadowConnector creates a Connector for shadowsocks proxy client.
+// It accepts a cipher info for shadowsocks data encryption/decryption.
+// The cipher must not be nil.
+func ShadowConnector(cipher *url.Userinfo) Connector {
+	return &shadowConnector{Cipher: cipher}
+}
+
+func (c *shadowConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+	rawaddr, err := ss.RawAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	var method, password string
+	if c.Cipher != nil {
+		method = c.Cipher.Username()
+		password, _ = c.Cipher.Password()
+	}
+
+	cipher, err := ss.NewCipher(method, password)
+	if err != nil {
+		return nil, err
+	}
+
+	sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
+	if err != nil {
+		return nil, err
+	}
+	return &shadowConn{conn: sc}, nil
+}
+
+type shadowHandler struct {
+	options *HandlerOptions
+}
+
+// ShadowHandler creates a server Handler for shadowsocks proxy server.
+func ShadowHandler(opts ...HandlerOption) Handler {
+	h := &shadowHandler{
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
 }
 
 func (h *shadowHandler) Handle(conn net.Conn) {
-	var method, password string
+	defer conn.Close()
 
-	users := h.server.Options().BaseOptions().Users
+	var method, password string
+	users := h.options.Users
 	if len(users) > 0 {
 		method = users[0].Username()
 		password, _ = users[0].Password()
@@ -80,7 +120,7 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 		log.Log("[ss]", err)
 		return
 	}
-	conn = ShadowConn(ss.NewConn(conn, cipher))
+	conn = &shadowConn{conn: ss.NewConn(conn, cipher)}
 
 	log.Logf("[ss] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
 
@@ -91,7 +131,12 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 	}
 	log.Logf("[ss] %s -> %s", conn.RemoteAddr(), addr)
 
-	cc, err := h.server.Chain().Dial(addr)
+	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[ss] Unauthorized to tcp connect to %s", addr)
+		return
+	}
+
+	cc, err := h.options.Chain.Dial(addr)
 	if err != nil {
 		log.Logf("[ss] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 		return
@@ -99,7 +144,7 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 	defer cc.Close()
 
 	log.Logf("[ss] %s <-> %s", conn.RemoteAddr(), addr)
-	Transport(conn, cc)
+	transport(conn, cc)
 	log.Logf("[ss] %s >-< %s", conn.RemoteAddr(), addr)
 }
 
@@ -124,7 +169,7 @@ func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
 	// buf size should at least have the same size with the largest possible
 	// request size (when addrType is 3, domain name has at most 256 bytes)
 	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
-	buf := make([]byte, SmallBufferSize)
+	buf := make([]byte, smallBufferSize)
 
 	// read till we get possible domain length field
 	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
@@ -170,117 +215,205 @@ func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
 	return
 }
 
-type ShadowUdpServer struct {
-	Base *ProxyServer
-	TTL  int
+type shadowUDPListener struct {
+	ln       net.PacketConn
+	conns    map[string]*udpServerConn
+	connChan chan net.Conn
+	errChan  chan error
+	ttl      time.Duration
 }
 
-func NewShadowUdpServer(base *ProxyServer, ttl int) *ShadowUdpServer {
-	return &ShadowUdpServer{Base: base, TTL: ttl}
+// ShadowUDPListener creates a Listener for shadowsocks UDP relay server.
+func ShadowUDPListener(addr string, cipher *url.Userinfo, ttl time.Duration) (Listener, error) {
+	laddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		return nil, err
+	}
+
+	var method, password string
+	if cipher != nil {
+		method = cipher.Username()
+		password, _ = cipher.Password()
+	}
+	cp, err := ss.NewCipher(method, password)
+	if err != nil {
+		ln.Close()
+		return nil, err
+	}
+	l := &shadowUDPListener{
+		ln:       ss.NewSecurePacketConn(ln, cp, false),
+		conns:    make(map[string]*udpServerConn),
+		connChan: make(chan net.Conn, 1024),
+		errChan:  make(chan error, 1),
+		ttl:      ttl,
+	}
+	go l.listenLoop()
+	return l, nil
 }
 
-func (s *ShadowUdpServer) ListenAndServe() error {
-	laddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-	lconn, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		return err
-	}
-	defer lconn.Close()
+func (l *shadowUDPListener) listenLoop() {
+	for {
+		b := make([]byte, mediumBufferSize)
+		n, raddr, err := l.ln.ReadFrom(b)
+		if err != nil {
+			log.Logf("[ssu] peer -> %s : %s", l.Addr(), err)
+			l.ln.Close()
+			l.errChan <- err
+			close(l.errChan)
+			return
+		}
+		if Debug {
+			log.Logf("[ssu] %s >>> %s : length %d", raddr, l.Addr(), n)
+		}
 
-	conn := ss.NewSecurePacketConn(lconn, s.Base.cipher.Copy(), true) // force OTA on
-
-	rChan, wChan := make(chan *packet, 128), make(chan *packet, 128)
-	// start send queue
-	go func(ch chan<- *packet) {
-		for {
-			b := make([]byte, MediumBufferSize)
-			n, addr, err := conn.ReadFrom(b[3:]) // add rsv and frag fields to make it the standard SOCKS5 UDP datagram
-			if err != nil {
-				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, laddr, err)
-				continue
-			}
-
-			b[3] &= ss.AddrMask // remove OTA flag
-			dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n+3]))
-			if err != nil {
-				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, laddr, err)
-				continue
-			}
+		conn, ok := l.conns[raddr.String()]
+		if !ok || conn.Closed() {
+			conn = newUDPServerConn(l.ln, raddr, l.ttl)
+			l.conns[raddr.String()] = conn
 
 			select {
-			case ch <- &packet{srcAddr: addr.String(), dstAddr: dgram.Header.Addr.String(), data: dgram.Data}:
-			case <-time.After(time.Second * 3):
-				glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", addr, dgram.Header.Addr.String(), "send queue is full, discard")
+			case l.connChan <- conn:
+			default:
+				conn.Close()
+				log.Logf("[ssu] %s - %s: connection queue is full", raddr, l.Addr())
 			}
-		}
-	}(wChan)
-	// start recv queue
-	go func(ch <-chan *packet) {
-		for pkt := range ch {
-			srcAddr, err := net.ResolveUDPAddr("udp", pkt.srcAddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
-				continue
-			}
-			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
-				continue
-			}
-
-			dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, ToSocksAddr(srcAddr)), pkt.data)
-			b := bytes.Buffer{}
-			dgram.Write(&b)
-			if b.Len() < 10 {
-				glog.V(LWARNING).Infof("[ssu] %s <- %s : invalid udp datagram", pkt.dstAddr, pkt.srcAddr)
-				continue
-			}
-
-			if _, err := conn.WriteTo(b.Bytes()[3:], dstAddr); err != nil { // remove rsv and frag fields to make it standard shadowsocks UDP datagram
-				glog.V(LWARNING).Infof("[ssu] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
-				return
-			}
-		}
-	}(rChan)
-
-	// mapping client to node
-	m := make(map[string]*cnode)
-
-	// start dispatcher
-	for pkt := range wChan {
-		// clear obsolete nodes
-		for k, node := range m {
-			if node != nil && node.err != nil {
-				close(node.wChan)
-				delete(m, k)
-				glog.V(LINFO).Infof("[ssu] clear node %s", k)
-			}
-		}
-
-		node, ok := m[pkt.srcAddr]
-		if !ok {
-			node = &cnode{
-				chain:   s.Base.Chain,
-				srcAddr: pkt.srcAddr,
-				dstAddr: pkt.dstAddr,
-				rChan:   rChan,
-				wChan:   make(chan *packet, 32),
-				ttl:     time.Duration(s.TTL) * time.Second,
-			}
-			m[pkt.srcAddr] = node
-			go node.run()
-			glog.V(LINFO).Infof("[ssu] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
 		}
 
 		select {
-		case node.wChan <- pkt:
-		case <-time.After(time.Second * 3):
-			glog.V(LWARNING).Infof("[ssu] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, "node send queue is full, discard")
+		case conn.rChan <- b[:n]: // we keep the addr info so that the handler can identify the destination.
+		default:
+			log.Logf("[ssu] %s -> %s : read queue is full", raddr, l.Addr())
 		}
 	}
+}
 
-	return nil
+func (l *shadowUDPListener) Accept() (conn net.Conn, err error) {
+	var ok bool
+	select {
+	case conn = <-l.connChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
+		}
+	}
+	return
+}
+
+func (l *shadowUDPListener) Addr() net.Addr {
+	return l.ln.LocalAddr()
+}
+
+func (l *shadowUDPListener) Close() error {
+	return l.ln.Close()
+}
+
+type shadowUDPdHandler struct {
+	ttl     time.Duration
+	options *HandlerOptions
+}
+
+// ShadowUDPdHandler creates a server Handler for shadowsocks UDP relay server.
+func ShadowUDPdHandler(opts ...HandlerOption) Handler {
+	h := &shadowUDPdHandler{
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
+}
+
+func (h *shadowUDPdHandler) Handle(conn net.Conn) {
+	defer conn.Close()
+
+	var err error
+	var cc net.PacketConn
+	if h.options.Chain.IsEmpty() {
+		cc, err = net.ListenUDP("udp", nil)
+		if err != nil {
+			log.Logf("[ssu] %s - : %s", conn.LocalAddr(), err)
+			return
+		}
+	} else {
+		var c net.Conn
+		c, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
+		if err != nil {
+			log.Logf("[ssu] %s - : %s", conn.LocalAddr(), err)
+			return
+		}
+		cc = &udpTunnelConn{Conn: c}
+	}
+	defer cc.Close()
+
+	log.Logf("[ssu] %s <-> %s", conn.RemoteAddr(), conn.LocalAddr())
+	transportUDP(conn, cc)
+	log.Logf("[ssu] %s >-< %s", conn.RemoteAddr(), conn.LocalAddr())
+}
+
+func transportUDP(sc net.Conn, cc net.PacketConn) error {
+	errc := make(chan error, 1)
+	go func() {
+		for {
+			b := make([]byte, mediumBufferSize)
+			n, err := sc.Read(b[3:]) // add rsv and frag fields to make it the standard SOCKS5 UDP datagram
+			if err != nil {
+				// log.Logf("[ssu] %s - %s : %s", sc.RemoteAddr(), sc.LocalAddr(), err)
+				errc <- err
+				return
+			}
+			dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(b[:n+3]))
+			if err != nil {
+				log.Logf("[ssu] %s - %s : %s", sc.RemoteAddr(), sc.LocalAddr(), err)
+				errc <- err
+				return
+			}
+			//if Debug {
+			//	log.Logf("[ssu] %s >>> %s length: %d", sc.RemoteAddr(), dgram.Header.Addr.String(), len(dgram.Data))
+			//}
+			addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+			if err != nil {
+				errc <- err
+				return
+			}
+			if _, err := cc.WriteTo(dgram.Data, addr); err != nil {
+				errc <- err
+				return
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			b := make([]byte, mediumBufferSize)
+			n, addr, err := cc.ReadFrom(b)
+			if err != nil {
+				errc <- err
+				return
+			}
+			//if Debug {
+			//	log.Logf("[ssu] %s <<< %s length: %d", sc.RemoteAddr(), addr, n)
+			//}
+			dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, toSocksAddr(addr)), b[:n])
+			buf := bytes.Buffer{}
+			dgram.Write(&buf)
+			if buf.Len() < 10 {
+				log.Logf("[ssu] %s <- %s : invalid udp datagram", sc.RemoteAddr(), addr)
+				continue
+			}
+			if _, err := sc.Write(buf.Bytes()[3:]); err != nil {
+				errc <- err
+				return
+			}
+		}
+	}()
+
+	err := <-errc
+	if err != nil && err == io.EOF {
+		err = nil
+	}
+	return err
 }

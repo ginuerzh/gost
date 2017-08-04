@@ -3,15 +3,29 @@
 package gost
 
 import (
-	"errors"
+	"net"
+
+	"github.com/go-log/log"
 )
 
-type RedsocksTCPServer struct{}
-
-func NewRedsocksTCPServer(base *ProxyServer) *RedsocksTCPServer {
-	return &RedsocksTCPServer{}
+type tcpRedirectHandler struct {
+	options *HandlerOptions
 }
 
-func (s *RedsocksTCPServer) ListenAndServe() error {
-	return errors.New("Not supported")
+// TCPRedirectHandler creates a server Handler for TCP redirect server.
+func TCPRedirectHandler(opts ...HandlerOption) Handler {
+	h := &tcpRedirectHandler{
+		options: &HandlerOptions{
+			Chain: new(Chain),
+		},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
+}
+
+func (h *tcpRedirectHandler) Handle(c net.Conn) {
+	log.Log("[red-tcp] TCP redirect is not available on the Windows platform")
+	c.Close()
 }

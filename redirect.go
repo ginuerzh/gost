@@ -5,70 +5,58 @@ package gost
 import (
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
 	"net"
 	"syscall"
+
+	"github.com/go-log/log"
 )
 
-const (
-	SO_ORIGINAL_DST = 80
-)
-
-type RedsocksTCPServer struct {
-	Base *ProxyServer
+type tcpRedirectHandler struct {
+	options *HandlerOptions
 }
 
-func NewRedsocksTCPServer(base *ProxyServer) *RedsocksTCPServer {
-	return &RedsocksTCPServer{
-		Base: base,
+// TCPRedirectHandler creates a server Handler for TCP redirect server.
+func TCPRedirectHandler(opts ...HandlerOption) Handler {
+	h := &tcpRedirectHandler{
+		options: &HandlerOptions{
+			Chain: new(Chain),
+		},
 	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
 }
 
-func (s *RedsocksTCPServer) ListenAndServe() error {
-	laddr, err := net.ResolveTCPAddr("tcp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-	ln, err := net.ListenTCP("tcp", laddr)
-	if err != nil {
-		return err
+func (h *tcpRedirectHandler) Handle(c net.Conn) {
+	conn, ok := c.(*net.TCPConn)
+	if !ok {
+		log.Log("[red-tcp] not a TCP connection")
 	}
 
-	defer ln.Close()
-	for {
-		conn, err := ln.AcceptTCP()
-		if err != nil {
-			glog.V(LWARNING).Infoln(err)
-			continue
-		}
-		go s.handleRedirectTCP(conn)
-	}
-}
-
-func (s *RedsocksTCPServer) handleRedirectTCP(conn *net.TCPConn) {
 	srcAddr := conn.RemoteAddr()
-	dstAddr, conn, err := getOriginalDstAddr(conn)
+	dstAddr, conn, err := h.getOriginalDstAddr(conn)
 	if err != nil {
-		glog.V(LWARNING).Infof("[red-tcp] %s -> %s : %s", srcAddr, dstAddr, err)
+		log.Logf("[red-tcp] %s -> %s : %s", srcAddr, dstAddr, err)
 		return
 	}
 	defer conn.Close()
 
-	glog.V(LINFO).Infof("[red-tcp] %s -> %s", srcAddr, dstAddr)
+	log.Logf("[red-tcp] %s -> %s", srcAddr, dstAddr)
 
-	cc, err := s.Base.Chain.Dial(dstAddr.String())
+	cc, err := h.options.Chain.Dial(dstAddr.String())
 	if err != nil {
-		glog.V(LWARNING).Infof("[red-tcp] %s -> %s : %s", srcAddr, dstAddr, err)
+		log.Logf("[red-tcp] %s -> %s : %s", srcAddr, dstAddr, err)
 		return
 	}
 	defer cc.Close()
 
-	glog.V(LINFO).Infof("[red-tcp] %s <-> %s", srcAddr, dstAddr)
-	s.Base.transport(conn, cc)
-	glog.V(LINFO).Infof("[red-tcp] %s >-< %s", srcAddr, dstAddr)
+	log.Logf("[red-tcp] %s <-> %s", srcAddr, dstAddr)
+	transport(conn, cc)
+	log.Logf("[red-tcp] %s >-< %s", srcAddr, dstAddr)
 }
 
-func getOriginalDstAddr(conn *net.TCPConn) (addr net.Addr, c *net.TCPConn, err error) {
+func (h *tcpRedirectHandler) getOriginalDstAddr(conn *net.TCPConn) (addr net.Addr, c *net.TCPConn, err error) {
 	defer conn.Close()
 
 	fc, err := conn.File()
@@ -77,7 +65,7 @@ func getOriginalDstAddr(conn *net.TCPConn) (addr net.Addr, c *net.TCPConn, err e
 	}
 	defer fc.Close()
 
-	mreq, err := syscall.GetsockoptIPv6Mreq(int(fc.Fd()), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
+	mreq, err := syscall.GetsockoptIPv6Mreq(int(fc.Fd()), syscall.IPPROTO_IP, 80)
 	if err != nil {
 		return
 	}

@@ -2,725 +2,662 @@ package gost
 
 import (
 	"errors"
-	"fmt"
 	"net"
-	"strconv"
-	"strings"
+	"sync"
 	"time"
 
+	"fmt"
+
 	"github.com/ginuerzh/gosocks5"
-	"github.com/golang/glog"
-	"golang.org/x/crypto/ssh"
+	"github.com/go-log/log"
 )
 
-type TcpForwardServer struct {
-	Base      *ProxyServer
-	sshClient *ssh.Client
-	Handler   func(conn net.Conn, raddr *net.TCPAddr)
+type tcpDirectForwardHandler struct {
+	raddr   string
+	options *HandlerOptions
 }
 
-func NewTcpForwardServer(base *ProxyServer) *TcpForwardServer {
-	return &TcpForwardServer{Base: base}
+// TCPDirectForwardHandler creates a server Handler for TCP port forwarding server.
+// The raddr is the remote address that the server will forward to.
+func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &tcpDirectForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
 }
 
-func (s *TcpForwardServer) ListenAndServe() error {
-	raddr, err := net.ResolveTCPAddr("tcp", s.Base.Node.Remote)
-	if err != nil {
-		return err
-	}
-
-	ln, err := net.Listen("tcp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
-
-	if s.Handler == nil {
-		s.Handler = s.handleTcpForward
-	}
-
-	quit := make(chan interface{})
-	close(quit) // first init ssh client
-
-	for {
-	start:
-		conn, err := ln.Accept()
-		if err != nil {
-			glog.V(LWARNING).Infoln("[ssh]", err)
-			continue
-		}
-		setKeepAlive(conn, KeepAliveTime)
-
-		select {
-		case <-quit:
-			if s.Base.Chain.lastNode == nil || s.Base.Chain.lastNode.Transport != "ssh" {
-				break
-			}
-			if err := s.initSSHClient(); err != nil {
-				glog.V(LWARNING).Infoln("[ssh]", err)
-				conn.Close()
-				goto start
-			}
-			quit = make(chan interface{})
-			exit := make(chan error, 1)
-			go func() {
-				exit <- s.sshClient.Wait()
-			}()
-
-			go func() {
-				var c <-chan time.Time
-				ping, _ := strconv.Atoi(s.Base.Chain.lastNode.Get("ping"))
-				if ping > 0 {
-					d := time.Second * time.Duration(ping)
-					glog.V(LINFO).Infoln("[tcp-ssh] ping is enabled:", d)
-					t := time.NewTicker(d)
-					defer t.Stop()
-					c = t.C
-				}
-
-				for {
-					select {
-					case <-c:
-						_, _, err := s.sshClient.SendRequest("ping", true, nil)
-						if err != nil {
-							glog.V(LWARNING).Infoln("[tcp-ssh] ping", err)
-							close(quit)
-							return
-						}
-						glog.V(LDEBUG).Infoln("[tcp-ssh] heartbeat OK")
-
-					case er := <-exit:
-						if er != nil {
-							glog.V(LWARNING).Infoln("[tcp-ssh] ssh connection closed:", er)
-						}
-						close(quit)
-						return
-					}
-				}
-			}()
-
-		default:
-		}
-
-		go s.Handler(conn, raddr)
-	}
-}
-
-func (s *TcpForwardServer) initSSHClient() error {
-	if s.sshClient != nil {
-		s.sshClient.Close()
-		s.sshClient = nil
-	}
-
-	sshNode := s.Base.Chain.lastNode
-	c, err := s.Base.Chain.GetConn()
-	if err != nil {
-		return err
-	}
-	var user, password string
-	if len(sshNode.Users) > 0 {
-		user = sshNode.Users[0].Username()
-		password, _ = sshNode.Users[0].Password()
-	}
-	config := ssh.ClientConfig{
-		User: user,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
-		},
-	}
-	sshConn, chans, reqs, err := ssh.NewClientConn(c, sshNode.Addr, &config)
-	if err != nil {
-		return err
-	}
-	s.sshClient = ssh.NewClient(sshConn, chans, reqs)
-	s.Handler = s.handleTcpForwardSSH
-
-	return nil
-}
-
-func (s *TcpForwardServer) handleTcpForward(conn net.Conn, raddr *net.TCPAddr) {
+func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	glog.V(LINFO).Infof("[tcp] %s - %s", conn.RemoteAddr(), raddr)
-	cc, err := s.Base.Chain.Dial(raddr.String())
+	log.Logf("[tcp] %s - %s", conn.RemoteAddr(), h.raddr)
+	cc, err := h.options.Chain.Dial(h.raddr)
 	if err != nil {
-		glog.V(LWARNING).Infof("[tcp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
+		log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), h.raddr, err)
 		return
 	}
 	defer cc.Close()
 
-	glog.V(LINFO).Infof("[tcp] %s <-> %s", conn.RemoteAddr(), raddr)
-	s.Base.transport(conn, cc)
-	glog.V(LINFO).Infof("[tcp] %s >-< %s", conn.RemoteAddr(), raddr)
+	log.Logf("[tcp] %s <-> %s", conn.RemoteAddr(), h.raddr)
+	transport(conn, cc)
+	log.Logf("[tcp] %s >-< %s", conn.RemoteAddr(), h.raddr)
 }
 
-func (s *TcpForwardServer) handleTcpForwardSSH(conn net.Conn, raddr *net.TCPAddr) {
+type udpDirectForwardHandler struct {
+	raddr   string
+	options *HandlerOptions
+}
+
+// UDPDirectForwardHandler creates a server Handler for UDP port forwarding server.
+// The raddr is the remote address that the server will forward to.
+func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &udpDirectForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
+}
+
+func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	if s.sshClient == nil {
-		return
-	}
-
-	rc, err := s.sshClient.DialTCP("tcp", nil, raddr)
-	if err != nil {
-		glog.V(LWARNING).Infof("[tcp] %s -> %s : %s", conn.RemoteAddr(), raddr, err)
-		return
-	}
-	defer rc.Close()
-
-	glog.V(LINFO).Infof("[tcp] %s <-> %s", conn.RemoteAddr(), raddr)
-	Transport(conn, rc)
-	glog.V(LINFO).Infof("[tcp] %s >-< %s", conn.RemoteAddr(), raddr)
-}
-
-type packet struct {
-	srcAddr string // src address
-	dstAddr string // dest address
-	data    []byte
-}
-
-type cnode struct {
-	chain            *ProxyChain
-	conn             net.Conn
-	srcAddr, dstAddr string
-	rChan, wChan     chan *packet
-	err              error
-	ttl              time.Duration
-}
-
-func (node *cnode) getUDPTunnel() (net.Conn, error) {
-	conn, err := node.chain.GetConn()
-	if err != nil {
-		return nil, err
-	}
-
-	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	if err = gosocks5.NewRequest(CmdUdpTun, nil).Write(conn); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn.SetWriteDeadline(time.Time{})
-
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	reply, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn.SetReadDeadline(time.Time{})
-
-	if reply.Rep != gosocks5.Succeeded {
-		conn.Close()
-		return nil, errors.New("UDP tunnel failure")
-	}
-
-	return conn, nil
-}
-
-func (node *cnode) run() {
-	if len(node.chain.Nodes()) == 0 {
-		lconn, err := net.ListenUDP("udp", nil)
+	var cc net.Conn
+	if h.options.Chain.IsEmpty() {
+		raddr, err := net.ResolveUDPAddr("udp", h.raddr)
 		if err != nil {
-			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", node.srcAddr, node.dstAddr, err)
-			node.err = err
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
 			return
 		}
-		node.conn = lconn
+		cc, err = net.DialUDP("udp", nil, raddr)
+		if err != nil {
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
+			return
+		}
 	} else {
-		tc, err := node.getUDPTunnel()
+		var err error
+		cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
 		if err != nil {
-			glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", node.srcAddr, node.dstAddr, err)
-			node.err = err
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
 			return
 		}
-		node.conn = tc
+		cc = &udpTunnelConn{Conn: cc, raddr: h.raddr}
 	}
 
-	defer node.conn.Close()
+	defer cc.Close()
 
-	timer := time.NewTimer(node.ttl)
-	errChan := make(chan error, 2)
-
-	go func() {
-		for {
-			switch c := node.conn.(type) {
-			case *net.UDPConn:
-				b := make([]byte, MediumBufferSize)
-				n, addr, err := c.ReadFromUDP(b)
-				if err != nil {
-					glog.V(LWARNING).Infof("[udp] %s <- %s : %s", node.srcAddr, node.dstAddr, err)
-					node.err = err
-					errChan <- err
-					return
-				}
-
-				timer.Reset(node.ttl)
-				glog.V(LDEBUG).Infof("[udp] %s <<< %s : length %d", node.srcAddr, addr, n)
-
-				select {
-				// swap srcAddr with dstAddr
-				case node.rChan <- &packet{srcAddr: addr.String(), dstAddr: node.srcAddr, data: b[:n]}:
-				case <-time.After(time.Second * 3):
-					glog.V(LWARNING).Infof("[udp] %s <- %s : %s", node.srcAddr, node.dstAddr, "recv queue is full, discard")
-				}
-
-			default:
-				dgram, err := gosocks5.ReadUDPDatagram(c)
-				if err != nil {
-					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", node.srcAddr, node.dstAddr, err)
-					node.err = err
-					errChan <- err
-					return
-				}
-
-				timer.Reset(node.ttl)
-				glog.V(LDEBUG).Infof("[udp-tun] %s <<< %s : length %d", node.srcAddr, dgram.Header.Addr.String(), len(dgram.Data))
-
-				select {
-				// swap srcAddr with dstAddr
-				case node.rChan <- &packet{srcAddr: dgram.Header.Addr.String(), dstAddr: node.srcAddr, data: dgram.Data}:
-				case <-time.After(time.Second * 3):
-					glog.V(LWARNING).Infof("[udp-tun] %s <- %s : %s", node.srcAddr, node.dstAddr, "recv queue is full, discard")
-				}
-			}
-		}
-	}()
-
-	go func() {
-		for pkt := range node.wChan {
-			timer.Reset(node.ttl)
-
-			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
-				continue
-			}
-
-			switch c := node.conn.(type) {
-			case *net.UDPConn:
-				if _, err := c.WriteToUDP(pkt.data, dstAddr); err != nil {
-					glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
-					node.err = err
-					errChan <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
-
-			default:
-				dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(pkt.data)), 0, ToSocksAddr(dstAddr)), pkt.data)
-				if err := dgram.Write(c); err != nil {
-					glog.V(LWARNING).Infof("[udp-tun] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, err)
-					node.err = err
-					errChan <- err
-					return
-				}
-				glog.V(LDEBUG).Infof("[udp-tun] %s >>> %s : length %d", pkt.srcAddr, pkt.dstAddr, len(pkt.data))
-			}
-		}
-	}()
-
-	select {
-	case <-errChan:
-	case <-timer.C:
-	}
+	log.Logf("[udp] %s <-> %s", conn.RemoteAddr(), h.raddr)
+	transport(conn, cc)
+	log.Logf("[udp] %s >-< %s", conn.RemoteAddr(), h.raddr)
 }
 
-type UdpForwardServer struct {
-	Base *ProxyServer
-	TTL  int
+type tcpRemoteForwardHandler struct {
+	raddr   string
+	options *HandlerOptions
 }
 
-func NewUdpForwardServer(base *ProxyServer, ttl int) *UdpForwardServer {
-	return &UdpForwardServer{Base: base, TTL: ttl}
+// TCPRemoteForwardHandler creates a server Handler for TCP remote port forwarding server.
+// The raddr is the remote address that the server will forward to.
+func TCPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &tcpRemoteForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
 }
 
-func (s *UdpForwardServer) ListenAndServe() error {
-	laddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-
-	raddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Remote)
-	if err != nil {
-		return err
-	}
-
-	conn, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-		return err
-	}
+func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	rChan, wChan := make(chan *packet, 128), make(chan *packet, 128)
-	// start send queue
-	go func(ch chan<- *packet) {
-		for {
-			b := make([]byte, MediumBufferSize)
-			n, addr, err := conn.ReadFromUDP(b)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", laddr, raddr, err)
-				continue
-			}
+	cc, err := net.DialTimeout("tcp", h.raddr, DialTimeout)
+	if err != nil {
+		log.Logf("[rtcp] %s -> %s : %s", conn.LocalAddr(), h.raddr, err)
+		return
+	}
+	defer cc.Close()
+
+	log.Logf("[rtcp] %s <-> %s", conn.LocalAddr(), h.raddr)
+	transport(cc, conn)
+	log.Logf("[rtcp] %s >-< %s", conn.LocalAddr(), h.raddr)
+}
+
+type udpRemoteForwardHandler struct {
+	raddr   string
+	options *HandlerOptions
+}
+
+// UDPRemoteForwardHandler creates a server Handler for UDP remote port forwarding server.
+// The raddr is the remote address that the server will forward to.
+func UDPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &udpRemoteForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
+}
+
+func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {
+	defer conn.Close()
+
+	raddr, err := net.ResolveUDPAddr("udp", h.raddr)
+	if err != nil {
+		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
+		return
+	}
+	cc, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
+		return
+	}
+
+	log.Logf("[rudp] %s <-> %s", conn.RemoteAddr(), h.raddr)
+	transport(conn, cc)
+	log.Logf("[rudp] %s >-< %s", conn.RemoteAddr(), h.raddr)
+}
+
+type udpDirectForwardListener struct {
+	ln       net.PacketConn
+	conns    map[string]*udpServerConn
+	connChan chan net.Conn
+	errChan  chan error
+	ttl      time.Duration
+}
+
+// UDPDirectForwardListener creates a Listener for UDP port forwarding server.
+func UDPDirectForwardListener(addr string, ttl time.Duration) (Listener, error) {
+	laddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := net.ListenUDP("udp", laddr)
+	if err != nil {
+		return nil, err
+	}
+	l := &udpDirectForwardListener{
+		ln:       ln,
+		conns:    make(map[string]*udpServerConn),
+		connChan: make(chan net.Conn, 1024),
+		errChan:  make(chan error, 1),
+		ttl:      ttl,
+	}
+	go l.listenLoop()
+	return l, nil
+}
+
+func (l *udpDirectForwardListener) listenLoop() {
+	for {
+		b := make([]byte, mediumBufferSize)
+		n, raddr, err := l.ln.ReadFrom(b)
+		if err != nil {
+			log.Logf("[udp] peer -> %s : %s", l.Addr(), err)
+			l.ln.Close()
+			l.errChan <- err
+			close(l.errChan)
+			return
+		}
+		if Debug {
+			log.Logf("[udp] %s >>> %s : length %d", raddr, l.Addr(), n)
+		}
+		conn, ok := l.conns[raddr.String()]
+		if !ok || conn.Closed() {
+			conn = newUDPServerConn(l.ln, raddr, l.ttl)
+			l.conns[raddr.String()] = conn
 
 			select {
-			case ch <- &packet{srcAddr: addr.String(), dstAddr: raddr.String(), data: b[:n]}:
-			case <-time.After(time.Second * 3):
-				glog.V(LWARNING).Infof("[udp] %s -> %s : %s", addr, raddr, "send queue is full, discard")
+			case l.connChan <- conn:
+			default:
+				conn.Close()
+				log.Logf("[udp] %s - %s: connection queue is full", raddr, l.Addr())
 			}
-		}
-	}(wChan)
-	// start recv queue
-	go func(ch <-chan *packet) {
-		for pkt := range ch {
-			dstAddr, err := net.ResolveUDPAddr("udp", pkt.dstAddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
-				continue
-			}
-			if _, err := conn.WriteToUDP(pkt.data, dstAddr); err != nil {
-				glog.V(LWARNING).Infof("[udp] %s <- %s : %s", pkt.dstAddr, pkt.srcAddr, err)
-				return
-			}
-		}
-	}(rChan)
-
-	// mapping client to node
-	m := make(map[string]*cnode)
-
-	// start dispatcher
-	for pkt := range wChan {
-		// clear obsolete nodes
-		for k, node := range m {
-			if node != nil && node.err != nil {
-				close(node.wChan)
-				delete(m, k)
-				glog.V(LINFO).Infof("[udp] clear node %s", k)
-			}
-		}
-
-		node, ok := m[pkt.srcAddr]
-		if !ok {
-			node = &cnode{
-				chain:   s.Base.Chain,
-				srcAddr: pkt.srcAddr,
-				dstAddr: pkt.dstAddr,
-				rChan:   rChan,
-				wChan:   make(chan *packet, 32),
-				ttl:     time.Duration(s.TTL) * time.Second,
-			}
-			m[pkt.srcAddr] = node
-			go node.run()
-			glog.V(LINFO).Infof("[udp] %s -> %s : new client (%d)", pkt.srcAddr, pkt.dstAddr, len(m))
 		}
 
 		select {
-		case node.wChan <- pkt:
-		case <-time.After(time.Second * 3):
-			glog.V(LWARNING).Infof("[udp] %s -> %s : %s", pkt.srcAddr, pkt.dstAddr, "node send queue is full, discard")
+		case conn.rChan <- b[:n]:
+		default:
+			log.Logf("[udp] %s -> %s : read queue is full", raddr, l.Addr())
 		}
 	}
+}
 
+func (l *udpDirectForwardListener) Accept() (conn net.Conn, err error) {
+	var ok bool
+	select {
+	case conn = <-l.connChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
+		}
+	}
+	return
+}
+
+func (l *udpDirectForwardListener) Addr() net.Addr {
+	return l.ln.LocalAddr()
+}
+
+func (l *udpDirectForwardListener) Close() error {
+	return l.ln.Close()
+}
+
+type udpServerConn struct {
+	conn         net.PacketConn
+	raddr        net.Addr
+	rChan, wChan chan []byte
+	closed       chan struct{}
+	brokenChan   chan struct{}
+	closeMutex   sync.Mutex
+	ttl          time.Duration
+	nopChan      chan int
+}
+
+func newUDPServerConn(conn net.PacketConn, raddr net.Addr, ttl time.Duration) *udpServerConn {
+	c := &udpServerConn{
+		conn:       conn,
+		raddr:      raddr,
+		rChan:      make(chan []byte, 128),
+		wChan:      make(chan []byte, 128),
+		closed:     make(chan struct{}),
+		brokenChan: make(chan struct{}),
+		nopChan:    make(chan int),
+		ttl:        ttl,
+	}
+	go c.writeLoop()
+	go c.ttlWait()
+	return c
+}
+
+func (c *udpServerConn) Read(b []byte) (n int, err error) {
+	select {
+	case bb := <-c.rChan:
+		n = copy(b, bb)
+		if n != len(bb) {
+			err = errors.New("read partial data")
+			return
+		}
+	case <-c.brokenChan:
+		err = errors.New("Broken pipe")
+	case <-c.closed:
+		err = errors.New("read from closed connection")
+		return
+	}
+
+	select {
+	case c.nopChan <- n:
+	default:
+	}
+	return
+}
+
+func (c *udpServerConn) Write(b []byte) (n int, err error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+	select {
+	case c.wChan <- b:
+		n = len(b)
+	case <-c.brokenChan:
+		err = errors.New("Broken pipe")
+	case <-c.closed:
+		err = errors.New("write to closed connection")
+		return
+	}
+
+	select {
+	case c.nopChan <- n:
+	default:
+	}
+
+	return
+}
+
+func (c *udpServerConn) Close() error {
+	c.closeMutex.Lock()
+	defer c.closeMutex.Unlock()
+
+	select {
+	case <-c.closed:
+		return errors.New("connection is closed")
+	default:
+		close(c.closed)
+	}
 	return nil
 }
 
-type RTcpForwardServer struct {
-	Base *ProxyServer
+func (c *udpServerConn) Closed() bool {
+	select {
+	case <-c.closed:
+		return true
+	default:
+		return false
+	}
 }
 
-func NewRTcpForwardServer(base *ProxyServer) *RTcpForwardServer {
-	return &RTcpForwardServer{Base: base}
-}
-
-func (s *RTcpForwardServer) Serve() error {
-	if len(s.Base.Chain.nodes) == 0 {
-		return errors.New("rtcp: at least one -F must be assigned")
-	}
-
-	laddr, err := net.ResolveTCPAddr("tcp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-	raddr, err := net.ResolveTCPAddr("tcp", s.Base.Node.Remote)
-	if err != nil {
-		return err
-	}
-
-	retry := 0
+func (c *udpServerConn) writeLoop() {
 	for {
-		conn, err := s.Base.Chain.GetConn()
-		if err != nil {
-			glog.V(LWARNING).Infof("[rtcp] %s - %s : %s", laddr, raddr, err)
-			time.Sleep((1 << uint(retry)) * time.Second)
-			if retry < 5 {
-				retry++
+		select {
+		case b, ok := <-c.wChan:
+			if !ok {
+				return
 			}
+			n, err := c.conn.WriteTo(b, c.raddr)
+			if err != nil {
+				log.Logf("[udp] %s - %s : %s", c.RemoteAddr(), c.LocalAddr(), err)
+				return
+			}
+			if Debug {
+				log.Logf("[udp] %s <<< %s : length %d", c.RemoteAddr(), c.LocalAddr(), n)
+			}
+		case <-c.brokenChan:
+			return
+		case <-c.closed:
+			return
+		}
+	}
+}
+
+func (c *udpServerConn) ttlWait() {
+	ttl := c.ttl
+	if ttl == 0 {
+		ttl = defaultTTL
+	}
+	timer := time.NewTimer(ttl)
+
+	for {
+		select {
+		case <-c.nopChan:
+			timer.Reset(ttl)
+		case <-timer.C:
+			close(c.brokenChan)
+			return
+		case <-c.closed:
+			return
+		}
+	}
+}
+
+func (c *udpServerConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+func (c *udpServerConn) RemoteAddr() net.Addr {
+	return c.raddr
+}
+
+func (c *udpServerConn) SetDeadline(t time.Time) error {
+	return nil
+}
+
+func (c *udpServerConn) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+type tcpRemoteForwardListener struct {
+	addr   net.Addr
+	chain  *Chain
+	ln     net.Listener
+	closed chan struct{}
+}
+
+// TCPRemoteForwardListener creates a Listener for TCP remote port forwarding server.
+func TCPRemoteForwardListener(addr string, chain *Chain) (Listener, error) {
+	laddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tcpRemoteForwardListener{
+		addr:   laddr,
+		chain:  chain,
+		closed: make(chan struct{}),
+	}, nil
+}
+
+func (l *tcpRemoteForwardListener) Accept() (net.Conn, error) {
+	select {
+	case <-l.closed:
+		return nil, errors.New("closed")
+	default:
+	}
+
+	var tempDelay time.Duration
+	for {
+		conn, err := l.accept()
+		if err != nil {
+			if tempDelay == 0 {
+				tempDelay = 1000 * time.Millisecond
+			} else {
+				tempDelay *= 2
+			}
+			if max := 6 * time.Second; tempDelay > max {
+				tempDelay = max
+			}
+			log.Logf("[rtcp] Accept error: %v; retrying in %v", err, tempDelay)
+			time.Sleep(tempDelay)
 			continue
 		}
-		retry = 0
-
-		glog.V(LINFO).Infof("[rtcp] %s - %s", laddr, raddr)
-
-		lastNode := s.Base.Chain.lastNode
-		if lastNode != nil && lastNode.Transport == "ssh" {
-			s.connectRTcpForwardSSH(conn, lastNode, laddr, raddr)
-		} else {
-			if err := s.connectRTcpForward(conn, laddr, raddr); err != nil {
-				conn.Close()
-			}
-		}
-		time.Sleep(3 * time.Second)
+		return conn, nil
 	}
 }
 
-func (s *RTcpForwardServer) connectRTcpForwardSSH(conn net.Conn, sshNode *ProxyNode, laddr, raddr net.Addr) error {
-	defer conn.Close()
-
-	var user, password string
-	if len(sshNode.Users) > 0 {
-		user = sshNode.Users[0].Username()
-		password, _ = sshNode.Users[0].Password()
-	}
-	config := ssh.ClientConfig{
-		User: user,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
-		},
-	}
-	c, chans, reqs, err := ssh.NewClientConn(conn, sshNode.Addr, &config)
-	if err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
-		return err
-	}
-	client := ssh.NewClient(c, chans, reqs)
-
-	quit := make(chan interface{})
-	defer close(quit)
-
-	go func() {
-		defer client.Close()
-
-		var c <-chan time.Time
-
-		ping, _ := strconv.Atoi(sshNode.Get("ping"))
-		if ping > 0 {
-			d := time.Second * time.Duration(ping)
-			glog.V(LINFO).Infoln("[rtcp] ping is enabled:", d)
-			t := time.NewTicker(d)
-			defer t.Stop()
-			c = t.C
+func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
+	lastNode := l.chain.LastNode()
+	if lastNode.Protocol == "forward" && lastNode.Transport == "ssh" {
+		conn, err = l.chain.Dial(l.addr.String())
+	} else if lastNode.Protocol == "socks5" {
+		cc, er := l.chain.Conn()
+		if er != nil {
+			return nil, er
 		}
-
-		for {
-			select {
-			case <-c:
-				_, _, err := client.SendRequest("ping", true, nil)
-				if err != nil {
-					glog.V(LWARNING).Infoln("[rtcp] ping", err)
-					return
-				}
-				glog.V(LDEBUG).Infoln("[rtcp] heartbeat OK")
-
-			case <-quit:
-				glog.V(LWARNING).Infoln("[rtcp] ssh connection closed")
-				return
-			}
-		}
-	}()
-
-	addr := laddr.String()
-	if strings.HasPrefix(addr, ":") {
-		addr = "0.0.0.0" + addr
-	}
-	ln, err := client.Listen("tcp", addr)
-	if err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
-		return err
-	}
-	defer ln.Close()
-
-	for {
-		rc, err := ln.Accept()
+		conn, err = l.waitConnectSOCKS5(cc)
 		if err != nil {
-			return err
+			cc.Close()
 		}
-
-		go func(c net.Conn) {
-			defer c.Close()
-
-			tc, err := net.DialTimeout("tcp", raddr.String(), time.Second*30)
+	} else {
+		if l.ln == nil {
+			l.ln, err = net.Listen("tcp", l.addr.String())
 			if err != nil {
-				glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
 				return
 			}
-			defer tc.Close()
-
-			glog.V(LINFO).Infof("[rtcp] %s <-> %s", c.RemoteAddr(), c.LocalAddr())
-			Transport(c, tc)
-			glog.V(LINFO).Infof("[rtcp] %s >-< %s", c.RemoteAddr(), c.LocalAddr())
-		}(rc)
+		}
+		conn, err = l.ln.Accept()
 	}
+	return
 }
 
-func (s *RTcpForwardServer) connectRTcpForward(conn net.Conn, laddr, raddr net.Addr) error {
-	req := gosocks5.NewRequest(gosocks5.CmdBind, ToSocksAddr(laddr))
+func (l *tcpRemoteForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, error) {
+	conn, err := socks5Handshake(conn, l.chain.LastNode().User)
+	if err != nil {
+		return nil, err
+	}
+	req := gosocks5.NewRequest(gosocks5.CmdBind, toSocksAddr(l.addr))
 	if err := req.Write(conn); err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
-		return err
+		log.Log("[rtcp] SOCKS5 BIND request: ", err)
+		return nil, err
 	}
 
 	// first reply, bind status
 	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	rep, err := gosocks5.ReadReply(conn)
 	if err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
-		return err
+		log.Log("[rtcp] SOCKS5 BIND reply: ", err)
+		return nil, err
 	}
 	conn.SetReadDeadline(time.Time{})
 	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : bind on %s failure", laddr, raddr, laddr)
-		return errors.New("Bind on " + laddr.String() + " failure")
+		log.Logf("[rtcp] bind on %s failure", l.addr)
+		return nil, fmt.Errorf("Bind on %s failure", l.addr.String())
 	}
-	glog.V(LINFO).Infof("[rtcp] %s - %s BIND ON %s OK", laddr, raddr, rep.Addr)
+	log.Logf("[rtcp] BIND ON %s OK", rep.Addr)
 
-	// second reply, peer connection
+	// second reply, peer connected
 	rep, err = gosocks5.ReadReply(conn)
 	if err != nil {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", laddr, raddr, err)
-		return err
+		log.Log("[rtcp]", err)
+		return nil, err
 	}
 	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[rtcp] %s -> %s : peer connect failure", laddr, raddr)
-		return errors.New("peer connect failure")
+		log.Logf("[rtcp] peer connect failure: %d", rep.Rep)
+		return nil, errors.New("peer connect failure")
 	}
 
-	glog.V(LINFO).Infof("[rtcp] %s -> %s PEER %s CONNECTED", laddr, raddr, rep.Addr)
+	log.Logf("[rtcp] PEER %s CONNECTED", rep.Addr)
+	return conn, nil
+}
 
-	go func() {
-		defer conn.Close()
+func (l *tcpRemoteForwardListener) Addr() net.Addr {
+	return l.addr
+}
 
-		lconn, err := net.DialTimeout("tcp", raddr.String(), time.Second*30)
-		if err != nil {
-			glog.V(LWARNING).Infof("[rtcp] %s -> %s : %s", rep.Addr, raddr, err)
-			return
-		}
-		defer lconn.Close()
-
-		glog.V(LINFO).Infof("[rtcp] %s <-> %s", rep.Addr, lconn.RemoteAddr())
-		s.Base.transport(lconn, conn)
-		glog.V(LINFO).Infof("[rtcp] %s >-< %s", rep.Addr, lconn.RemoteAddr())
-	}()
-
+func (l *tcpRemoteForwardListener) Close() error {
+	close(l.closed)
 	return nil
 }
 
-type RUdpForwardServer struct {
-	Base *ProxyServer
+type udpRemoteForwardListener struct {
+	addr     *net.UDPAddr
+	chain    *Chain
+	conns    map[string]*udpServerConn
+	connChan chan net.Conn
+	errChan  chan error
+	ttl      time.Duration
+	closed   chan struct{}
 }
 
-func NewRUdpForwardServer(base *ProxyServer) *RUdpForwardServer {
-	return &RUdpForwardServer{Base: base}
+// UDPRemoteForwardListener creates a Listener for UDP remote port forwarding server.
+func UDPRemoteForwardListener(addr string, chain *Chain, ttl time.Duration) (Listener, error) {
+	laddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	ln := &udpRemoteForwardListener{
+		addr:     laddr,
+		chain:    chain,
+		conns:    make(map[string]*udpServerConn),
+		connChan: make(chan net.Conn, 1024),
+		errChan:  make(chan error, 1),
+		ttl:      ttl,
+		closed:   make(chan struct{}),
+	}
+	go ln.listenLoop()
+	return ln, nil
 }
 
-func (s *RUdpForwardServer) Serve() error {
-	if len(s.Base.Chain.nodes) == 0 {
-		return errors.New("rudp: at least one -F must be assigned")
-	}
-
-	laddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Addr)
-	if err != nil {
-		return err
-	}
-	raddr, err := net.ResolveUDPAddr("udp", s.Base.Node.Remote)
-	if err != nil {
-		return err
-	}
-
-	retry := 0
+func (l *udpRemoteForwardListener) listenLoop() {
 	for {
-		conn, err := s.Base.Chain.GetConn()
+		conn, err := l.connect()
 		if err != nil {
-			glog.V(LWARNING).Infof("[rudp] %s - %s : %s", laddr, raddr, err)
-			time.Sleep((1 << uint(retry)) * time.Second)
-			if retry < 5 {
-				retry++
+			log.Logf("[rudp] %s : %s", l.Addr(), err)
+			return
+		}
+
+		defer conn.Close()
+
+		for {
+			b := make([]byte, mediumBufferSize)
+			n, raddr, err := conn.ReadFrom(b)
+			if err != nil {
+				log.Logf("[rudp] %s : %s", l.Addr(), err)
+				break
 			}
+			if Debug {
+				log.Logf("[udp] %s >>> %s : length %d", raddr, l.Addr(), n)
+			}
+			uc, ok := l.conns[raddr.String()]
+			if !ok || uc.Closed() {
+				uc = newUDPServerConn(conn, raddr, l.ttl)
+				l.conns[raddr.String()] = uc
+
+				select {
+				case l.connChan <- uc:
+				default:
+					uc.Close()
+					log.Logf("[rudp] %s - %s: connection queue is full", raddr, l.Addr())
+				}
+			}
+
+			select {
+			case uc.rChan <- b[:n]:
+			default:
+				log.Logf("[rudp] %s -> %s : write queue is full", raddr, l.Addr())
+			}
+		}
+	}
+
+}
+
+func (l *udpRemoteForwardListener) connect() (conn net.PacketConn, err error) {
+	var tempDelay time.Duration
+
+	for {
+		select {
+		case <-l.closed:
+			return nil, errors.New("closed")
+		default:
+		}
+
+		lastNode := l.chain.LastNode()
+		if lastNode.Protocol == "socks5" {
+			var cc net.Conn
+			cc, err = getSOCKS5UDPTunnel(l.chain, l.addr)
+			if err != nil {
+				log.Logf("[rudp] %s : %s", l.Addr(), err)
+			} else {
+				conn = &udpTunnelConn{Conn: cc}
+			}
+		} else {
+			conn, err = net.ListenUDP("udp", l.addr)
+		}
+
+		if err != nil {
+			if tempDelay == 0 {
+				tempDelay = 1000 * time.Millisecond
+			} else {
+				tempDelay *= 2
+			}
+			if max := 6 * time.Second; tempDelay > max {
+				tempDelay = max
+			}
+			log.Logf("[rudp] Accept error: %v; retrying in %v", err, tempDelay)
+			time.Sleep(tempDelay)
 			continue
 		}
-		retry = 0
-
-		if err := s.connectRUdpForward(conn, laddr, raddr); err != nil {
-			conn.Close()
-			time.Sleep(6 * time.Second)
-		}
+		return
 	}
 }
 
-func (s *RUdpForwardServer) connectRUdpForward(conn net.Conn, laddr, raddr *net.UDPAddr) error {
-	glog.V(LINFO).Infof("[rudp] %s - %s", laddr, raddr)
-
-	req := gosocks5.NewRequest(CmdUdpTun, ToSocksAddr(laddr))
-	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	if err := req.Write(conn); err != nil {
-		glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", laddr, raddr, err)
-		return err
-	}
-	conn.SetWriteDeadline(time.Time{})
-
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	rep, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
-		return err
-	}
-	conn.SetReadDeadline(time.Time{})
-
-	if rep.Rep != gosocks5.Succeeded {
-		glog.V(LWARNING).Infof("[rudp] %s <- %s : bind on %s failure", laddr, raddr, laddr)
-		return errors.New(fmt.Sprintf("bind on %s failure", laddr))
-	}
-
-	glog.V(LINFO).Infof("[rudp] %s - %s BIND ON %s OK", laddr, raddr, rep.Addr)
-
-	for {
-		dgram, err := gosocks5.ReadUDPDatagram(conn)
-		if err != nil {
-			glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
-			return err
+func (l *udpRemoteForwardListener) Accept() (conn net.Conn, err error) {
+	var ok bool
+	select {
+	case conn = <-l.connChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
 		}
-
-		go func() {
-			b := make([]byte, MediumBufferSize)
-
-			relay, err := net.DialUDP("udp", nil, raddr)
-			if err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", laddr, raddr, err)
-				return
-			}
-			defer relay.Close()
-
-			if _, err := relay.Write(dgram.Data); err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s -> %s : %s", laddr, raddr, err)
-				return
-			}
-			glog.V(LDEBUG).Infof("[rudp] %s >>> %s length: %d", laddr, raddr, len(dgram.Data))
-
-			relay.SetReadDeadline(time.Now().Add(ReadTimeout))
-			n, err := relay.Read(b)
-			if err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
-				return
-			}
-			relay.SetReadDeadline(time.Time{})
-
-			glog.V(LDEBUG).Infof("[rudp] %s <<< %s length: %d", laddr, raddr, n)
-
-			conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-			if err := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(n), 0, dgram.Header.Addr), b[:n]).Write(conn); err != nil {
-				glog.V(LWARNING).Infof("[rudp] %s <- %s : %s", laddr, raddr, err)
-				return
-			}
-			conn.SetWriteDeadline(time.Time{})
-		}()
 	}
+	return
+}
+
+func (l *udpRemoteForwardListener) Addr() net.Addr {
+	return l.addr
+}
+
+func (l *udpRemoteForwardListener) Close() error {
+	close(l.closed)
+	return nil
 }

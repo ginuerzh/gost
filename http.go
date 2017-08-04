@@ -2,96 +2,100 @@ package gost
 
 import (
 	"bufio"
-	"crypto/tls"
 	"encoding/base64"
-	"errors"
-	"io"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
+	"strings"
 	"time"
 
-	"github.com/ginuerzh/pht"
 	"github.com/go-log/log"
-	"github.com/golang/glog"
-	"golang.org/x/net/http2"
 )
 
-type HttpServer struct {
-	conn net.Conn
-	Base *ProxyServer
+type httpConnector struct {
+	User *url.Userinfo
 }
 
-func NewHttpServer(conn net.Conn, base *ProxyServer) *HttpServer {
-	return &HttpServer{
-		conn: conn,
-		Base: base,
-	}
+// HTTPConnector creates a Connector for HTTP proxy client.
+// It accepts an optional auth info for HTTP Basic Authentication.
+func HTTPConnector(user *url.Userinfo) Connector {
+	return &httpConnector{User: user}
 }
 
-// Default HTTP server handler
-func (s *HttpServer) HandleRequest(req *http.Request) {
-
-}
-
-func (s *HttpServer) forwardRequest(req *http.Request) {
-	last := s.Base.Chain.lastNode
-	if last == nil {
-		return
+func (c *httpConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+	req := &http.Request{
+		Method:     http.MethodConnect,
+		URL:        &url.URL{Host: addr},
+		Host:       addr,
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header:     make(http.Header),
 	}
-	cc, err := s.Base.Chain.GetConn()
-	if err != nil {
-		glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), last.Addr, err)
+	req.Header.Set("Proxy-Connection", "keep-alive")
 
-		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		glog.V(LDEBUG).Infof("[http] %s <- %s\n%s", s.conn.RemoteAddr(), last.Addr, string(b))
-		s.conn.Write(b)
-		return
-	}
-	defer cc.Close()
-
-	if len(last.Users) > 0 {
-		user := last.Users[0]
-		s := user.String()
-		if _, set := user.Password(); !set {
+	if c.User != nil {
+		s := c.User.String()
+		if _, set := c.User.Password(); !set {
 			s += ":"
 		}
 		req.Header.Set("Proxy-Authorization",
 			"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
 	}
 
-	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	if err = req.WriteProxy(cc); err != nil {
-		glog.V(LWARNING).Infof("[http] %s -> %s : %s", s.conn.RemoteAddr(), req.Host, err)
-		return
+	if err := req.Write(conn); err != nil {
+		return nil, err
 	}
-	cc.SetWriteDeadline(time.Time{})
 
-	glog.V(LINFO).Infof("[http] %s <-> %s", s.conn.RemoteAddr(), req.Host)
-	s.Base.transport(s.conn, cc)
-	glog.V(LINFO).Infof("[http] %s >-< %s", s.conn.RemoteAddr(), req.Host)
-	return
+	if Debug {
+		dump, _ := httputil.DumpRequest(req, false)
+		log.Log(string(dump))
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		return nil, err
+	}
+
+	if Debug {
+		dump, _ := httputil.DumpResponse(resp, false)
+		log.Log(string(dump))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s", resp.Status)
+	}
+
+	return conn, nil
 }
 
 type httpHandler struct {
-	server Server
+	options *HandlerOptions
 }
 
-func HTTPHandler(server Server) Handler {
-	return &httpHandler{server: server}
+// HTTPHandler creates a server Handler for HTTP proxy server.
+func HTTPHandler(opts ...HandlerOption) Handler {
+	h := &httpHandler{
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+	return h
 }
 
 func (h *httpHandler) Handle(conn net.Conn) {
+	defer conn.Close()
+
 	req, err := http.ReadRequest(bufio.NewReader(conn))
 	if err != nil {
-		log.Log("[http]", err)
+		log.Logf("[http] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 
-	log.Logf("[http] %s %s - %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
-
 	if Debug {
+		log.Logf("[http] %s %s - %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
 		dump, _ := httputil.DumpRequest(req, false)
 		log.Logf(string(dump))
 	}
@@ -104,21 +108,8 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	valid := false
 	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	users := h.server.Options().BaseOptions().Users
-	for _, user := range users {
-		username := user.Username()
-		password, _ := user.Password()
-		if (u == username && p == password) ||
-			(u == username && password == "") ||
-			(username == "" && p == password) {
-			valid = true
-			break
-		}
-	}
-
-	if len(users) > 0 && !valid {
+	if !authenticate(u, p, h.options.Users...) {
 		log.Logf("[http] %s <- %s : proxy authentication required", conn.RemoteAddr(), req.Host)
 		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
 			"Proxy-Authenticate: Basic realm=\"gost\"\r\n" +
@@ -128,20 +119,31 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	}
 
 	req.Header.Del("Proxy-Authorization")
+	req.Header.Del("Proxy-Connection")
+
+	if !Can("tcp", req.Host, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[http] Unauthorized to tcp connect to %s", req.Host)
+		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		conn.Write(b)
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
+		}
+		return
+	}
 
 	// forward http request
-	//lastNode := s.Base.Chain.lastNode
-	//if lastNode != nil && lastNode.Transport == "" && (lastNode.Protocol == "http" || lastNode.Protocol == "") {
-	//	s.forwardRequest(req)
-	//	return
-	//}
+	lastNode := h.options.Chain.LastNode()
+	if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
+		h.forwardRequest(conn, req)
+		return
+	}
 
-	// if !s.Base.Node.Can("tcp", req.Host) {
-	//	glog.Errorf("Unauthorized to tcp connect to %s", req.Host)
-	//	return
-	// }
-
-	cc, err := h.server.Chain().Dial(req.Host)
+	host := req.Host
+	if !strings.Contains(req.Host, ":") {
+		host += ":80"
+	}
+	cc, err := h.options.Chain.Dial(host)
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 
@@ -164,7 +166,6 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		conn.Write(b)
 	} else {
 		req.Header.Del("Proxy-Connection")
-		// req.Header.Set("Connection", "Keep-Alive")
 
 		if err = req.Write(cc); err != nil {
 			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
@@ -172,274 +173,87 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		}
 	}
 
+	log.Logf("[http] %s <-> %s", cc.LocalAddr(), req.Host)
+	transport(conn, cc)
+	log.Logf("[http] %s >-< %s", cc.LocalAddr(), req.Host)
+}
+
+func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request) {
+	if h.options.Chain.IsEmpty() {
+		return
+	}
+	lastNode := h.options.Chain.LastNode()
+
+	cc, err := h.options.Chain.Conn()
+	if err != nil {
+		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), lastNode.Addr, err)
+
+		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), lastNode.Addr, string(b))
+		}
+		conn.Write(b)
+		return
+	}
+	defer cc.Close()
+
+	if lastNode.User != nil {
+		s := lastNode.User.String()
+		if _, set := lastNode.User.Password(); !set {
+			s += ":"
+		}
+		req.Header.Set("Proxy-Authorization",
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
+	}
+
+	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	if err = req.WriteProxy(cc); err != nil {
+		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+		return
+	}
+	cc.SetWriteDeadline(time.Time{})
+
 	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
-	Transport(conn, cc)
+	transport(conn, cc)
 	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
+	return
 }
 
-type Http2Server struct {
-	Base      *ProxyServer
-	Handler   http.Handler
-	TLSConfig *tls.Config
-}
-
-func NewHttp2Server(base *ProxyServer) *Http2Server {
-	return &Http2Server{Base: base}
-}
-
-func (s *Http2Server) ListenAndServeTLS(config *tls.Config) error {
-	srv := http.Server{
-		Addr:      s.Base.Node.Addr,
-		Handler:   s.Handler,
-		TLSConfig: config,
-	}
-	if srv.Handler == nil {
-		srv.Handler = http.HandlerFunc(s.HandleRequest)
-	}
-	http2.ConfigureServer(&srv, nil)
-	return srv.ListenAndServeTLS("", "")
-}
-
-// Default HTTP2 server handler
-func (s *Http2Server) HandleRequest(w http.ResponseWriter, req *http.Request) {
-	target := req.Header.Get("Gost-Target")
-	if target == "" {
-		target = req.Host
-	}
-	glog.V(LINFO).Infof("[http2] %s %s - %s %s", req.Method, req.RemoteAddr, target, req.Proto)
-	if glog.V(LDEBUG) {
-		dump, _ := httputil.DumpRequest(req, false)
-		glog.Infoln(string(dump))
-	}
-
-	w.Header().Set("Proxy-Agent", "gost/"+Version)
-
-	if !s.Base.Node.Can("tcp", target) {
-		glog.Errorf("Unauthorized to tcp connect to %s", target)
+func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
+	if proxyAuth == "" {
 		return
 	}
 
-	// HTTP2 as transport
-	if req.Header.Get("Proxy-Switch") == "gost" {
-		conn, err := s.Upgrade(w, req)
-		if err != nil {
-			glog.V(LINFO).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
-			return
-		}
-		glog.V(LINFO).Infof("[http2] %s - %s : switch to HTTP2 transport mode OK", req.RemoteAddr, target)
-		s.Base.handleConn(conn)
+	if !strings.HasPrefix(proxyAuth, "Basic ") {
+		return
+	}
+	c, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(proxyAuth, "Basic "))
+	if err != nil {
+		return
+	}
+	cs := string(c)
+	s := strings.IndexByte(cs, ':')
+	if s < 0 {
 		return
 	}
 
-	valid := false
-	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
-	for _, user := range s.Base.Node.Users {
-		username := user.Username()
-		password, _ := user.Password()
+	return cs[:s], cs[s+1:], true
+}
+
+func authenticate(username, password string, users ...*url.Userinfo) bool {
+	if len(users) == 0 {
+		return true
+	}
+
+	for _, user := range users {
+		u := user.Username()
+		p, _ := user.Password()
 		if (u == username && p == password) ||
-			(u == username && password == "") ||
-			(username == "" && p == password) {
-			valid = true
-			break
+			(u == username && p == "") ||
+			(u == "" && p == password) {
+			return true
 		}
 	}
-	if len(s.Base.Node.Users) > 0 && !valid {
-		glog.V(LWARNING).Infof("[http2] %s <- %s : proxy authentication required", req.RemoteAddr, target)
-		w.WriteHeader(http.StatusProxyAuthRequired)
-		return
-	}
-
-	req.Header.Del("Proxy-Authorization")
-	req.Header.Del("Proxy-Connection")
-
-	c, err := s.Base.Chain.Dial(target)
-	if err != nil {
-		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-	defer c.Close()
-
-	glog.V(LINFO).Infof("[http2] %s <-> %s", req.RemoteAddr, target)
-
-	if req.Method == http.MethodConnect {
-		w.WriteHeader(http.StatusOK)
-		if fw, ok := w.(http.Flusher); ok {
-			fw.Flush()
-		}
-
-		// compatible with HTTP1.x
-		if hj, ok := w.(http.Hijacker); ok && req.ProtoMajor == 1 {
-			// we take over the underly connection
-			conn, _, err := hj.Hijack()
-			if err != nil {
-				glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			defer conn.Close()
-			glog.V(LINFO).Infof("[http2] %s -> %s : downgrade to HTTP/1.1", req.RemoteAddr, target)
-			s.Base.transport(conn, c)
-			return
-		}
-
-		errc := make(chan error, 2)
-		go func() {
-			_, err := io.Copy(c, req.Body)
-			errc <- err
-		}()
-		go func() {
-			_, err := io.Copy(flushWriter{w}, c)
-			errc <- err
-		}()
-
-		select {
-		case <-errc:
-			// glog.V(LWARNING).Infoln("exit", err)
-		}
-		glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, target)
-		return
-	}
-
-	// req.Header.Set("Connection", "Keep-Alive")
-	if err = req.Write(c); err != nil {
-		glog.V(LWARNING).Infof("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
-		return
-	}
-
-	resp, err := http.ReadResponse(bufio.NewReader(c), req)
-	if err != nil {
-		glog.V(LWARNING).Infoln("[http2] %s -> %s : %s", req.RemoteAddr, target, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	for k, v := range resp.Header {
-		for _, vv := range v {
-			w.Header().Add(k, vv)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(flushWriter{w}, resp.Body); err != nil {
-		glog.V(LWARNING).Infof("[http2] %s <- %s : %s", req.RemoteAddr, target, err)
-	}
-	glog.V(LINFO).Infof("[http2] %s >-< %s", req.RemoteAddr, target)
-}
-
-// Upgrade upgrade an HTTP2 request to a bidirectional connection that preparing for tunneling other protocol, just like a websocket connection.
-func (s *Http2Server) Upgrade(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
-	if r.Method != http.MethodConnect {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, errors.New("Method not allowed")
-	}
-
-	w.WriteHeader(http.StatusOK)
-
-	if fw, ok := w.(http.Flusher); ok {
-		fw.Flush()
-	}
-
-	conn := &http2Conn{r: r.Body, w: flushWriter{w}}
-	conn.remoteAddr, _ = net.ResolveTCPAddr("tcp", r.RemoteAddr)
-	conn.localAddr, _ = net.ResolveTCPAddr("tcp", r.Host)
-	return conn, nil
-}
-
-// HTTP2 client connection, wrapped up just like a net.Conn
-type http2Conn struct {
-	r          io.Reader
-	w          io.Writer
-	remoteAddr net.Addr
-	localAddr  net.Addr
-}
-
-func (c *http2Conn) Read(b []byte) (n int, err error) {
-	return c.r.Read(b)
-}
-
-func (c *http2Conn) Write(b []byte) (n int, err error) {
-	return c.w.Write(b)
-}
-
-func (c *http2Conn) Close() (err error) {
-	if rc, ok := c.r.(io.Closer); ok {
-		err = rc.Close()
-	}
-	if w, ok := c.w.(io.Closer); ok {
-		err = w.Close()
-	}
-	return
-}
-
-func (c *http2Conn) LocalAddr() net.Addr {
-	return c.localAddr
-}
-
-func (c *http2Conn) RemoteAddr() net.Addr {
-	return c.remoteAddr
-}
-
-func (c *http2Conn) SetDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
-}
-
-func (c *http2Conn) SetReadDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
-}
-
-func (c *http2Conn) SetWriteDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
-}
-
-type flushWriter struct {
-	w io.Writer
-}
-
-func (fw flushWriter) Write(p []byte) (n int, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if s, ok := r.(string); ok {
-				err = errors.New(s)
-				return
-			}
-			err = r.(error)
-		}
-	}()
-
-	n, err = fw.w.Write(p)
-	if err != nil {
-		// glog.V(LWARNING).Infoln("flush writer:", err)
-		return
-	}
-	if f, ok := fw.w.(http.Flusher); ok {
-		f.Flush()
-	}
-	return
-}
-
-type PureHttpServer struct {
-	Base    *ProxyServer
-	Handler func(net.Conn)
-}
-
-func NewPureHttpServer(base *ProxyServer) *PureHttpServer {
-	return &PureHttpServer{
-		Base: base,
-	}
-}
-
-func (s *PureHttpServer) ListenAndServe() error {
-	server := pht.Server{
-		Addr: s.Base.Node.Addr,
-		Key:  s.Base.Node.Get("key"),
-	}
-	if server.Handler == nil {
-		server.Handler = s.handleConn
-	}
-	return server.ListenAndServe()
-}
-
-func (s *PureHttpServer) handleConn(conn net.Conn) {
-	glog.V(LINFO).Infof("[pht] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
-	s.Base.handleConn(conn)
+	return false
 }

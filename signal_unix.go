@@ -3,11 +3,12 @@
 package gost
 
 import (
-	"github.com/golang/glog"
-	"gopkg.in/xtaci/kcp-go.v2"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/go-log/log"
+	"gopkg.in/xtaci/kcp-go.v2"
 )
 
 func kcpSigHandler() {
@@ -17,7 +18,7 @@ func kcpSigHandler() {
 	for {
 		switch <-ch {
 		case syscall.SIGUSR1:
-			glog.V(LINFO).Infof("[kcp] SNMP: %+v", kcp.DefaultSnmp.Copy())
+			log.Logf("[kcp] SNMP: %+v", kcp.DefaultSnmp.Copy())
 		}
 	}
 }
