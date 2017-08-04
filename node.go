@@ -5,8 +5,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/go-log/log"
 )
 
 // Node is a proxy node, mainly used to construct a proxy chain.
@@ -89,8 +87,5 @@ func Can(action string, addr string, whitelist, blacklist *Permissions) bool {
 		return false
 	}
 
-	if Debug {
-		log.Logf("Can action: %s, host: %s, port %d", action, host, port)
-	}
 	return whitelist.Can(action, host, port) && !blacklist.Can(action, host, port)
 }

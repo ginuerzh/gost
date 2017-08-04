@@ -41,7 +41,7 @@ func TLSListener(addr string, config *tls.Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &tlsListener{tcpKeepAliveListener{ln.(*net.TCPListener)}}, nil
+	return &tlsListener{ln}, nil
 }
 
 // Wrap a net.Conn into a client tls connection, performing any
