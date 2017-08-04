@@ -7,18 +7,19 @@ gost - GO Simple Tunnel
 
 特性
 ------
-* 可同时监听多端口
+* 多端口监听
 * 可设置转发代理，支持多级转发(代理链)
-* 支持标准HTTP/HTTPS/SOCKS4(A)/SOCKS5代理协议
+* 支持标准HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议 (OTA: 2.2+，UDP: 2.4+)
-* 支持本地/远程端口转发 (2.1+)
-* 支持HTTP 2.0 (2.2+)
-* 实验性支持QUIC (2.3+)
+* 支持Shadowsocks协议
+* Shadowsocks UDP relay (2.4+)
+* 本地/远程TCP/UDP端口转发
 * 支持KCP协议 (2.3+)
-* 透明代理 (2.3+)
+* TCP透明代理 (2.3+)
+* HTTP2隧道 (2.4+)
 * SSH隧道 (2.4+)
+* QUIC隧道 (2.4+)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -37,35 +38,38 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks4(a), socks5, shadowsocks), transport: 数据传输方式(ws, wss, tls, http2, quic, kcp, pht), 二者可以任意组合，或单独使用:
+protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传输方式(ws, wss, tls, quic, kcp, ssh, h2, h2c), 二者可以任意组合，或单独使用:
 
-> http - HTTP代理: http://:8080
+> http - 标准HTTP代理: http://:8080
 
-> http+tls - HTTPS代理(可能需要提供受信任的证书): http+tls://:443或https://:443
+> https - 标准HTTPS代理(可能需要提供受信任的证书): https://:443或https://:443
 
-> http2 - HTTP2代理并向下兼容HTTPS代理: http2://:443
+> http2 - 标准HTTP2代理并向下兼容HTTPS: http2://:443
 
 > socks4(a) - 标准SOCKS4(A)代理: socks4://:1080或socks4a://:1080
 
-> socks - 标准SOCKS5代理(支持TLS协商加密): socks://:1080
+> socks5 - 标准SOCKS5代理(支持TLS协商加密): socks5://:1080
 
-> socks+wss - SOCKS5代理，使用websocket传输数据: socks+wss://:1080
+> socks5+wss - SOCKS5代理，使用websocket传输数据: socks5+wss://:1080
 
-> tls - HTTPS/SOCKS5代理，使用TLS传输数据: tls://:443
+> tls - HTTP/SOCKS4/SOCKS5代理，使用TLS传输数据: tls://:443
 
-> ss - Shadowsocks代理，ss://chacha20:123456@:8338
+> ss - Shadowsocks代理: ss://chacha20:123456@:8338
 
-> ssu - Shadowsocks UDP relay，ssu://chacha20:123456@:8338
+> ssu - Shadowsocks UDP relay: ssu://chacha20:123456@:8338
 
-> quic - QUIC代理，quic://:6121
+> quic - QUIC隧道: quic://:6121
 
-> kcp - KCP通道，kcp://:8388或kcp://aes:123456@:8388
+> kcp - KCP通道: kcp://:8388或kcp://aes:123456@:8388
 
-> pht - 普通HTTP通道，pht://:8080
+> redirect - 透明代理: redirect://:12345
 
-> redirect - 透明代理，redirect://:12345
+> ssh - SSH代理隧道: ssh://:2222，SSH转发隧道: forward+ssh://:2222
 
-> ssh - SSH转发隧道，ssh://admin:123456@:2222
+> h2 - HTTP2 h2隧道: h2://:443
+
+> h2c - HTTP2 h2c隧道: h2c://:443
+
 
 #### 端口转发
 
@@ -100,14 +104,6 @@ scheme://[bind_address]:port/[host]:hostport
 
 ServeNodes等同于-L参数，ChainNodes等同于-F参数
 
-#### 开启日志
-
-> -logtostderr : 输出到控制台
-
-> -v=3 : 日志级别(1-5)，级别越高，日志越详细(级别5将开启http2 debug)
-
-> -log_dir=/log/dir/path : 输出到目录/log/dir/path
-
 
 使用方法
 ------
@@ -115,7 +111,7 @@ ServeNodes等同于-L参数，ChainNodes等同于-F参数
 
 <img src="https://ginuerzh.github.io/images/gost_01.png" />
 
-* 作为标准HTTP/SOCKS5代理
+* 作为标准HTTP/SOCKS4/SOCKS5代理
 ```bash
 gost -L=:8080
 ```
@@ -140,7 +136,7 @@ test002 12345678
 
 * 多端口监听
 ```bash
-gost -L=http2://:443 -L=socks://:1080 -L=ss://aes-128-cfb:123456@:8338
+gost -L=http2://:443 -L=socks5://:1080 -L=ss://aes-128-cfb:123456@:8338
 ```
 
 #### 设置转发代理
@@ -159,59 +155,76 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 
 <img src="https://ginuerzh.github.io/images/gost_03.png" />
 ```bash
-gost -L=:8080 -F=http+tls://192.168.1.1:443 -F=socks+ws://192.168.1.2:1080 -F=ss://aes-128-cfb:123456@192.168.1.3:8338 -F=a.b.c.d:NNNN
+gost -L=:8080 -F=quic://192.168.1.1:6121 -F=socks5+wss://192.168.1.2:1080 -F=http2://192.168.1.3:443 ... -F=a.b.c.d:NNNN
 ```
 gost按照-F设置的顺序通过代理链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
 
 #### 本地端口转发(TCP)
 
 ```bash
-gost -L=tcp://:2222/192.168.1.1:22 -F=...
+gost -L=tcp://:2222/192.168.1.1:22 [-F=...]
 ```
-将本地TCP端口2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH类型时，gost会直接使用SSH的本地端口转发功能。
+将本地TCP端口2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发隧道类型时，gost会直接使用SSH的本地端口转发功能:
+
+```bash
+gost -L=tcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
+```
+
 #### 本地端口转发(UDP)
 
 ```bash
-gost -L=udp://:5353/192.168.1.1:53?ttl=60 -F=...
+gost -L=udp://:5353/192.168.1.1:53?ttl=60 [-F=...]
 ```
 将本地UDP端口5353上的数据(通过代理链)转发到192.168.1.1:53上。
 每条转发通道都有超时时间，当超过此时间，且在此时间段内无任何数据交互，则此通道将关闭。可以通过`ttl`参数来设置超时时间，默认值为60秒。
 
-**注:** 转发UDP数据时，如果有代理链，则代理链的末端(最后一个-F参数)必须是gost SOCKS5类型代理。
+**注:** 转发UDP数据时，如果有代理链，则代理链的末端(最后一个-F参数)必须是gost SOCKS5类型代理，gost会使用UDP over TCP方式进行转发。
 
 #### 远程端口转发(TCP)
 
 ```bash
-gost -L=rtcp://:2222/192.168.1.1:22 -F=... -F=socks://172.24.10.1:1080
+gost -L=rtcp://:2222/192.168.1.1:22 [-F=...]
 ```
-将172.24.10.1:2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH类型时，gost会直接使用SSH的远程端口转发功能。
+将172.24.10.1:2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发隧道类型时，gost会直接使用SSH的远程端口转发功能:
+
+```bash
+gost -L=rtcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
+```
 
 #### 远程端口转发(UDP)
 
 ```bash
-gost -L=rudp://:5353/192.168.1.1:53 -F=... -F=socks://172.24.10.1:1080
+gost -L=rudp://:5353/192.168.1.1:53 [-F=...]
 ```
 将172.24.10.1:5353上的数据(通过代理链)转发到192.168.1.1:53上。
 
-**注：** 若要使用远程端口转发功能，代理链不能为空(至少要设置一个-F参数)，且代理链的末端(最后一个-F参数)必须是gost SOCKS5类型代理。
+**注:** 转发UDP数据时，如果有代理链，则代理链的末端(最后一个-F参数)必须是gost SOCKS5类型代理，gost会使用UDP over TCP方式进行转发。
 
 #### HTTP2
-gost的HTTP2支持两种模式并自适应：
-* 作为标准的HTTP2代理，并向下兼容HTTPS代理。
-* 作为transport(类似于wss)，传输其他协议。
 
+gost的HTTP2支持两种模式：
+* 作为标准的HTTP2代理，并向下兼容HTTPS代理。
+* 作为隧道传输其他协议。
+
+##### 代理模式
 服务端:
 ```bash
 gost -L=http2://:443
 ```
 客户端:
 ```bash
-gost -L=:8080 -F=http2://server_ip:443?ping=30
+gost -L=:8080 -F=http2://server_ip:443
 ```
 
-客户端支持`ping`参数开启心跳检测(默认不开启)，参数值代表心跳间隔秒数。
-
-**注：** gost的代理链仅支持一个HTTP2代理节点，采用就近原则，会将第一个遇到的HTTP2代理节点视为HTTP2代理，其他HTTP2代理节点则被视为HTTPS代理。
+##### 隧道模式
+服务端:
+```bash
+gost -L=h2://:443
+```
+客户端:
+```bash
+gost -L=:8080 -F=h2://server_ip:443
+```
 
 #### QUIC
 gost对QUIC的支持是基于[quic-go](https://github.com/lucas-clemente/quic-go)库。
@@ -221,12 +234,12 @@ gost对QUIC的支持是基于[quic-go](https://github.com/lucas-clemente/quic-go
 gost -L=quic://:6121
 ```
 
-客户端(Chrome):
+客户端:
 ```bash
-chrome --enable-quic --proxy-server=quic://server_ip:6121
+gost -L=:8080 -F=quic://server_ip:6121
 ```
 
-**注：** 由于Chrome自身的限制，目前只能通过QUIC访问HTTP网站，无法访问HTTPS网站。
+**注：** QUIC模式只能作为代理链的第一个节点。
 
 #### KCP
 gost对KCP的支持是基于[kcp-go](https://github.com/xtaci/kcp-go)和[kcptun](https://github.com/xtaci/kcptun)库。
@@ -241,24 +254,41 @@ gost -L=kcp://:8388
 gost -L=:8080 -F=kcp://server_ip:8388
 ```
 
-或者手动指定加密方法和密码(手动指定的加密方法和密码会覆盖配置文件中的相应值)
-
-服务端:
-```bash
-gost -L=kcp://aes:123456@:8388
-```
-
-客户端:
-```bash
-gost -L=:8080 -F=kcp://aes:123456@server_ip:8388
-```
-
 gost会自动加载当前工作目录中的kcp.json(如果存在)配置文件，或者可以手动通过参数指定配置文件路径：
 ```bash
 gost -L=kcp://:8388?c=/path/to/conf/file
 ```
 
-**注：** 客户端若要开启KCP转发，当且仅当代理链不为空且首个代理节点(第一个-F参数)为kcp类型。
+**注：** KCP模式只能作为代理链的第一个节点。
+
+#### SSH
+
+gost的SSH支持两种模式：
+* 作为转发隧道，配合本地/远程TCP端口转发使用。
+* 作为隧道传输其他协议。
+
+##### 转发模式
+服务端:
+```bash
+gost -L=forward+ssh://:2222
+```
+客户端:
+```bash
+gost -L=rtcp://:1222/:22 -F=forward+ssh://server_ip:2222
+```
+
+##### 隧道模式
+服务端:
+```bash
+gost -L=ssh://:2222
+```
+客户端:
+```bash
+gost -L=:8080 -F=ssh://server_ip:2222?ping=60
+```
+
+可以通过`ping`参数设置心跳包发送周期，单位为秒。默认不发送心跳包。
+
 
 #### 透明代理
 基于iptables的透明代理。
@@ -274,7 +304,7 @@ gost -L=redirect://:12345 -F=http2://server_ip:443
 
 服务端:
 ```bash
-gost -L=http+tls://:443
+gost -L=https://:443
 ```
 客户端:
 ```bash
@@ -282,44 +312,43 @@ gost -L=:8080 -F=http+tls://server_ip:443
 ```
 
 #### HTTP2
-gost仅支持使用TLS加密的HTTP2协议，不支持明文HTTP2传输。
+gost的HTTP2代理模式仅支持使用TLS加密的HTTP2协议，不支持明文HTTP2传输。
 
+gost的HTTP2隧道模式支持加密(h2)和明文(h2c)两种模式。
 
 #### SOCKS5
 gost支持标准SOCKS5协议的no-auth(0x00)和user/pass(0x02)方法，并在此基础上扩展了两个：tls(0x80)和tls-auth(0x82)，用于数据加密。
 
 服务端:
 ```bash
-gost -L=socks://:1080
+gost -L=socks5://:1080
 ```
 客户端:
 ```bash
-gost -L=:8080 -F=socks://server_ip:1080
+gost -L=:8080 -F=socks5://server_ip:1080
 ```
 
 如果两端都是gost(如上)则数据传输会被加密(协商使用tls或tls-auth方法)，否则使用标准SOCKS5进行通讯(no-auth或user/pass方法)。
 
-**注：** 如果transport已经支持加密(wss, tls, http2, kcp)，则SOCKS5不会再使用加密方法，防止不必要的双重加密。
-
 #### Shadowsocks
 gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
-服务端(可以通过ota参数开启OTA强制模式，开启后客户端必须使用OTA模式):
+服务端:
 ```bash
-gost -L=ss://aes-128-cfb:123456@:8338?ota=1
+gost -L=ss://chacha20:123456@:8338
 ```
-客户端(可以通过ota参数开启OTA模式):
+客户端:
 ```bash
-gost -L=:8080 -F=ss://aes-128-cfb:123456@server_ip:8338?ota=1
+gost -L=:8080 -F=ss://chacha20:123456@server_ip:8338
 ```
 
 ##### Shadowsocks UDP relay
 
-目前仅服务端支持UDP，且仅支持OTA模式。
+目前仅服务端支持UDP Relay。
 
 服务端:
 ```bash
-gost -L=ssu://aes-128-cfb:123456@:8338
+gost -L=ssu://chacha20:123456@:8338
 ```
 
 #### TLS
