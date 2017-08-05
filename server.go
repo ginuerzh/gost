@@ -141,6 +141,16 @@ func (s *ProxyServer) Serve() error {
 
 		setKeepAlive(conn, KeepAliveTime)
 
+		if node.Transport == "obfs4" {
+			obfs4Conn, err := node.Obfs4ServerConn(conn)
+			if err != nil {
+				glog.V(LWARNING).Infoln(err)
+				conn.Close()
+				continue
+			}
+			conn = obfs4Conn
+		}
+
 		go s.handleConn(conn)
 	}
 }

@@ -60,7 +60,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	for _, ns := range options.ServeNodes {
-		serverNode, err := gost.ParseProxyNode(ns)
+		serverNode, err := gost.ParseProxyNode(ns, true) // isServeNode == true
 		if err != nil {
 			glog.Fatal(err)
 		}

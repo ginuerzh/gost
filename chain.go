@@ -42,7 +42,7 @@ func (c *ProxyChain) AddProxyNode(node ...ProxyNode) {
 
 func (c *ProxyChain) AddProxyNodeString(snode ...string) error {
 	for _, sn := range snode {
-		node, err := ParseProxyNode(sn)
+		node, err := ParseProxyNode(sn, false) // isServeNode == false
 		if err != nil {
 			return err
 		}
