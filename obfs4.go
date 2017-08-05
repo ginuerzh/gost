@@ -143,7 +143,7 @@ func Obfs4Listener(addr string) (Listener, error) {
 	return l, nil
 }
 
-func (l *obfs4Listener) Accpet() (net.Conn, error) {
+func (l *obfs4Listener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
 		return nil, err
