@@ -12,15 +12,14 @@ gost - GO Simple Tunnel
 * 支持标准HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议
-* Shadowsocks UDP relay (2.4+)
-* 本地/远程TCP/UDP端口转发
+* 支持Shadowsocks协议 (UDP: 2.4+)
+* 本地/远程TCP/UDP端口转发 (2.1+)
 * 支持KCP协议 (2.3+)
 * TCP透明代理 (2.3+)
-* HTTP2隧道 (2.4+)
-* SSH隧道 (2.4+)
-* QUIC隧道 (2.4+)
-* obfs4隧道 (2.4+)
+* HTTP2通道 (2.4+)
+* SSH通道 (2.4+)
+* QUIC通道 (2.4+)
+* obfs4通道 (2.4+)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -39,17 +38,17 @@ Google讨论组: https://groups.google.com/d/forum/go-gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传输方式(ws, wss, tls, quic, kcp, ssh, h2, h2c), 二者可以任意组合，或单独使用:
+protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传输方式(ws, wss, tls, quic, kcp, ssh, h2, h2c, obfs4), 二者可以任意组合，或单独使用:
 
 > http - 标准HTTP代理: http://:8080
 
-> https - 标准HTTPS代理(可能需要提供受信任的证书): https://:443或https://:443
+> https - 标准HTTPS代理(可能需要提供受信任的证书): http+tls://:443或https://:443
 
 > http2 - 标准HTTP2代理并向下兼容HTTPS: http2://:443
 
-> h2 - HTTP2 h2隧道: h2://:443
+> h2 - HTTP2 h2通道: h2://:443
 
-> h2c - HTTP2 h2c隧道: h2c://:443
+> h2c - HTTP2 h2c通道: h2c://:443
 
 > socks4(a) - 标准SOCKS4(A)代理: socks4://:1080或socks4a://:1080
 
@@ -63,15 +62,15 @@ protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传�
 
 > ssu - Shadowsocks UDP relay: ssu://chacha20:123456@:8338
 
-> quic - QUIC隧道: quic://:6121
+> quic - QUIC通道: quic://:6121
 
 > kcp - KCP通道: kcp://:8388或kcp://aes:123456@:8388
 
 > redirect - 透明代理: redirect://:12345
 
-> ssh - SSH代理隧道: ssh://:2222，SSH转发隧道: forward+ssh://:2222
+> ssh - SSH代理通道: ssh://:2222，SSH转发通道: forward+ssh://:2222
 
-> obfs4 - obfs4隧道: obfs4://:8080
+> obfs4 - obfs4通道: obfs4://:8080
 
 
 #### 端口转发
@@ -162,14 +161,14 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 ```bash
 gost -L=:8080 -F=quic://192.168.1.1:6121 -F=socks5+wss://192.168.1.2:1080 -F=http2://192.168.1.3:443 ... -F=a.b.c.d:NNNN
 ```
-gost按照-F设置的顺序通过代理链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
+gost按照-F设置的顺序通过代理链将请求最终转发给a.b.c.d:NNNN处理，每一个转发代理可以是任意HTTP/HTTPS/HTTP2/SOCKS4/SOCKS5/Shadowsocks类型代理。
 
 #### 本地端口转发(TCP)
 
 ```bash
 gost -L=tcp://:2222/192.168.1.1:22 [-F=...]
 ```
-将本地TCP端口2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发隧道类型时，gost会直接使用SSH的本地端口转发功能:
+将本地TCP端口2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发通道类型时，gost会直接使用SSH的本地端口转发功能:
 
 ```bash
 gost -L=tcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
@@ -190,7 +189,7 @@ gost -L=udp://:5353/192.168.1.1:53?ttl=60 [-F=...]
 ```bash
 gost -L=rtcp://:2222/192.168.1.1:22 [-F=...]
 ```
-将172.24.10.1:2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发隧道类型时，gost会直接使用SSH的远程端口转发功能:
+将172.24.10.1:2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发通道类型时，gost会直接使用SSH的远程端口转发功能:
 
 ```bash
 gost -L=rtcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
@@ -209,7 +208,7 @@ gost -L=rudp://:5353/192.168.1.1:53 [-F=...]
 
 gost的HTTP2支持两种模式：
 * 作为标准的HTTP2代理，并向下兼容HTTPS代理。
-* 作为隧道传输其他协议。
+* 作为通道传输其他协议。
 
 ##### 代理模式
 服务端:
@@ -221,7 +220,7 @@ gost -L=http2://:443
 gost -L=:8080 -F=http2://server_ip:443
 ```
 
-##### 隧道模式
+##### 通道模式
 服务端:
 ```bash
 gost -L=h2://:443
@@ -269,8 +268,8 @@ gost -L=kcp://:8388?c=/path/to/conf/file
 #### SSH
 
 gost的SSH支持两种模式：
-* 作为转发隧道，配合本地/远程TCP端口转发使用。
-* 作为隧道传输其他协议。
+* 作为转发通道，配合本地/远程TCP端口转发使用。
+* 作为通道传输其他协议。
 
 ##### 转发模式
 服务端:
@@ -282,7 +281,7 @@ gost -L=forward+ssh://:2222
 gost -L=rtcp://:1222/:22 -F=forward+ssh://server_ip:2222
 ```
 
-##### 隧道模式
+##### 通道模式
 服务端:
 ```bash
 gost -L=ssh://:2222
@@ -337,7 +336,7 @@ gost -L=:8080 -F=http+tls://server_ip:443
 #### HTTP2
 gost的HTTP2代理模式仅支持使用TLS加密的HTTP2协议，不支持明文HTTP2传输。
 
-gost的HTTP2隧道模式支持加密(h2)和明文(h2c)两种模式。
+gost的HTTP2通道模式支持加密(h2)和明文(h2c)两种模式。
 
 #### SOCKS5
 gost支持标准SOCKS5协议的no-auth(0x00)和user/pass(0x02)方法，并在此基础上扩展了两个：tls(0x80)和tls-auth(0x82)，用于数据加密。
@@ -382,11 +381,11 @@ gost内置了TLS证书，如果需要使用其他TLS证书，有两种方法：
 gost -L="http2://:443?cert=/path/to/my/cert/file&key=/path/to/my/key/file"
 ```
 
-对于客户端可以指定CA证书进行证书锁定(Certificate Pinning):
+对于客户端可以指定CA证书进行[证书锁定](https://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning)(Certificate Pinning):
 ```bash
 gost -L=:8080 -F="http2://:443?ca=ca.pem"
 ```
-此功能由[@sheerun](https://github.com/sheerun)贡献
+证书锁定功能由[@sheerun](https://github.com/sheerun)贡献
 
 SOCKS5 UDP数据处理
 ------
@@ -421,7 +420,7 @@ gost作为标准SOCKS5代理处理UDP数据
 
 多组权限可以通过`+`进行连接:
 
-`whitelist=rtcp,rudp:localhost,127.0.0.1:2222,8000-9000+udp:8.8.8.8,8.8.4.4:53`(允许TCP/UDP远程端口转发绑定到localhost,127.0.0.1的2222端口和8000-9000端口范围，同时允许UDP转发到8.8.8.8:53和8.8.4.4:53)
+`whitelist=rtcp,rudp:localhost,127.0.0.1:2222,8000-9000+udp:8.8.8.8,8.8.4.4:53`(允许TCP/UDP远程端口转发绑定到localhost,127.0.0.1的2222端口和8000-9000端口范围，同时允许UDP转发到8.8.8.8:53和8.8.4.4:53)。
 
 SSH远程端口转发只能绑定到127.0.0.1:8000
 ```bash
