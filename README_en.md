@@ -75,7 +75,7 @@ transport: data transmission mode (ws, wss, tls, quic, kcp, ssh, h2, h2c, obfs4)
 
 > quic - QUIC tunnel: quic://:6121
 
-> kcp - KCP tunnel: kcp://:8388 or kcp://aes:123456@:8388
+> kcp - KCP tunnel: kcp://:8388
 
 > redirect - transparent proxy: redirect://:12345
 
@@ -155,6 +155,7 @@ gost -L=http2://:443 -L=socks5://:1080 -L=ss://aes-128-cfb:123456@:8338
 #### Forward proxy
 
 <img src="https://ginuerzh.github.io/images/gost_02.png" />
+
 ```bash
 gost -L=:8080 -F=192.168.1.1:8081
 ```
@@ -167,6 +168,7 @@ gost -L=:8080 -F=http://admin:123456@192.168.1.1:8081
 #### Multi-level forward proxy
 
 <img src="https://ginuerzh.github.io/images/gost_03.png" />
+
 ```bash
 gost -L=:8080 -F=quic://192.168.1.1:6121 -F=socks5+wss://192.168.1.2:1080 -F=http2://192.168.1.3:443 ... -F=a.b.c.d:NNNN
 ```
@@ -208,9 +210,10 @@ gost -L=rtcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
 #### Remote UDP port forwarding
 
 ```bash
-gost -L=rudp://:5353/192.168.1.1:53 [-F=...]
+gost -L=rudp://:5353/192.168.1.1:53?ttl=60 [-F=...]
 ```
 The data on 172.24.10.1:5353 is forwarded to 192.168.1.1:53 (through the proxy chain).
+Each forwarding channel has a timeout period. When this time is exceeded and there is no data interaction during this time period, the channel will be closed. The timeout value can be set by the `ttl` parameter. The default value is 60 seconds.
 
 **NOTE:** When forwarding UDP data, if there is a proxy chain, the end of the chain (the last -F parameter) must be gost SOCKS5 proxy, gost will use UDP-over-TCP to forward data.
 
