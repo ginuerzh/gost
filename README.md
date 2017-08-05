@@ -20,6 +20,7 @@ gost - GO Simple Tunnel
 * HTTP2隧道 (2.4+)
 * SSH隧道 (2.4+)
 * QUIC隧道 (2.4+)
+* obfs4隧道 (2.4+)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -46,6 +47,10 @@ protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传�
 
 > http2 - 标准HTTP2代理并向下兼容HTTPS: http2://:443
 
+> h2 - HTTP2 h2隧道: h2://:443
+
+> h2c - HTTP2 h2c隧道: h2c://:443
+
 > socks4(a) - 标准SOCKS4(A)代理: socks4://:1080或socks4a://:1080
 
 > socks5 - 标准SOCKS5代理(支持TLS协商加密): socks5://:1080
@@ -66,9 +71,7 @@ protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传�
 
 > ssh - SSH代理隧道: ssh://:2222，SSH转发隧道: forward+ssh://:2222
 
-> h2 - HTTP2 h2隧道: h2://:443
-
-> h2c - HTTP2 h2c隧道: h2c://:443
+> obfs4 - obfs4隧道: obfs4://:8080
 
 
 #### 端口转发
@@ -85,6 +88,8 @@ scheme://[bind_address]:port/[host]:hostport
 > host:hostport - 目标访问地址
 
 #### 配置文件
+
+此功能由[@septs](https://github.com/septs)贡献。
 
 > -C : 指定配置文件路径
 
@@ -297,6 +302,24 @@ gost -L=:8080 -F=ssh://server_ip:2222?ping=60
 gost -L=redirect://:12345 -F=http2://server_ip:443
 ```
 
+#### obfs4
+此功能由[@isofew](https://github.com/isofew)贡献。
+
+服务端:
+```bash
+gost -L=obfs4://:443
+```
+
+当服务端运行后会在控制台打印出连接地址供客户端使用:
+```
+obfs4://:443/?cert=4UbQjIfjJEQHPOs8vs5sagrSXx1gfrDCGdVh2hpIPSKH0nklv1e4f29r7jb91VIrq4q5Jw&iat-mode=0
+```
+
+客户端:
+```
+gost -L=:8888 -F='obfs4://server_ip:443?cert=4UbQjIfjJEQHPOs8vs5sagrSXx1gfrDCGdVh2hpIPSKH0nklv1e4f29r7jb91VIrq4q5Jw&iat-mode=0'
+```
+
 加密机制
 ------
 #### HTTP
@@ -359,6 +382,12 @@ gost内置了TLS证书，如果需要使用其他TLS证书，有两种方法：
 gost -L="http2://:443?cert=/path/to/my/cert/file&key=/path/to/my/key/file"
 ```
 
+对于客户端可以指定CA证书进行证书锁定(Certificate Pinning):
+```bash
+gost -L=:8080 -F="http2://:443?ca=ca.pem"
+```
+此功能由[@sheerun](https://github.com/sheerun)贡献
+
 SOCKS5 UDP数据处理
 ------
 #### 不设置转发代理
@@ -376,6 +405,38 @@ gost作为标准SOCKS5代理处理UDP数据
 <img src="https://ginuerzh.github.io/images/udp03.png" height=200 />
 
 当设置转发代理时，gost会使用UDP-over-TCP方式转发UDP数据。proxy1 - proxyN可以为任意HTTP/HTTPS/HTTP2/SOCKS5/Shadowsocks类型代理。
+
+权限控制
+------
+此功能由[@sheerun](https://github.com/sheerun)贡献。
+
+服务端可以通过白名单(`whitelist`参数)和黑名单(`blacklist`参数)来控制客户端的请求是否允许被处理。
+参数格式为: `[actions]:[hosts]:[ports]`
+
+`[actions]`是一个由`,`分割的动作列表，可选值有: `tcp`(TCP转发), `udp`(UDP转发), `rtcp`(TCP远程转发), `rudp`(UDP远程转发), 或 `*`(所有动作)。
+
+`[hosts]`是一个由`,`分割的Host列表，代表可以绑定到(rtcp,rudp)或转发到(tcp,udp)的目的主机，支持通配符(*.google.com)和`*`(所有主机)。
+
+`[ports]`是一个由`,`分割的端口列表，代表可以绑定到(rtcp,rudp)或转发到(tcp,udp)的目的端口，可以是`*`(所有端口)。
+
+多组权限可以通过`+`进行连接:
+
+`whitelist=rtcp,rudp:localhost,127.0.0.1:2222,8000-9000+udp:8.8.8.8,8.8.4.4:53`(允许TCP/UDP远程端口转发绑定到localhost,127.0.0.1的2222端口和8000-9000端口范围，同时允许UDP转发到8.8.8.8:53和8.8.4.4:53)
+
+SSH远程端口转发只能绑定到127.0.0.1:8000
+```bash
+gost -L=forward+ssh://localhost:8389?whitelist=rtcp:127.0.0.1:8000
+```
+
+SOCKS5的TCP/UDP远程端口转发只允许绑定到大于1000的端口
+```bash
+gost -L=socks://localhost:8389?blacklist=rtcp,rudp:*:0-1000
+```
+
+SOCKS5的UDP转发只能转发到8.8.8.8:53
+```bash
+gost -L=socks://localhost:8389?whitelist=udp:8.8.8.8:53
+```
 
 限制条件
 ------
