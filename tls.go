@@ -8,7 +8,7 @@ import (
 )
 
 type tlsTransporter struct {
-	*tcpTransporter
+	tcpTransporter
 }
 
 // TLSTransporter creates a Transporter that is used by TLS proxy client.

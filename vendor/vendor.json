@@ -3,10 +3,82 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "Ntd/jdOFlzTpccS67XPoN8P+GvA=",
+			"path": "git.torproject.org/pluggable-transports/goptlib.git",
+			"revision": "a3ad5df6c9e7dc8117f55958b4ce99bf1e0fe291",
+			"revisionTime": "2017-06-26T23:50:26Z"
+		},
+		{
+			"checksumSHA1": "9FjAFzCl4t9s2I/2LrLcmTqprJc=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/common/csrand",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "QcRA+Vo62wjolAdMtjWmtyE+j2g=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/common/drbg",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "aAkBnDAHUvUpyX4G1PmedxQQpx4=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/common/ntor",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "MNwh5v3DYMhxJQHgwCubElx5hjk=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/common/probdist",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "g0e9BbYKC/ToxZ+GVh77L0QA8Eg=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/common/replayfilter",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "bLggyj50IADuEWoWSoyYdU6MaFo=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/transports/base",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "0WJ//uEKORueVXb9DDrZ7t1v00s=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/transports/obfs4",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
+			"checksumSHA1": "EuNvu7iIjtIWStjBSXSvaRNa76M=",
+			"path": "git.torproject.org/pluggable-transports/obfs4.git/transports/obfs4/framing",
+			"revision": "97a875ec3c0afa629405c78e750d27e4e1f851ca",
+			"revisionTime": "2016-11-15T19:21:38Z"
+		},
+		{
 			"checksumSHA1": "IFJyJgPCjumDG37lEb0lyRBBGZE=",
 			"path": "github.com/Yawning/chacha20",
 			"revision": "c91e78db502ff629614837aacb7aa4efa61c651a",
 			"revisionTime": "2016-04-30T09:49:23Z"
+		},
+		{
+			"checksumSHA1": "30PBqj9BW03KCVqASvLg3bR+xYc=",
+			"path": "github.com/agl/ed25519/edwards25519",
+			"revision": "5312a61534124124185d41f09206b9fef1d88403",
+			"revisionTime": "2017-01-16T20:05:12Z"
+		},
+		{
+			"checksumSHA1": "wHBvnCJG9bkZdtxFFefU+8/WDSE=",
+			"path": "github.com/agl/ed25519/extra25519",
+			"revision": "5312a61534124124185d41f09206b9fef1d88403",
+			"revisionTime": "2017-01-16T20:05:12Z"
+		},
+		{
+			"checksumSHA1": "xqVDKHGnakGlcRhmWd1j9JYmfLc=",
+			"path": "github.com/dchest/siphash",
+			"revision": "4ebf1de738443ea7f45f02dc394c4df1942a126d",
+			"revisionTime": "2016-08-31T15:17:26Z"
 		},
 		{
 			"checksumSHA1": "aIhLeVAIrsjs63CwqmU3+GU8yT4=",
@@ -207,8 +279,20 @@
 			"revisionTime": "2017-07-28T12:36:07Z"
 		},
 		{
+			"checksumSHA1": "Y/FcWB2/xSfX1rRp7HYhktHNw8s=",
+			"path": "golang.org/x/crypto/nacl/secretbox",
+			"revision": "558b6879de74bc843225cde5686419267ff707ca",
+			"revisionTime": "2017-07-28T12:36:07Z"
+		},
+		{
 			"checksumSHA1": "1MGpGDQqnUoRpv7VEcQrXOBydXE=",
 			"path": "golang.org/x/crypto/pbkdf2",
+			"revision": "558b6879de74bc843225cde5686419267ff707ca",
+			"revisionTime": "2017-07-28T12:36:07Z"
+		},
+		{
+			"checksumSHA1": "kVKE0OX1Xdw5mG7XKT86DLLKE2I=",
+			"path": "golang.org/x/crypto/poly1305",
 			"revision": "558b6879de74bc843225cde5686419267ff707ca",
 			"revisionTime": "2017-07-28T12:36:07Z"
 		},

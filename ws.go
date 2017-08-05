@@ -97,7 +97,7 @@ func (c *websocketConn) SetWriteDeadline(t time.Time) error {
 }
 
 type wsTransporter struct {
-	*tcpTransporter
+	tcpTransporter
 	options *WSOptions
 }
 
@@ -122,7 +122,7 @@ func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (n
 }
 
 type wssTransporter struct {
-	*tcpTransporter
+	tcpTransporter
 	options *WSOptions
 }
 

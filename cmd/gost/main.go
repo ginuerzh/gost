@@ -156,6 +156,11 @@ func initChain() (*gost.Chain, error) {
 				gost.ChainDialOption(chain),
 			)
 			chain = gost.NewChain() // cutoff the chain for multiplex
+		case "obfs4":
+			if err := gost.Obfs4Init(node, false); err != nil {
+				return nil, err
+			}
+			tr = gost.Obfs4Transporter()
 		default:
 			tr = gost.TCPTransporter()
 		}
@@ -265,6 +270,11 @@ func serve(chain *gost.Chain) error {
 			ln, err = gost.H2Listener(node.Addr, tlsCfg)
 		case "h2c":
 			ln, err = gost.H2CListener(node.Addr)
+		case "obfs4":
+			if err = gost.Obfs4Init(node, true); err != nil {
+				return err
+			}
+			ln, err = gost.Obfs4Listener(node.Addr)
 		case "tcp":
 			ln, err = gost.TCPListener(node.Addr)
 		case "rtcp":
