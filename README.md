@@ -12,9 +12,10 @@ gost - GO Simple Tunnel
 * 支持标准HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5代理协议
 * SOCKS5代理支持TLS协商加密
 * Tunnel UDP over TCP
-* 支持Shadowsocks协议 (UDP: 2.4+)
+* 权限控制 (2.4+)
 * 本地/远程TCP/UDP端口转发 (2.1+)
-* 支持KCP协议 (2.3+)
+* Shadowsocks协议 (UDP: 2.4+)
+* KCP协议 (2.3+)
 * TCP透明代理 (2.3+)
 * HTTP2通道 (2.4+)
 * SSH通道 (2.4+)

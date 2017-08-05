@@ -10,9 +10,10 @@ Features
 * Standard HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5 proxy protocols support
 * TLS encryption via negotiation support for SOCKS5 proxy
 * Tunnel UDP over TCP
-* Shadowsocks protocol support (UDP: 2.4+)
+* Permission control
 * Local/remote TCP/UDP port forwarding (2.1+)
-* KCP protocol support (2.3+)
+* Shadowsocks protocol (UDP: 2.4+)
+* KCP protocol (2.3+)
 * Transparent TCP proxy (2.3+)
 * HTTP2 tunnel (2.4+)
 * SSH tunnel (2.4+)
