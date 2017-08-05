@@ -1,28 +1,30 @@
-// KCP feature is based on https://github.com/xtaci/kcptun
-
 package gost
 
 import (
 	"crypto/sha1"
-	"encoding/json"
-	"github.com/golang/glog"
-	"github.com/klauspost/compress/snappy"
-	"golang.org/x/crypto/pbkdf2"
-	"gopkg.in/xtaci/kcp-go.v2"
-	"gopkg.in/xtaci/smux.v1"
+	"encoding/csv"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"time"
-)
 
-const (
-	DefaultKCPConfigFile = "kcp.json"
+	"golang.org/x/crypto/pbkdf2"
+
+	"sync"
+
+	"github.com/go-log/log"
+	"github.com/klauspost/compress/snappy"
+	"gopkg.in/xtaci/kcp-go.v2"
+	"gopkg.in/xtaci/smux.v1"
 )
 
 var (
-	SALT = "kcp-go"
+	// KCPSalt is the default salt for KCP cipher.
+	KCPSalt = "kcp-go"
 )
 
+// KCPConfig describes the config for KCP.
 type KCPConfig struct {
 	Key          string `json:"key"`
 	Crypt        string `json:"crypt"`
@@ -41,41 +43,29 @@ type KCPConfig struct {
 	NoCongestion int    `json:"nc"`
 	SockBuf      int    `json:"sockbuf"`
 	KeepAlive    int    `json:"keepalive"`
+	SnmpLog      string `json:"snmplog"`
+	SnmpPeriod   int    `json:"snmpperiod"`
+	Signal       bool   `json:"signal"` // Signal enables the signal SIGUSR1 feature.
 }
 
-func ParseKCPConfig(configFile string) (*KCPConfig, error) {
-	if configFile == "" {
-		configFile = DefaultKCPConfigFile
-	}
-	file, err := os.Open(configFile)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	config := &KCPConfig{}
-	if err = json.NewDecoder(file).Decode(config); err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
+// Init initializes the KCP config.
 func (c *KCPConfig) Init() {
 	switch c.Mode {
 	case "normal":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 30, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 50, 2, 1
 	case "fast2":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 20, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 30, 2, 1
 	case "fast3":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 10, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 20, 2, 1
 	case "fast":
 		fallthrough
 	default:
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 20, 2, 1
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 40, 2, 1
 	}
 }
 
 var (
+	// DefaultKCPConfig is the default KCP config.
 	DefaultKCPConfig = &KCPConfig{
 		Key:          "it's a secrect",
 		Crypt:        "aes",
@@ -89,90 +79,328 @@ var (
 		NoComp:       false,
 		AckNodelay:   false,
 		NoDelay:      0,
-		Interval:     40,
+		Interval:     50,
 		Resend:       0,
 		NoCongestion: 0,
 		SockBuf:      4194304,
 		KeepAlive:    10,
+		SnmpLog:      "",
+		SnmpPeriod:   60,
+		Signal:       false,
 	}
 )
 
-type KCPServer struct {
-	Base   *ProxyServer
-	Config *KCPConfig
+type kcpConn struct {
+	conn   net.Conn
+	stream *smux.Stream
 }
 
-func NewKCPServer(base *ProxyServer, config *KCPConfig) *KCPServer {
-	return &KCPServer{Base: base, Config: config}
+func (c *kcpConn) Read(b []byte) (n int, err error) {
+	return c.stream.Read(b)
 }
 
-func (s *KCPServer) ListenAndServe() (err error) {
-	if s.Config == nil {
-		s.Config = DefaultKCPConfig
-	}
-	s.Config.Init()
+func (c *kcpConn) Write(b []byte) (n int, err error) {
+	return c.stream.Write(b)
+}
 
-	ln, err := kcp.ListenWithOptions(s.Base.Node.Addr,
-		blockCrypt(s.Config.Key, s.Config.Crypt, SALT), s.Config.DataShard, s.Config.ParityShard)
+func (c *kcpConn) Close() error {
+	return c.stream.Close()
+}
+
+func (c *kcpConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+func (c *kcpConn) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
+}
+
+func (c *kcpConn) SetDeadline(t time.Time) error {
+	return c.conn.SetDeadline(t)
+}
+
+func (c *kcpConn) SetReadDeadline(t time.Time) error {
+	return c.conn.SetReadDeadline(t)
+}
+
+func (c *kcpConn) SetWriteDeadline(t time.Time) error {
+	return c.conn.SetWriteDeadline(t)
+}
+
+type kcpSession struct {
+	conn    net.Conn
+	session *smux.Session
+}
+
+func (session *kcpSession) GetConn() (*kcpConn, error) {
+	stream, err := session.session.OpenStream()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err = ln.SetDSCP(s.Config.DSCP); err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
+	return &kcpConn{conn: session.conn, stream: stream}, nil
+}
+
+func (session *kcpSession) Close() error {
+	return session.session.Close()
+}
+
+func (session *kcpSession) IsClosed() bool {
+	return session.session.IsClosed()
+}
+
+func (session *kcpSession) NumStreams() int {
+	return session.session.NumStreams()
+}
+
+type kcpTransporter struct {
+	sessions     map[string]*kcpSession
+	sessionMutex sync.Mutex
+	config       *KCPConfig
+}
+
+// KCPTransporter creates a Transporter that is used by KCP proxy client.
+func KCPTransporter(config *KCPConfig) Transporter {
+	if config == nil {
+		config = DefaultKCPConfig
 	}
-	if err = ln.SetReadBuffer(s.Config.SockBuf); err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
-	}
-	if err = ln.SetWriteBuffer(s.Config.SockBuf); err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
+	config.Init()
+
+	go snmpLogger(config.SnmpLog, config.SnmpPeriod)
+	if config.Signal {
+		go kcpSigHandler()
 	}
 
-	for {
-		conn, err := ln.AcceptKCP()
-		if err != nil {
-			glog.V(LWARNING).Infoln(err)
-			continue
-		}
-
-		conn.SetStreamMode(true)
-		conn.SetNoDelay(s.Config.NoDelay, s.Config.Interval, s.Config.Resend, s.Config.NoCongestion)
-		conn.SetMtu(s.Config.MTU)
-		conn.SetWindowSize(s.Config.SndWnd, s.Config.RcvWnd)
-		conn.SetACKNoDelay(s.Config.AckNodelay)
-		conn.SetKeepAlive(s.Config.KeepAlive)
-
-		go s.handleMux(conn)
+	return &kcpTransporter{
+		config:   config,
+		sessions: make(map[string]*kcpSession),
 	}
 }
 
-func (s *KCPServer) handleMux(conn net.Conn) {
+func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
+	uaddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return
+	}
+
+	tr.sessionMutex.Lock()
+	defer tr.sessionMutex.Unlock()
+
+	session, ok := tr.sessions[addr]
+	if !ok {
+		conn, err = net.DialUDP("udp", nil, uaddr)
+		if err != nil {
+			return
+		}
+		session = &kcpSession{conn: conn}
+		tr.sessions[addr] = session
+	}
+	return session.conn, nil
+}
+
+func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	opts := &HandshakeOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	config := tr.config
+	if opts.KCPConfig != nil {
+		config = opts.KCPConfig
+	}
+	tr.sessionMutex.Lock()
+	defer tr.sessionMutex.Unlock()
+
+	session, ok := tr.sessions[opts.Addr]
+	if session != nil && session.conn != conn {
+		conn.Close()
+		return nil, errors.New("kcp: unrecognized connection")
+	}
+	if !ok || session.session == nil {
+		s, err := tr.initSession(opts.Addr, conn, config)
+		if err != nil {
+			conn.Close()
+			delete(tr.sessions, opts.Addr)
+			return nil, err
+		}
+		session = s
+		tr.sessions[opts.Addr] = session
+	}
+	cc, err := session.GetConn()
+	if err != nil {
+		session.Close()
+		delete(tr.sessions, opts.Addr)
+		return nil, err
+	}
+
+	return cc, nil
+}
+
+func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPConfig) (*kcpSession, error) {
+	udpConn, ok := conn.(*net.UDPConn)
+	if !ok {
+		return nil, errors.New("kcp: wrong connection type")
+	}
+
+	kcpconn, err := kcp.NewConn(addr,
+		blockCrypt(config.Key, config.Crypt, KCPSalt),
+		config.DataShard, config.ParityShard,
+		&kcp.ConnectedUDPConn{UDPConn: udpConn, Conn: udpConn})
+	if err != nil {
+		return nil, err
+	}
+
+	kcpconn.SetStreamMode(true)
+	kcpconn.SetNoDelay(config.NoDelay, config.Interval, config.Resend, config.NoCongestion)
+	kcpconn.SetWindowSize(config.SndWnd, config.RcvWnd)
+	kcpconn.SetMtu(config.MTU)
+	kcpconn.SetACKNoDelay(config.AckNodelay)
+	kcpconn.SetKeepAlive(config.KeepAlive)
+
+	if err := kcpconn.SetDSCP(config.DSCP); err != nil {
+		log.Log("[kcp]", err)
+	}
+	if err := kcpconn.SetReadBuffer(config.SockBuf); err != nil {
+		log.Log("[kcp]", err)
+	}
+	if err := kcpconn.SetWriteBuffer(config.SockBuf); err != nil {
+		log.Log("[kcp]", err)
+	}
+
+	// stream multiplex
 	smuxConfig := smux.DefaultConfig()
-	smuxConfig.MaxReceiveBuffer = s.Config.SockBuf
+	smuxConfig.MaxReceiveBuffer = config.SockBuf
+	var cc net.Conn = kcpconn
+	if !config.NoComp {
+		cc = newCompStreamConn(kcpconn)
+	}
+	session, err := smux.Client(cc, smuxConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &kcpSession{conn: conn, session: session}, nil
+}
 
-	glog.V(LINFO).Infof("[kcp] %s - %s", conn.RemoteAddr(), s.Base.Node.Addr)
+func (tr *kcpTransporter) Multiplex() bool {
+	return true
+}
 
-	if !s.Config.NoComp {
+type kcpListener struct {
+	config   *KCPConfig
+	ln       *kcp.Listener
+	connChan chan net.Conn
+	errChan  chan error
+}
+
+// KCPListener creates a Listener for KCP proxy server.
+func KCPListener(addr string, config *KCPConfig) (Listener, error) {
+	if config == nil {
+		config = DefaultKCPConfig
+	}
+	config.Init()
+
+	ln, err := kcp.ListenWithOptions(addr,
+		blockCrypt(config.Key, config.Crypt, KCPSalt), config.DataShard, config.ParityShard)
+	if err != nil {
+		return nil, err
+	}
+	if err = ln.SetDSCP(config.DSCP); err != nil {
+		log.Log("[kcp]", err)
+	}
+	if err = ln.SetReadBuffer(config.SockBuf); err != nil {
+		log.Log("[kcp]", err)
+	}
+	if err = ln.SetWriteBuffer(config.SockBuf); err != nil {
+		log.Log("[kcp]", err)
+	}
+
+	go snmpLogger(config.SnmpLog, config.SnmpPeriod)
+	if config.Signal {
+		go kcpSigHandler()
+	}
+
+	l := &kcpListener{
+		config:   config,
+		ln:       ln,
+		connChan: make(chan net.Conn, 1024),
+		errChan:  make(chan error, 1),
+	}
+	go l.listenLoop()
+
+	return l, nil
+}
+
+func (l *kcpListener) listenLoop() {
+	for {
+		conn, err := l.ln.AcceptKCP()
+		if err != nil {
+			log.Log("[kcp] accept:", err)
+			l.errChan <- err
+			close(l.errChan)
+			return
+		}
+		conn.SetStreamMode(true)
+		conn.SetNoDelay(l.config.NoDelay, l.config.Interval, l.config.Resend, l.config.NoCongestion)
+		conn.SetMtu(l.config.MTU)
+		conn.SetWindowSize(l.config.SndWnd, l.config.RcvWnd)
+		conn.SetACKNoDelay(l.config.AckNodelay)
+		conn.SetKeepAlive(l.config.KeepAlive)
+		go l.mux(conn)
+	}
+}
+
+func (l *kcpListener) mux(conn net.Conn) {
+	smuxConfig := smux.DefaultConfig()
+	smuxConfig.MaxReceiveBuffer = l.config.SockBuf
+
+	log.Logf("[kcp] %s - %s", conn.RemoteAddr(), l.Addr())
+
+	if !l.config.NoComp {
 		conn = newCompStreamConn(conn)
 	}
 
 	mux, err := smux.Server(conn, smuxConfig)
 	if err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
+		log.Log("[kcp]", err)
 		return
 	}
 	defer mux.Close()
 
-	glog.V(LINFO).Infof("[kcp] %s <-> %s", conn.RemoteAddr(), s.Base.Node.Addr)
-	defer glog.V(LINFO).Infof("[kcp] %s >-< %s", conn.RemoteAddr(), s.Base.Node.Addr)
+	log.Logf("[kcp] %s <-> %s", conn.RemoteAddr(), l.Addr())
+	defer log.Logf("[kcp] %s >-< %s", conn.RemoteAddr(), l.Addr())
 
 	for {
 		stream, err := mux.AcceptStream()
 		if err != nil {
-			glog.V(LWARNING).Infoln("[kcp]", err)
+			log.Log("[kcp] accept stream:", err)
 			return
 		}
-		go s.Base.handleConn(NewKCPConn(conn, stream))
+
+		cc := &kcpConn{conn: conn, stream: stream}
+		select {
+		case l.connChan <- cc:
+		default:
+			cc.Close()
+			log.Logf("[kcp] %s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
+		}
 	}
+}
+
+func (l *kcpListener) Accept() (conn net.Conn, err error) {
+	var ok bool
+	select {
+	case conn = <-l.connChan:
+	case err, ok = <-l.errChan:
+		if !ok {
+			err = errors.New("accpet on closed listener")
+		}
+	}
+	return
+}
+func (l *kcpListener) Addr() net.Addr {
+	return l.ln.Addr()
+}
+
+func (l *kcpListener) Close() error {
+	return l.ln.Close()
 }
 
 func blockCrypt(key, crypt, salt string) (block kcp.BlockCrypt) {
@@ -209,115 +437,35 @@ func blockCrypt(key, crypt, salt string) (block kcp.BlockCrypt) {
 	return
 }
 
-type KCPSession struct {
-	conn    net.Conn
-	session *smux.Session
-}
-
-func DialKCP(addr string, config *KCPConfig) (*KCPSession, error) {
-	if config == nil {
-		config = DefaultKCPConfig
+func snmpLogger(format string, interval int) {
+	if format == "" || interval == 0 {
+		return
 	}
-	config.Init()
-
-	kcpconn, err := kcp.DialWithOptions(addr,
-		blockCrypt(config.Key, config.Crypt, SALT), config.DataShard, config.ParityShard)
-	if err != nil {
-		return nil, err
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			f, err := os.OpenFile(time.Now().Format(format), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+			if err != nil {
+				log.Log("[kcp]", err)
+				return
+			}
+			w := csv.NewWriter(f)
+			// write header in empty file
+			if stat, err := f.Stat(); err == nil && stat.Size() == 0 {
+				if err := w.Write(append([]string{"Unix"}, kcp.DefaultSnmp.Header()...)); err != nil {
+					log.Log("[kcp]", err)
+				}
+			}
+			if err := w.Write(append([]string{fmt.Sprint(time.Now().Unix())}, kcp.DefaultSnmp.ToSlice()...)); err != nil {
+				log.Log("[kcp]", err)
+			}
+			kcp.DefaultSnmp.Reset()
+			w.Flush()
+			f.Close()
+		}
 	}
-
-	kcpconn.SetStreamMode(true)
-	kcpconn.SetNoDelay(config.NoDelay, config.Interval, config.Resend, config.NoCongestion)
-	kcpconn.SetWindowSize(config.SndWnd, config.RcvWnd)
-	kcpconn.SetMtu(config.MTU)
-	kcpconn.SetACKNoDelay(config.AckNodelay)
-	kcpconn.SetKeepAlive(config.KeepAlive)
-
-	if err := kcpconn.SetDSCP(config.DSCP); err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
-	}
-	if err := kcpconn.SetReadBuffer(config.SockBuf); err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
-	}
-	if err := kcpconn.SetWriteBuffer(config.SockBuf); err != nil {
-		glog.V(LWARNING).Infoln("[kcp]", err)
-	}
-
-	// stream multiplex
-	smuxConfig := smux.DefaultConfig()
-	smuxConfig.MaxReceiveBuffer = config.SockBuf
-	var conn net.Conn = kcpconn
-	if !config.NoComp {
-		conn = newCompStreamConn(kcpconn)
-	}
-	session, err := smux.Client(conn, smuxConfig)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return &KCPSession{conn: conn, session: session}, nil
-}
-
-func (session *KCPSession) GetConn() (*KCPConn, error) {
-	stream, err := session.session.OpenStream()
-	if err != nil {
-		session.Close()
-		return nil, err
-	}
-	return NewKCPConn(session.conn, stream), nil
-}
-
-func (session *KCPSession) Close() error {
-	return session.session.Close()
-}
-
-func (session *KCPSession) IsClosed() bool {
-	return session.session.IsClosed()
-}
-
-func (session *KCPSession) NumStreams() int {
-	return session.session.NumStreams()
-}
-
-type KCPConn struct {
-	conn   net.Conn
-	stream *smux.Stream
-}
-
-func NewKCPConn(conn net.Conn, stream *smux.Stream) *KCPConn {
-	return &KCPConn{conn: conn, stream: stream}
-}
-
-func (c *KCPConn) Read(b []byte) (n int, err error) {
-	return c.stream.Read(b)
-}
-
-func (c *KCPConn) Write(b []byte) (n int, err error) {
-	return c.stream.Write(b)
-}
-
-func (c *KCPConn) Close() error {
-	return c.stream.Close()
-}
-
-func (c *KCPConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *KCPConn) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
-}
-
-func (c *KCPConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *KCPConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *KCPConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
 }
 
 type compStreamConn struct {
