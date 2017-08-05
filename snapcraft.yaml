@@ -19,3 +19,5 @@ parts:
     plugin: go
     go-packages: [github.com/ginuerzh/gost/cmd/gost]
     go-importpath: github.com/ginuerzh/gost
+  go:
+    source-tag: go1.8.3
