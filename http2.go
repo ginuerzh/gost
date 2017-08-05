@@ -46,7 +46,6 @@ func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 		Host:          addr,
 		ContentLength: -1,
 	}
-	// req.Header.Set("Gost-Target", addr) // Flag header to indicate the address that server connected to
 	if c.User != nil {
 		req.Header.Set("Proxy-Authorization",
 			"Basic "+base64.StdEncoding.EncodeToString([]byte(c.User.String())))
@@ -271,10 +270,7 @@ func (h *http2Handler) Handle(conn net.Conn) {
 }
 
 func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
-	target := r.Header.Get("Gost-Target")
-	if target == "" {
-		target = r.Host
-	}
+	target := r.Host
 	if !strings.Contains(target, ":") {
 		target += ":80"
 	}
@@ -294,6 +290,9 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
+	if Debug && (u != "" || p != "") {
+		log.Logf("[http] %s - %s : Authorization: '%s' '%s'", r.RemoteAddr, target, u, p)
+	}
 	if !authenticate(u, p, h.options.Users...) {
 		log.Logf("[http2] %s <- %s : proxy authentication required", r.RemoteAddr, target)
 		w.Header().Set("Proxy-Authenticate", "Basic realm=\"gost\"")
@@ -404,8 +403,12 @@ func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
 	}
 	l.server = server
 
+	ln, err := tls.Listen("tcp", addr, config)
+	if err != nil {
+		return nil, err
+	}
 	go func() {
-		err := server.ListenAndServeTLS("", "")
+		err := server.Serve(ln)
 		if err != nil {
 			log.Log("[http2]", err)
 		}

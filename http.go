@@ -109,6 +109,9 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	}
 
 	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
+	if Debug && (u != "" || p != "") {
+		log.Logf("[http] %s - %s : Authorization: '%s' '%s'", conn.RemoteAddr(), req.Host, u, p)
+	}
 	if !authenticate(u, p, h.options.Users...) {
 		log.Logf("[http] %s <- %s : proxy authentication required", conn.RemoteAddr(), req.Host)
 		resp := "HTTP/1.1 407 Proxy Authentication Required\r\n" +
