@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -84,9 +85,14 @@ func initChain() (*gost.Chain, error) {
 			serverName = "localhost" // default server name
 		}
 
+		rootCAs, err := loadCA(node.Values.Get("ca"))
+		if err != nil {
+			return nil, err
+		}
 		tlsCfg := &tls.Config{
 			ServerName:         serverName,
 			InsecureSkipVerify: !toBool(node.Values.Get("scure")),
+			RootCAs:            rootCAs,
 		}
 		var tr gost.Transporter
 		switch node.Transport {
@@ -377,6 +383,21 @@ func tlsConfig(certFile, keyFile string) (*tls.Config, error) {
 		return nil, err
 	}
 	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
+}
+
+func loadCA(caFile string) (cp *x509.CertPool, err error) {
+	if caFile == "" {
+		return
+	}
+	cp = x509.NewCertPool()
+	data, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		return nil, err
+	}
+	if !cp.AppendCertsFromPEM(data) {
+		return nil, errors.New("AppendCertsFromPEM failed")
+	}
+	return
 }
 
 func loadConfigureFile(configureFile string) error {
