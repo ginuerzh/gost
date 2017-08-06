@@ -97,7 +97,7 @@ func initChain() (*gost.Chain, error) {
 		}
 		tlsCfg := &tls.Config{
 			ServerName:         serverName,
-			InsecureSkipVerify: !toBool(node.Values.Get("scure")),
+			InsecureSkipVerify: !toBool(node.Values.Get("secure")),
 			RootCAs:            rootCAs,
 		}
 		var tr gost.Transporter
@@ -109,24 +109,22 @@ func initChain() (*gost.Chain, error) {
 			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
 			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
 			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
-			node.HandshakeOptions = append(node.HandshakeOptions,
-				gost.WSOptionsHandshakeOption(wsOpts),
-			)
-			tr = gost.WSTransporter(nil)
+			tr = gost.WSTransporter(wsOpts)
 		case "wss":
-			tr = gost.WSSTransporter(nil)
+			wsOpts := &gost.WSOptions{}
+			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
+			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
+			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
+			tr = gost.WSSTransporter(wsOpts)
 		case "kcp":
 			if !chain.IsEmpty() {
 				return nil, errors.New("KCP must be the first node in the proxy chain")
 			}
 			config, err := parseKCPConfig(node.Values.Get("c"))
 			if err != nil {
-				log.Log("[kcp]", err)
+				return nil, err
 			}
-			node.HandshakeOptions = append(node.HandshakeOptions,
-				gost.KCPConfigHandshakeOption(config),
-			)
-			tr = gost.KCPTransporter(nil)
+			tr = gost.KCPTransporter(config)
 		case "ssh":
 			if node.Protocol == "direct" || node.Protocol == "remote" || node.Protocol == "forward" {
 				tr = gost.SSHForwardTransporter()
@@ -146,18 +144,15 @@ func initChain() (*gost.Chain, error) {
 				TLSConfig: tlsCfg,
 				KeepAlive: toBool(node.Values.Get("keepalive")),
 			}
-			node.HandshakeOptions = append(node.HandshakeOptions,
-				gost.QUICConfigHandshakeOption(config),
-			)
-			tr = gost.QUICTransporter(nil)
+			tr = gost.QUICTransporter(config)
 		case "http2":
-			tr = gost.HTTP2Transporter(nil)
+			tr = gost.HTTP2Transporter(tlsCfg)
 			node.DialOptions = append(node.DialOptions,
 				gost.ChainDialOption(chain),
 			)
 			chain = gost.NewChain() // cutoff the chain for multiplex
 		case "h2":
-			tr = gost.H2Transporter(nil)
+			tr = gost.H2Transporter(tlsCfg)
 			node.DialOptions = append(node.DialOptions,
 				gost.ChainDialOption(chain),
 			)
@@ -256,7 +251,7 @@ func serve(chain *gost.Chain) error {
 		case "kcp":
 			config, err := parseKCPConfig(node.Values.Get("c"))
 			if err != nil {
-				log.Log("[kcp]", err)
+				return err
 			}
 			ln, err = gost.KCPListener(node.Addr, config)
 		case "ssh":
