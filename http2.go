@@ -37,15 +37,16 @@ func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 	pr, pw := io.Pipe()
 	req := &http.Request{
 		Method:        http.MethodConnect,
-		URL:           &url.URL{Scheme: "https", Host: addr},
+		URL:           &url.URL{Scheme: "https", Host: cc.addr},
 		Header:        make(http.Header),
 		Proto:         "HTTP/2.0",
 		ProtoMajor:    2,
 		ProtoMinor:    0,
 		Body:          pr,
-		Host:          addr,
+		Host:          cc.addr,
 		ContentLength: -1,
 	}
+	req.Header.Set("Gost-Target", addr)
 	if c.User != nil {
 		req.Header.Set("Proxy-Authorization",
 			"Basic "+base64.StdEncoding.EncodeToString([]byte(c.User.String())))
@@ -107,7 +108,7 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 		transport := http2.Transport{
 			TLSClientConfig: tr.tlsConfig,
 			DialTLS: func(network, adr string, cfg *tls.Config) (net.Conn, error) {
-				conn, err := opts.Chain.Dial(addr)
+				conn, err := opts.Chain.Dial(adr)
 				if err != nil {
 					return nil, err
 				}
@@ -270,7 +271,11 @@ func (h *http2Handler) Handle(conn net.Conn) {
 }
 
 func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
-	target := r.Host
+	target := r.Header.Get("Gost-Target")
+	if target == "" {
+		target = r.Host
+	}
+
 	if !strings.Contains(target, ":") {
 		target += ":80"
 	}

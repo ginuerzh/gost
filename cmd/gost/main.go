@@ -194,8 +194,9 @@ func initChain() (*gost.Chain, error) {
 			connector = gost.HTTPConnector(node.User)
 		}
 
+		timeout, _ := strconv.Atoi(node.Values.Get("timeout"))
 		node.DialOptions = append(node.DialOptions,
-			gost.TimeoutDialOption(gost.DialTimeout),
+			gost.TimeoutDialOption(time.Duration(timeout)*time.Second),
 		)
 
 		interval, _ := strconv.Atoi(node.Values.Get("ping"))
