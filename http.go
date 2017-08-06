@@ -36,12 +36,10 @@ func (c *httpConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 	req.Header.Set("Proxy-Connection", "keep-alive")
 
 	if c.User != nil {
-		s := c.User.String()
-		if _, set := c.User.Password(); !set {
-			s += ":"
-		}
+		u := c.User.Username()
+		p, _ := c.User.Password()
 		req.Header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(u+":"+p)))
 	}
 
 	if err := req.Write(conn); err != nil {

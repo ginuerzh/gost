@@ -79,7 +79,13 @@ func initChain() (*gost.Chain, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		users, err := parseUsers(node.Values.Get("secrets"))
+		if err != nil {
+			return nil, err
+		}
+		if node.User == nil && len(users) > 0 {
+			node.User = users[0]
+		}
 		serverName, _, _ := net.SplitHostPort(node.Addr)
 		if serverName == "" {
 			serverName = "localhost" // default server name

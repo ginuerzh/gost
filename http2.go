@@ -48,8 +48,10 @@ func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 	}
 	req.Header.Set("Gost-Target", addr)
 	if c.User != nil {
+		u := c.User.Username()
+		p, _ := c.User.Password()
 		req.Header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(c.User.String())))
+			"Basic "+base64.StdEncoding.EncodeToString([]byte(u+":"+p)))
 	}
 	if Debug {
 		dump, _ := httputil.DumpRequest(req, false)
