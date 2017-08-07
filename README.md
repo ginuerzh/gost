@@ -203,7 +203,7 @@ gost -L=udp://:5353/192.168.1.1:53?ttl=60 [-F=...]
 #### 远程端口转发(TCP)
 
 ```bash
-gost -L=rtcp://:2222/192.168.1.1:22 [-F=...]
+gost -L=rtcp://:2222/192.168.1.1:22 [-F=... -F=socks5://172.24.10.1:1080]
 ```
 将172.24.10.1:2222上的数据(通过代理链)转发到192.168.1.1:22上。当代理链末端(最后一个-F参数)为SSH转发通道类型时，gost会直接使用SSH的远程端口转发功能:
 
@@ -214,7 +214,7 @@ gost -L=rtcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
 #### 远程端口转发(UDP)
 
 ```bash
-gost -L=rudp://:5353/192.168.1.1:53 [-F=...]
+gost -L=rudp://:5353/192.168.1.1:53?ttl=60 [-F=... -F=socks5://172.24.10.1:1080]
 ```
 将172.24.10.1:5353上的数据(通过代理链)转发到192.168.1.1:53上。
 每条转发通道都有超时时间，当超过此时间，且在此时间段内无任何数据交互，则此通道将关闭。可以通过`ttl`参数来设置超时时间，默认值为60秒。
@@ -396,6 +396,11 @@ gost内置了TLS证书，如果需要使用其他TLS证书，有两种方法：
 * 使用参数指定证书文件路径：
 ```bash
 gost -L="http2://:443?cert=/path/to/my/cert/file&key=/path/to/my/key/file"
+```
+
+对于客户端可以通过`secure`参数开启服务器证书和域名校验:
+```bash
+gost -L=:8080 -F="http2://server_domain_name:443?secure=true"
 ```
 
 对于客户端可以指定CA证书进行[证书锁定](https://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning)(Certificate Pinning):

@@ -199,7 +199,7 @@ Each forwarding channel has a timeout period. When this time is exceeded and the
 #### Remote TCP port forwarding
 
 ```bash
-gost -L=rtcp://:2222/192.168.1.1:22 [-F=...]
+gost -L=rtcp://:2222/192.168.1.1:22 [-F=... -F=socks5://172.24.10.1:1080]
 ```
 The data on 172.24.10.1:2222 is forwarded to 192.168.1.1:22 (through the proxy chain). If the last node of the chain (the last -F parameter) is a SSH tunnel, then gost will use the remote port forwarding function of SSH directly:
 
@@ -210,7 +210,7 @@ gost -L=rtcp://:2222/192.168.1.1:22 -F forward+ssh://:2222
 #### Remote UDP port forwarding
 
 ```bash
-gost -L=rudp://:5353/192.168.1.1:53?ttl=60 [-F=...]
+gost -L=rudp://:5353/192.168.1.1:53?ttl=60 [-F=... -F=socks5://172.24.10.1:1080]
 ```
 The data on 172.24.10.1:5353 is forwarded to 192.168.1.1:53 (through the proxy chain).
 Each forwarding channel has a timeout period. When this time is exceeded and there is no data interaction during this time period, the channel will be closed. The timeout value can be set by the `ttl` parameter. The default value is 60 seconds.
@@ -393,8 +393,12 @@ There is built-in TLS certificate in gost, if you need to use other TLS certific
 gost -L="http2://:443?cert=/path/to/my/cert/file&key=/path/to/my/key/file"
 ```
 
+Client can specify `secure` parameter to perform server's certificate chain and host name verification:
+```bash
+gost -L=:8080 -F="http2://server_domain_name:443?secure=true"
+```
 
-For client, you can specify a CA certificate to allow for [Certificate Pinning](https://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning):
+Client can specify a CA certificate to allow for [Certificate Pinning](https://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning):
 ```bash
 gost -L=:8080 -F="http2://:443?ca=ca.pem"
 ```

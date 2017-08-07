@@ -285,7 +285,7 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 			deaded: make(chan struct{}),
 		}
 		tr.sessions[opts.Addr] = session
-		go session.Ping(opts.Interval, opts.Timeout, 1)
+		go session.Ping(opts.Interval, 30*time.Second, 1)
 		go session.waitServer()
 		go session.waitClose()
 	}
@@ -322,7 +322,7 @@ func (s *sshSession) Ping(interval, timeout time.Duration, retries int) {
 		return
 	}
 	if timeout <= 0 {
-		timeout = 30 * time.Second
+		timeout = 0
 	}
 	defer close(s.deaded)
 
@@ -331,13 +331,14 @@ func (s *sshSession) Ping(interval, timeout time.Duration, retries int) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
+	count := retries + 1
 	for {
 		select {
 		case <-t.C:
 			start := time.Now()
-			//if Debug {
-			log.Log("[ssh] sending ping")
-			//}
+			if Debug {
+				log.Log("[ssh] sending ping")
+			}
 			ctx, cancel := context.WithTimeout(baseCtx, timeout)
 			var err error
 			select {
@@ -348,12 +349,16 @@ func (s *sshSession) Ping(interval, timeout time.Duration, retries int) {
 			cancel()
 			if err != nil {
 				log.Log("[ssh] ping:", err)
-				return
+				count--
+				if count == 0 {
+					return
+				}
+				continue
 			}
-			//if Debug {
-			log.Log("[ssh] ping OK, RTT:", time.Since(start))
-			//}
-
+			if Debug {
+				log.Log("[ssh] ping OK, RTT:", time.Since(start))
+			}
+			count = retries + 1
 		case <-s.closed:
 			return
 		}

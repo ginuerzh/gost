@@ -116,6 +116,7 @@ type HandshakeOptions struct {
 	User       *url.Userinfo
 	Timeout    time.Duration
 	Interval   time.Duration
+	Retry      int
 	TLSConfig  *tls.Config
 	WSOptions  *WSOptions
 	KCPConfig  *KCPConfig
@@ -146,6 +147,12 @@ func TimeoutHandshakeOption(timeout time.Duration) HandshakeOption {
 func IntervalHandshakeOption(interval time.Duration) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Interval = interval
+	}
+}
+
+func RetryHandshakeOption(retry int) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.Retry = retry
 	}
 }
 
