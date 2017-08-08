@@ -23,8 +23,8 @@ import (
 
 var (
 	options struct {
-		chainNodes, serveNodes stringList
-		debugMode              bool
+		ChainNodes, ServeNodes stringList
+		DebugMode              bool
 	}
 )
 
@@ -34,10 +34,10 @@ func init() {
 		printVersion  bool
 	)
 
-	flag.Var(&options.chainNodes, "F", "forward address, can make a forward chain")
-	flag.Var(&options.serveNodes, "L", "listen address, can listen on multiple ports")
+	flag.Var(&options.ChainNodes, "F", "forward address, can make a forward chain")
+	flag.Var(&options.ServeNodes, "L", "listen address, can listen on multiple ports")
 	flag.StringVar(&configureFile, "C", "", "configure file")
-	flag.BoolVar(&options.debugMode, "D", false, "enable debug log")
+	flag.BoolVar(&options.DebugMode, "D", false, "enable debug log")
 	flag.BoolVar(&printVersion, "V", false, "print version")
 	flag.Parse()
 
@@ -56,7 +56,7 @@ func init() {
 		os.Exit(0)
 	}
 
-	gost.Debug = options.debugMode
+	gost.Debug = options.DebugMode
 }
 
 func main() {
@@ -74,7 +74,7 @@ func main() {
 
 func initChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
-	for _, ns := range options.chainNodes {
+	for _, ns := range options.ChainNodes {
 		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return nil, err
@@ -218,7 +218,7 @@ func initChain() (*gost.Chain, error) {
 }
 
 func serve(chain *gost.Chain) error {
-	for _, ns := range options.serveNodes {
+	for _, ns := range options.ServeNodes {
 		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return err
