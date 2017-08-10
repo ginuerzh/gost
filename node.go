@@ -49,7 +49,7 @@ func ParseNode(s string) (node Node, err error) {
 	}
 
 	switch node.Transport {
-	case "tls", "ws", "wss", "kcp", "ssh", "quic", "ssu", "http2", "h2", "h2c", "redirect", "obfs4":
+	case "tls", "ws", "wss", "kcp", "ssh", "quic", "ssu", "http2", "h2", "h2c", "obfs4":
 	case "https":
 		node.Protocol = "http"
 		node.Transport = "tls"
@@ -67,6 +67,7 @@ func ParseNode(s string) (node Node, err error) {
 		node.Protocol = "socks5"
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
 	case "direct", "remote", "forward": // SSH port forwarding
+	case "redirect": // TCP transparent proxy
 	default:
 		node.Protocol = ""
 	}

@@ -296,8 +296,6 @@ func serve(chain *gost.Chain) error {
 		case "rudp":
 			ttl, _ := strconv.Atoi(node.Values.Get("ttl"))
 			ln, err = gost.UDPRemoteForwardListener(node.Addr, chain, time.Duration(ttl)*time.Second)
-		case "redirect":
-			ln, err = gost.TCPListener(node.Addr)
 		case "ssu":
 			ttl, _ := strconv.Atoi(node.Values.Get("ttl"))
 			ln, err = gost.ShadowUDPListener(node.Addr, node.User, time.Duration(ttl)*time.Second)
