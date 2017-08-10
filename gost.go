@@ -45,6 +45,7 @@ var (
 
 var (
 	DefaultTLSConfig *tls.Config
+	DefaultUserAgent = "Chrome/60.0.3112.90"
 )
 
 func init() {

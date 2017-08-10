@@ -33,6 +33,7 @@ func (c *httpConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 		ProtoMinor: 1,
 		Header:     make(http.Header),
 	}
+	req.Header.Set("User-Agent", DefaultUserAgent)
 	req.Header.Set("Proxy-Connection", "keep-alive")
 
 	if c.User != nil {

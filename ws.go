@@ -19,6 +19,7 @@ type WSOptions struct {
 	WriteBufferSize   int
 	HandshakeTimeout  time.Duration
 	EnableCompression bool
+	UserAgent         string
 }
 
 type websocketConn struct {
@@ -40,7 +41,12 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 			return conn, nil
 		},
 	}
-	c, resp, err := dialer.Dial(url, nil)
+	header := http.Header{}
+	header.Set("User-Agent", DefaultUserAgent)
+	if options.UserAgent != "" {
+		header.Set("User-Agent", options.UserAgent)
+	}
+	c, resp, err := dialer.Dial(url, header)
 	if err != nil {
 		return nil, err
 	}

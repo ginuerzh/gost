@@ -109,6 +109,7 @@ func initChain() (*gost.Chain, error) {
 			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
 			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
 			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
+			wsOpts.UserAgent = node.Values.Get("agent")
 			tr = gost.WSTransporter(wsOpts)
 		case "wss":
 			wsOpts := &gost.WSOptions{}
