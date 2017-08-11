@@ -139,24 +139,6 @@ func WSSTransporter(opts *WSOptions) Transporter {
 	}
 }
 
-func (tr *wssTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	opts := &DialOptions{}
-	for _, option := range options {
-		option(opts)
-	}
-	if ip := opts.getIP(); ip != "" {
-		_, sport, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-		addr = ip + ":" + sport
-	}
-	if opts.Chain == nil {
-		return net.DialTimeout("tcp", addr, opts.Timeout)
-	}
-	return opts.Chain.Dial(addr)
-}
-
 func (tr *wssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
 	opts := &HandshakeOptions{}
 	for _, option := range options {
