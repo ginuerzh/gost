@@ -93,6 +93,18 @@ func (tr *tcpTransporter) Multiplex() bool {
 type DialOptions struct {
 	Timeout time.Duration
 	Chain   *Chain
+	IPs     []string
+	// count   uint32
+}
+
+func (o *DialOptions) getIP() string {
+	n := len(o.IPs)
+	if n == 0 {
+		return ""
+	}
+	return o.IPs[int(time.Now().Nanosecond())%n]
+	// count := atomic.AddUint32(&o.count, 1)
+	//return o.IPs[int(count)%n]
 }
 
 // DialOption allows a common way to set dial options.
@@ -107,6 +119,12 @@ func TimeoutDialOption(timeout time.Duration) DialOption {
 func ChainDialOption(chain *Chain) DialOption {
 	return func(opts *DialOptions) {
 		opts.Chain = chain
+	}
+}
+
+func IPDialOption(ips ...string) DialOption {
+	return func(opts *DialOptions) {
+		opts.IPs = ips
 	}
 }
 
