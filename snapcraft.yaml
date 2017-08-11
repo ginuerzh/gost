@@ -16,6 +16,7 @@ parts:
   gost:
     source: .
     plugin: go
+    go-packages: [github.com/ginuerzh/gost/cmd/gost]
     go-importpath: github.com/ginuerzh/gost
     after: [go]
   go:
