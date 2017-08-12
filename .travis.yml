@@ -1,0 +1,8 @@
+language: go
+sudo: false
+go:
+  - 1.8
+
+script:
+  - go test -v
+  - cd cmd/gost && go build

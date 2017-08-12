@@ -485,7 +485,13 @@ func parseIP(s string) (ips []string) {
 	}
 	file, err := os.Open(s)
 	if err != nil {
-		return strings.Split(s, ",")
+		ss := strings.Split(s, ",")
+		for _, s := range ss {
+			if ip := net.ParseIP(s); ip != nil {
+				ips = append(ips, s)
+			}
+		}
+		return
 	}
 
 	scanner := bufio.NewScanner(file)
