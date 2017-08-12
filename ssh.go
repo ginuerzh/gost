@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Applicaple SSH Request types for Port Forwarding - RFC 4254 7.X
+// Applicable SSH Request types for Port Forwarding - RFC 4254 7.X
 const (
 	DirectForwardRequest       = "direct-tcpip"         // RFC 4254 7.2
 	RemoteForwardRequest       = "tcpip-forward"        // RFC 4254 7.1

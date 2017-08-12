@@ -13,11 +13,14 @@ apps:
     plugs: [network, network-bind, home]
 
 parts:
+  go:
+    source-tag: go1.8.3
   gost:
+    after: [go]
     source: .
+    source-type: git
+    source-branch: master
     plugin: go
     go-packages: [github.com/ginuerzh/gost/cmd/gost]
     go-importpath: github.com/ginuerzh/gost
-    after: [go]
-  go:
-    source-tag: go1.8.3
+  

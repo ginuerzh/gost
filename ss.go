@@ -150,7 +150,7 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 
 const (
 	idType  = 0 // address type index
-	idIP0   = 1 // ip addres start index
+	idIP0   = 1 // ip address start index
 	idDmLen = 1 // domain address length index
 	idDm0   = 2 // domain address start index
 

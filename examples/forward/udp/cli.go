@@ -24,7 +24,7 @@ func main() {
 	for i := 0; i < concurrency; i++ {
 		go udpEchoLoop()
 	}
-	select{}
+	select {}
 }
 
 func udpEchoLoop() {

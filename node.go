@@ -22,7 +22,7 @@ type Node struct {
 
 // ParseNode parses the node info.
 // The proxy node string pattern is [scheme://][user:pass@host]:port.
-// Scheme can be devided into two parts by character '+', such as: http+tls.
+// Scheme can be divided into two parts by character '+', such as: http+tls.
 func ParseNode(s string) (node Node, err error) {
 	if !strings.Contains(s, "://") {
 		s = "auto://" + s

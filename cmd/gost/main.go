@@ -251,9 +251,9 @@ func serve(chain *gost.Chain) error {
 			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
 			ln, err = gost.WSSListener(node.Addr, tlsCfg, wsOpts)
 		case "kcp":
-			config, err := parseKCPConfig(node.Values.Get("c"))
-			if err != nil {
-				return err
+			config, er := parseKCPConfig(node.Values.Get("c"))
+			if er != nil {
+				return er
 			}
 			ln, err = gost.KCPListener(node.Addr, config)
 		case "ssh":
@@ -314,7 +314,7 @@ func serve(chain *gost.Chain) error {
 				return err
 			}
 		} else {
-			// By default allow for everyting
+			// By default allow for everything
 			whitelist, _ = gost.ParsePermissions("*:*:*")
 		}
 
