@@ -44,7 +44,10 @@ var (
 )
 
 var (
+	// DefaultTLSConfig is a default TLS config for internal use
 	DefaultTLSConfig *tls.Config
+
+	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket
 	DefaultUserAgent = "Chrome/60.0.3112.90"
 )
 
@@ -64,6 +67,7 @@ func init() {
 	log.DefaultLogger = &LogLogger{}
 }
 
+// SetLogger sets a new logger for internal log system
 func SetLogger(logger log.Logger) {
 	log.DefaultLogger = logger
 }

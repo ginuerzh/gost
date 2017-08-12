@@ -75,6 +75,7 @@ func ParseNode(s string) (node Node, err error) {
 	return
 }
 
+// Can tests whether the given action and address is allowed by the whitelist and blacklist.
 func Can(action string, addr string, whitelist, blacklist *Permissions) bool {
 	if !strings.Contains(addr, ":") {
 		addr = addr + ":80"

@@ -131,6 +131,7 @@ func (tr *quicTransporter) Multiplex() bool {
 	return true
 }
 
+// QUICConfig is the config for QUIC client and server
 type QUICConfig struct {
 	TLSConfig *tls.Config
 	Timeout   time.Duration

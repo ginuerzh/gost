@@ -9,36 +9,20 @@ import (
 	glob "github.com/ryanuber/go-glob"
 )
 
+// Permission is a rule for blacklist and whitelist.
 type Permission struct {
 	Actions StringSet
 	Hosts   StringSet
 	Ports   PortSet
 }
 
-type Permissions []Permission
-
-func minint(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-func maxint(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
-}
-
+// PortRange specifies the range of port, such as 1000-2000.
 type PortRange struct {
 	Min, Max int
 }
 
-func (ir *PortRange) Contains(value int) bool {
-	return value >= ir.Min && value <= ir.Max
-}
-
+// ParsePortRange parses the s to a PortRange.
+// The s may be a '*' means 0-65535.
 func ParsePortRange(s string) (*PortRange, error) {
 	if s == "*" {
 		return &PortRange{Min: 0, Max: 65535}, nil
@@ -74,18 +58,16 @@ func ParsePortRange(s string) (*PortRange, error) {
 	}
 }
 
-func (ps *PortSet) Contains(value int) bool {
-	for _, portRange := range *ps {
-		if portRange.Contains(value) {
-			return true
-		}
-	}
-
-	return false
+// Contains checks whether the value is within this range.
+func (ir *PortRange) Contains(value int) bool {
+	return value >= ir.Min && value <= ir.Max
 }
 
+// PortSet is a set of PortRange
 type PortSet []PortRange
 
+// ParsePortSet parses the s to a PortSet.
+// The s shoud be a comma separated string.
 func ParsePortSet(s string) (*PortSet, error) {
 	ps := &PortSet{}
 
@@ -108,9 +90,10 @@ func ParsePortSet(s string) (*PortSet, error) {
 	return ps, nil
 }
 
-func (ss *StringSet) Contains(subj string) bool {
-	for _, s := range *ss {
-		if glob.Glob(s, subj) {
+// Contains checks whether the value is within this port set.
+func (ps *PortSet) Contains(value int) bool {
+	for _, portRange := range *ps {
+		if portRange.Contains(value) {
 			return true
 		}
 	}
@@ -118,8 +101,11 @@ func (ss *StringSet) Contains(subj string) bool {
 	return false
 }
 
+// StringSet is a set of string.
 type StringSet []string
 
+// ParseStringSet parses the s to a StringSet.
+// The s shoud be a comma separated string.
 func ParseStringSet(s string) (*StringSet, error) {
 	ss := &StringSet{}
 	if s == "" {
@@ -131,9 +117,10 @@ func ParseStringSet(s string) (*StringSet, error) {
 	return ss, nil
 }
 
-func (ps *Permissions) Can(action string, host string, port int) bool {
-	for _, p := range *ps {
-		if p.Actions.Contains(action) && p.Hosts.Contains(host) && p.Ports.Contains(port) {
+// Contains checks whether the string subj within this StringSet.
+func (ss *StringSet) Contains(subj string) bool {
+	for _, s := range *ss {
+		if glob.Glob(s, subj) {
 			return true
 		}
 	}
@@ -141,6 +128,10 @@ func (ps *Permissions) Can(action string, host string, port int) bool {
 	return false
 }
 
+// Permissions is a set of Permission.
+type Permissions []Permission
+
+// ParsePermissions parses the s to a Permissions.
 func ParsePermissions(s string) (*Permissions, error) {
 	ps := &Permissions{}
 
@@ -182,4 +173,29 @@ func ParsePermissions(s string) (*Permissions, error) {
 	}
 
 	return ps, nil
+}
+
+// Can tests whether the given action and host:port is allowed by this Permissions.
+func (ps *Permissions) Can(action string, host string, port int) bool {
+	for _, p := range *ps {
+		if p.Actions.Contains(action) && p.Hosts.Contains(host) && p.Ports.Contains(port) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func minint(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
+
+func maxint(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
 }

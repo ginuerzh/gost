@@ -23,6 +23,7 @@ type obfs4Context struct {
 
 var obfs4Map = make(map[string]obfs4Context)
 
+// Obfs4Init initializes the obfs client or server based on isServeNode
 func Obfs4Init(node Node, isServeNode bool) error {
 	if _, ok := obfs4Map[node.Addr]; ok {
 		return fmt.Errorf("obfs4 context already inited")

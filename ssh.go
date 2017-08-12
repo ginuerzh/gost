@@ -34,6 +34,7 @@ var (
 type sshDirectForwardConnector struct {
 }
 
+// SSHDirectForwardConnector creates a Connector for SSH TCP direct port forwarding.
 func SSHDirectForwardConnector() Connector {
 	return &sshDirectForwardConnector{}
 }
@@ -54,6 +55,7 @@ func (c *sshDirectForwardConnector) Connect(conn net.Conn, raddr string) (net.Co
 type sshRemoteForwardConnector struct {
 }
 
+// SSHRemoteForwardConnector creates a Connector for SSH TCP remote port forwarding.
 func SSHRemoteForwardConnector() Connector {
 	return &sshRemoteForwardConnector{}
 }
@@ -108,6 +110,7 @@ type sshForwardTransporter struct {
 	sessionMutex sync.Mutex
 }
 
+// SSHForwardTransporter creates a Transporter that is used by SSH port forwarding server.
 func SSHForwardTransporter() Transporter {
 	return &sshForwardTransporter{
 		sessions: make(map[string]*sshSession),
@@ -406,6 +409,7 @@ type sshForwardHandler struct {
 	config  *ssh.ServerConfig
 }
 
+// SSHForwardHandler creates a server Handler for SSH port forwarding server.
 func SSHForwardHandler(opts ...HandlerOption) Handler {
 	h := &sshForwardHandler{
 		options: new(HandlerOptions),
@@ -744,6 +748,7 @@ func getHostPortFromAddr(addr net.Addr) (host string, port int, err error) {
 	return
 }
 
+// PasswordCallbackFunc is a callback function used by SSH server.
 type PasswordCallbackFunc func(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error)
 
 func defaultSSHPasswordCallback(users ...*url.Userinfo) PasswordCallbackFunc {

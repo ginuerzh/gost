@@ -112,18 +112,21 @@ type DialOptions struct {
 // DialOption allows a common way to set dial options.
 type DialOption func(opts *DialOptions)
 
+// TimeoutDialOption specifies the timeout used by Transporter.Dial
 func TimeoutDialOption(timeout time.Duration) DialOption {
 	return func(opts *DialOptions) {
 		opts.Timeout = timeout
 	}
 }
 
+// ChainDialOption specifies a chain used by Transporter.Dial
 func ChainDialOption(chain *Chain) DialOption {
 	return func(opts *DialOptions) {
 		opts.Chain = chain
 	}
 }
 
+// IPDialOption specifies an IP list used by Transporter.Dial
 func IPDialOption(ips ...string) DialOption {
 	return func(opts *DialOptions) {
 		opts.IPs = ips
@@ -146,54 +149,63 @@ type HandshakeOptions struct {
 // HandshakeOption allows a common way to set handshake options.
 type HandshakeOption func(opts *HandshakeOptions)
 
+// AddrHandshakeOption specifies the server address
 func AddrHandshakeOption(addr string) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Addr = addr
 	}
 }
 
+// UserHandshakeOption specifies the user used by Transporter.Handshake
 func UserHandshakeOption(user *url.Userinfo) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.User = user
 	}
 }
 
+// TimeoutHandshakeOption specifies the timeout used by Transporter.Handshake
 func TimeoutHandshakeOption(timeout time.Duration) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Timeout = timeout
 	}
 }
 
+// IntervalHandshakeOption specifies the interval time used by Transporter.Handshake
 func IntervalHandshakeOption(interval time.Duration) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Interval = interval
 	}
 }
 
+// RetryHandshakeOption specifies the times of retry used by Transporter.Handshake
 func RetryHandshakeOption(retry int) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Retry = retry
 	}
 }
 
+// TLSConfigHandshakeOption specifies the TLS config used by Transporter.Handshake
 func TLSConfigHandshakeOption(config *tls.Config) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.TLSConfig = config
 	}
 }
 
+// WSOptionsHandshakeOption specifies the websocket options used by websocket handshake
 func WSOptionsHandshakeOption(options *WSOptions) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.WSOptions = options
 	}
 }
 
+// KCPConfigHandshakeOption specifies the KCP config used by KCP handshake
 func KCPConfigHandshakeOption(config *KCPConfig) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.KCPConfig = config
 	}
 }
 
+// QUICConfigHandshakeOption specifies the QUIC config used by QUIC handshake
 func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.QUICConfig = config
