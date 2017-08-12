@@ -3,6 +3,7 @@ sudo: false
 go:
   - 1.8
 
+install: true
 script:
   - go test -v
   - cd cmd/gost && go build
