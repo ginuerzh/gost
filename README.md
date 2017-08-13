@@ -71,7 +71,7 @@ protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传�
 
 > socks5+wss - SOCKS5代理，使用websocket传输数据: socks5+wss://:1080
 
-> tls - HTTP/SOCKS4/SOCKS5代理，使用TLS传输数据: tls://:443
+> tls - HTTP/SOCKS5代理，使用TLS传输数据: tls://:443
 
 > ss - Shadowsocks代理: ss://chacha20:123456@:8338
 
@@ -131,7 +131,7 @@ scheme://[bind_address]:port/[host]:hostport
 
 <img src="https://ginuerzh.github.io/images/gost_01.png" />
 
-* 作为标准HTTP/SOCKS4/SOCKS5代理
+* 作为标准HTTP/SOCKS5代理
 ```bash
 gost -L=:8080
 ```

@@ -72,7 +72,7 @@ transport: data transmission mode (ws, wss, tls, quic, kcp, ssh, h2, h2c, obfs4)
 
 > socks5+wss - SOCKS5 over websocket: socks5+wss://:1080
 
-> tls - HTTPS/SOCKS4/SOCKS5 over TLS: tls://:443
+> tls - HTTPS/SOCKS5 over TLS: tls://:443
 
 > ss - standard shadowsocks proxy: ss://chacha20:123456@:8338
 
@@ -130,7 +130,7 @@ Usage
 
 <img src="https://ginuerzh.github.io/images/gost_01.png" />
 
-* Standard HTTP/SOCKS4/SOCKS5 proxy
+* Standard HTTP/SOCKS5 proxy
 ```bash
 gost -L=:8080
 ```
