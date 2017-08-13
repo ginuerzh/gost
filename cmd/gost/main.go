@@ -24,7 +24,7 @@ import (
 var (
 	options struct {
 		ChainNodes, ServeNodes stringList
-		DebugMode              bool
+		Debug                  bool
 	}
 )
 
@@ -37,7 +37,7 @@ func init() {
 	flag.Var(&options.ChainNodes, "F", "forward address, can make a forward chain")
 	flag.Var(&options.ServeNodes, "L", "listen address, can listen on multiple ports")
 	flag.StringVar(&configureFile, "C", "", "configure file")
-	flag.BoolVar(&options.DebugMode, "D", false, "enable debug log")
+	flag.BoolVar(&options.Debug, "D", false, "enable debug log")
 	flag.BoolVar(&printVersion, "V", false, "print version")
 	flag.Parse()
 
@@ -57,7 +57,7 @@ func init() {
 	}
 
 	gost.SetLogger(&gost.LogLogger{})
-	gost.Debug = options.DebugMode
+	gost.Debug = options.Debug
 }
 
 func main() {

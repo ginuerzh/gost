@@ -117,11 +117,12 @@ scheme://[bind_address]:port/[host]:hostport
     "ChainNodes": [
         "http://192.168.1.1:8080",
         "https://10.0.2.1:443"
-    ]
+    ],
+    "Debug": true
 }
 ```
 
-ServeNodes等同于-L参数，ChainNodes等同于-F参数
+`ServeNodes`等同于`-L`参数，`ChainNodes`等同于`-F`参数，`Debug`等同于`-D`参数。
 
 
 使用方法

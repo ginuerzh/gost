@@ -117,11 +117,12 @@ The configuration file is in standard JSON format:
     "ChainNodes": [
         "http://192.168.1.1:8080",
         "https://10.0.2.1:443"
-    ]
+    ],
+    "Debug": true
 }
 ```
 
-ServeNodes is equivalent to the -L parameter, ChainNodes is equivalent to the -F parameter.
+`ServeNodes` is equivalent to the `-L` parameter, `ChainNodes` is equivalent to the `-F` parameter, `Debug` is equivalent to the `-D` parameter.
 
 Usage
 ------
