@@ -29,6 +29,8 @@ var (
 )
 
 func init() {
+	gost.SetLogger(&gost.LogLogger{})
+
 	var (
 		configureFile string
 		printVersion  bool
@@ -56,7 +58,6 @@ func init() {
 		os.Exit(0)
 	}
 
-	gost.SetLogger(&gost.LogLogger{})
 	gost.Debug = options.Debug
 }
 
@@ -233,8 +234,11 @@ func serve(chain *gost.Chain) error {
 		if node.User != nil {
 			users = append(users, node.User)
 		}
-		tlsCfg, _ := tlsConfig(node.Values.Get("cert"), node.Values.Get("key"))
-
+		certFile, keyFile := node.Values.Get("cert"), node.Values.Get("key")
+		tlsCfg, err := tlsConfig(certFile, keyFile)
+		if err != nil && certFile != "" && keyFile != "" {
+			return err
+		}
 		var ln gost.Listener
 		switch node.Transport {
 		case "tls":
