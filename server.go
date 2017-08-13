@@ -10,23 +10,33 @@ import (
 
 // Server is a proxy server.
 type Server struct {
+	Listener Listener
+}
+
+// Addr returns the address of the server
+func (s *Server) Addr() net.Addr {
+	return s.Listener.Addr()
+}
+
+// Close closes the server
+func (s *Server) Close() error {
+	return s.Listener.Close()
 }
 
 // Serve serves as a proxy server.
-func (s *Server) Serve(l net.Listener, h Handler) error {
-	defer l.Close()
-
-	if l == nil {
-		ln, err := TCPListener(":8080")
+func (s *Server) Serve(h Handler) error {
+	if s.Listener == nil {
+		ln, err := TCPListener("")
 		if err != nil {
 			return err
 		}
-		l = ln
+		s.Listener = ln
 	}
 	if h == nil {
 		h = HTTPHandler()
 	}
 
+	l := s.Listener
 	var tempDelay time.Duration
 	for {
 		conn, e := l.Accept()
@@ -63,11 +73,15 @@ type tcpListener struct {
 
 // TCPListener creates a Listener for TCP proxy server.
 func TCPListener(addr string) (Listener, error) {
-	ln, err := net.Listen("tcp", addr)
+	laddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	return &tcpListener{Listener: tcpKeepAliveListener{ln.(*net.TCPListener)}}, nil
+	ln, err := net.ListenTCP("tcp", laddr)
+	if err != nil {
+		return nil, err
+	}
+	return &tcpListener{Listener: tcpKeepAliveListener{ln}}, nil
 }
 
 type tcpKeepAliveListener struct {

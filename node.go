@@ -1,9 +1,7 @@
 package gost
 
 import (
-	"net"
 	"net/url"
-	"strconv"
 	"strings"
 )
 
@@ -24,6 +22,10 @@ type Node struct {
 // The proxy node string pattern is [scheme://][user:pass@host]:port.
 // Scheme can be divided into two parts by character '+', such as: http+tls.
 func ParseNode(s string) (node Node, err error) {
+	if s == "" {
+		return Node{}, nil
+	}
+
 	if !strings.Contains(s, "://") {
 		s = "auto://" + s
 	}
@@ -58,7 +60,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "rtcp", "rudp": // rtcp and rudp are for remote port forwarding
 		node.Remote = strings.Trim(u.EscapedPath(), "/")
 	default:
-		node.Transport = ""
+		node.Transport = "tcp"
 	}
 
 	switch node.Protocol {
@@ -73,24 +75,4 @@ func ParseNode(s string) (node Node, err error) {
 	}
 
 	return
-}
-
-// Can tests whether the given action and address is allowed by the whitelist and blacklist.
-func Can(action string, addr string, whitelist, blacklist *Permissions) bool {
-	if !strings.Contains(addr, ":") {
-		addr = addr + ":80"
-	}
-	host, strport, err := net.SplitHostPort(addr)
-
-	if err != nil {
-		return false
-	}
-
-	port, err := strconv.Atoi(strport)
-
-	if err != nil {
-		return false
-	}
-
-	return whitelist.Can(action, host, port) && !blacklist.Can(action, host, port)
 }

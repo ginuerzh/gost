@@ -3,6 +3,7 @@ package gost
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -198,4 +199,25 @@ func maxint(x, y int) int {
 		return x
 	}
 	return y
+}
+
+// Can tests whether the given action and address is allowed by the whitelist and blacklist.
+func Can(action string, addr string, whitelist, blacklist *Permissions) bool {
+	if !strings.Contains(addr, ":") {
+		addr = addr + ":80"
+	}
+	host, strport, err := net.SplitHostPort(addr)
+
+	if err != nil {
+		return false
+	}
+
+	port, err := strconv.Atoi(strport)
+
+	if err != nil {
+		return false
+	}
+
+	return (whitelist == nil || whitelist.Can(action, host, port)) &&
+		(blacklist == nil || !blacklist.Can(action, host, port))
 }

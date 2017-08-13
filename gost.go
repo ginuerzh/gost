@@ -64,7 +64,7 @@ func init() {
 		Certificates: []tls.Certificate{cert},
 	}
 
-	log.DefaultLogger = &LogLogger{}
+	// log.DefaultLogger = &LogLogger{}
 }
 
 // SetLogger sets a new logger for internal log system

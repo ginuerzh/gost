@@ -5,5 +5,5 @@ go:
 
 install: true
 script:
-  - go test -v
+  - go test -race -v
   - cd cmd/gost && go build

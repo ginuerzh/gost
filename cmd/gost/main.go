@@ -56,6 +56,7 @@ func init() {
 		os.Exit(0)
 	}
 
+	gost.SetLogger(&gost.LogLogger{})
 	gost.Debug = options.DebugMode
 }
 
@@ -313,18 +314,11 @@ func serve(chain *gost.Chain) error {
 			if whitelist, err = gost.ParsePermissions(node.Values.Get("whitelist")); err != nil {
 				return err
 			}
-		} else {
-			// By default allow for everything
-			whitelist, _ = gost.ParsePermissions("*:*:*")
 		}
-
 		if node.Values.Get("blacklist") != "" {
 			if blacklist, err = gost.ParsePermissions(node.Values.Get("blacklist")); err != nil {
 				return err
 			}
-		} else {
-			// By default block nothing
-			blacklist, _ = gost.ParsePermissions("")
 		}
 
 		var handlerOptions []gost.HandlerOption
@@ -366,7 +360,8 @@ func serve(chain *gost.Chain) error {
 		default:
 			handler = gost.AutoHandler(handlerOptions...)
 		}
-		go new(gost.Server).Serve(ln, handler)
+		srv := &gost.Server{Listener: ln}
+		go srv.Serve(handler)
 	}
 
 	return nil
