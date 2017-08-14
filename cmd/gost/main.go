@@ -361,6 +361,8 @@ func serve(chain *gost.Chain) error {
 			handler = gost.TCPRedirectHandler(handlerOptions...)
 		case "ssu":
 			handler = gost.ShadowUDPdHandler(handlerOptions...)
+		case "sni":
+			handler = gost.SNIHandler(handlerOptions...)
 		default:
 			handler = gost.AutoHandler(handlerOptions...)
 		}

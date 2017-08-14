@@ -84,12 +84,11 @@ func AutoHandler(opts ...HandlerOption) Handler {
 }
 
 func (h *autoHandler) Handle(conn net.Conn) {
-	defer conn.Close()
-
 	br := bufio.NewReader(conn)
 	b, err := br.Peek(1)
 	if err != nil {
 		log.Log(err)
+		conn.Close()
 		return
 	}
 
