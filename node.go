@@ -36,6 +36,7 @@ func ParseNode(s string) (node Node, err error) {
 
 	node = Node{
 		Addr:   u.Host,
+		Remote: strings.Trim(u.EscapedPath(), "/"),
 		Values: u.Query(),
 		User:   u.User,
 	}
@@ -56,9 +57,7 @@ func ParseNode(s string) (node Node, err error) {
 		node.Protocol = "http"
 		node.Transport = "tls"
 	case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
-		node.Remote = strings.Trim(u.EscapedPath(), "/")
 	case "rtcp", "rudp": // rtcp and rudp are for remote port forwarding
-		node.Remote = strings.Trim(u.EscapedPath(), "/")
 	default:
 		node.Transport = "tcp"
 	}
@@ -68,7 +67,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "socks", "socks5":
 		node.Protocol = "socks5"
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
-	case "direct", "remote", "forward": // SSH port forwarding
+	case "direct", "remote", "forward": // forwarding
 	case "redirect": // TCP transparent proxy
 	default:
 		node.Protocol = ""

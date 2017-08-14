@@ -129,7 +129,7 @@ func initChain() (*gost.Chain, error) {
 			}
 			tr = gost.KCPTransporter(config)
 		case "ssh":
-			if node.Protocol == "direct" || node.Protocol == "remote" || node.Protocol == "forward" {
+			if node.Protocol == "direct" || node.Protocol == "remote" {
 				tr = gost.SSHForwardTransporter()
 			} else {
 				tr = gost.SSHTunnelTransporter()
@@ -187,10 +187,12 @@ func initChain() (*gost.Chain, error) {
 			connector = gost.SOCKS4AConnector()
 		case "ss":
 			connector = gost.ShadowConnector(node.User)
-		case "direct", "forward":
+		case "direct":
 			connector = gost.SSHDirectForwardConnector()
 		case "remote":
 			connector = gost.SSHRemoteForwardConnector()
+		case "forward":
+			connector = gost.ForwardConnector()
 		case "http":
 			fallthrough
 		default:
@@ -239,6 +241,7 @@ func serve(chain *gost.Chain) error {
 		if err != nil && certFile != "" && keyFile != "" {
 			return err
 		}
+
 		var ln gost.Listener
 		switch node.Transport {
 		case "tls":
@@ -364,8 +367,14 @@ func serve(chain *gost.Chain) error {
 		case "sni":
 			handler = gost.SNIHandler(handlerOptions...)
 		default:
-			handler = gost.AutoHandler(handlerOptions...)
+			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel
+			if node.Remote != "" {
+				handler = gost.ForwardHandler(node.Remote, handlerOptions...)
+			} else {
+				handler = gost.AutoHandler(handlerOptions...)
+			}
 		}
+
 		srv := &gost.Server{Listener: ln}
 		go srv.Serve(handler)
 	}

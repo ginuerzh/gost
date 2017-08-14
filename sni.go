@@ -56,7 +56,7 @@ func (h *sniHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	cc, err := options.Chain.Dial(sni)
+	cc, err := options.Chain.Dial(sni + ":443")
 	if err != nil {
 		log.Logf("[sni] %s -> %s : %s", conn.RemoteAddr(), sni, err)
 		return
