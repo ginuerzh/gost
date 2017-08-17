@@ -191,7 +191,7 @@ func initChain() (*gost.Chain, error) {
 			connector = gost.SSHDirectForwardConnector()
 		case "remote":
 			connector = gost.SSHRemoteForwardConnector()
-		case "forward":
+		case "forward", "sni": // sni is an alias of forward
 			connector = gost.ForwardConnector()
 		case "http":
 			fallthrough
