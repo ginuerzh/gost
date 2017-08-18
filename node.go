@@ -13,9 +13,9 @@ type Node struct {
 	Remote           string // remote address, used by tcp/udp port forwarding
 	User             *url.Userinfo
 	Values           url.Values
-	Client           *Client
 	DialOptions      []DialOption
 	HandshakeOptions []HandshakeOption
+	Client           *Client
 }
 
 // ParseNode parses the node info.
@@ -74,4 +74,34 @@ func ParseNode(s string) (node Node, err error) {
 	}
 
 	return
+}
+
+// NodeGroup is a group of nodes.
+type NodeGroup struct {
+	nodes    []Node
+	Options  []SelectOption
+	Selector Selector
+}
+
+// NewNodeGroup creates a node group
+func NewNodeGroup(nodes ...Node) *NodeGroup {
+	return &NodeGroup{
+		nodes: nodes,
+	}
+}
+
+// AddNode adds node or node list into group
+func (ng *NodeGroup) AddNode(node ...Node) {
+	if ng == nil {
+		return
+	}
+	ng.nodes = append(ng.nodes, node...)
+}
+
+// Nodes returns node list in the group
+func (ng *NodeGroup) Nodes() []Node {
+	if ng == nil {
+		return nil
+	}
+	return ng.nodes
 }
