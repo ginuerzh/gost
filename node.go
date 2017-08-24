@@ -58,6 +58,7 @@ func ParseNode(s string) (node Node, err error) {
 		node.Transport = "tls"
 	case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
 	case "rtcp", "rudp": // rtcp and rudp are for remote port forwarding
+	case "ohttp": // obfs-http
 	default:
 		node.Transport = "tcp"
 	}

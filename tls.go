@@ -12,7 +12,6 @@ type tlsTransporter struct {
 }
 
 // TLSTransporter creates a Transporter that is used by TLS proxy client.
-// It accepts a TLS config for TLS handshake.
 func TLSTransporter() Transporter {
 	return &tlsTransporter{}
 }

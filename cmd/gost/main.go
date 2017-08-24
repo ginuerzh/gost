@@ -171,6 +171,8 @@ func initChain() (*gost.Chain, error) {
 				return nil, err
 			}
 			tr = gost.Obfs4Transporter()
+		case "ohttp":
+			tr = gost.ObfsHTTPTransporter()
 		default:
 			tr = gost.TCPTransporter()
 		}
@@ -288,11 +290,6 @@ func serve(chain *gost.Chain) error {
 			ln, err = gost.H2Listener(node.Addr, tlsCfg)
 		case "h2c":
 			ln, err = gost.H2CListener(node.Addr)
-		case "obfs4":
-			if err = gost.Obfs4Init(node, true); err != nil {
-				return err
-			}
-			ln, err = gost.Obfs4Listener(node.Addr)
 		case "tcp":
 			ln, err = gost.TCPListener(node.Addr)
 		case "rtcp":
@@ -311,6 +308,13 @@ func serve(chain *gost.Chain) error {
 		case "ssu":
 			ttl, _ := strconv.Atoi(node.Values.Get("ttl"))
 			ln, err = gost.ShadowUDPListener(node.Addr, node.User, time.Duration(ttl)*time.Second)
+		case "obfs4":
+			if err = gost.Obfs4Init(node, true); err != nil {
+				return err
+			}
+			ln, err = gost.Obfs4Listener(node.Addr)
+		case "ohttp":
+			ln, err = gost.ObfsHTTPListener(node.Addr)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
