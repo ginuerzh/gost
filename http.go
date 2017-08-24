@@ -94,16 +94,17 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	}
 
 	if Debug {
-		log.Logf("[http] %s %s - %s %s", req.Method, conn.RemoteAddr(), req.Host, req.Proto)
 		dump, _ := httputil.DumpRequest(req, false)
-		log.Logf(string(dump))
+		log.Logf("[http] %s -> %s\n%s", conn.RemoteAddr(), req.Host, string(dump))
 	}
 
-	if req.Method == "PRI" && req.ProtoMajor == 2 {
-		log.Logf("[http] %s <- %s : Not an HTTP2 server", conn.RemoteAddr(), req.Host)
+	if req.Method == "PRI" || (req.Method != http.MethodConnect && req.URL.Scheme != "http") {
 		resp := "HTTP/1.1 400 Bad Request\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n"
 		conn.Write([]byte(resp))
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, resp)
+		}
 		return
 	}
 
