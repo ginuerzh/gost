@@ -108,6 +108,17 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		return
 	}
 
+	if !Can("tcp", req.Host, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[http] Unauthorized to tcp connect to %s", req.Host)
+		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		conn.Write(b)
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
+		}
+		return
+	}
+
 	u, p, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
 	if Debug && (u != "" || p != "") {
 		log.Logf("[http] %s - %s : Authorization: '%s' '%s'", conn.RemoteAddr(), req.Host, u, p)
@@ -122,18 +133,7 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	}
 
 	req.Header.Del("Proxy-Authorization")
-	req.Header.Del("Proxy-Connection")
-
-	if !Can("tcp", req.Host, h.options.Whitelist, h.options.Blacklist) {
-		log.Logf("[http] Unauthorized to tcp connect to %s", req.Host)
-		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		conn.Write(b)
-		if Debug {
-			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
-		}
-		return
-	}
+	// req.Header.Del("Proxy-Connection")
 
 	// forward http request
 	lastNode := h.options.Chain.LastNode()
