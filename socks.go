@@ -261,6 +261,9 @@ func (c *socks4Connector) Connect(conn net.Conn, addr string) (net.Conn, error) 
 	if err != nil {
 		return nil, err
 	}
+	if len(taddr.IP) == 0 {
+		taddr.IP = net.IPv4(0, 0, 0, 0)
+	}
 
 	req := gosocks4.NewRequest(gosocks4.CmdConnect,
 		&gosocks4.Addr{

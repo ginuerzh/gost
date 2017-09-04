@@ -56,7 +56,7 @@ func (addr *Addr) Decode(b []byte) error {
 	addr.Port = binary.BigEndian.Uint16(b[0:2])
 	addr.Host = net.IP(b[2 : 2+net.IPv4len]).String()
 
-	if b[2]|b[3]|b[4] == 0 {
+	if b[2]|b[3]|b[4] == 0 && b[5] != 0 {
 		addr.Type = AddrDomain
 	}
 
