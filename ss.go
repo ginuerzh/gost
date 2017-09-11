@@ -172,10 +172,12 @@ func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
 	buf := make([]byte, smallBufferSize)
 
 	// read till we get possible domain length field
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	if _, err = io.ReadFull(conn, buf[:idType+1]); err != nil {
 		return
 	}
+	// clear timer
+	conn.SetReadDeadline(time.Time{})
 
 	var reqStart, reqEnd int
 	addrType := buf[idType]
