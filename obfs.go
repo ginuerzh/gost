@@ -5,8 +5,8 @@ package gost
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -66,6 +66,8 @@ func (l *obfsHTTPListener) Accept() (net.Conn, error) {
 type obfsHTTPConn struct {
 	net.Conn
 	r              *http.Request
+	rbuf           []byte
+	wbuf           []byte
 	isServer       bool
 	handshaked     bool
 	handshakeMutex sync.Mutex
@@ -80,7 +82,8 @@ func (c *obfsHTTPConn) Handshake() (err error) {
 	}
 
 	if c.isServer {
-		c.r, err = http.ReadRequest(bufio.NewReader(c.Conn))
+		br := bufio.NewReader(c.Conn)
+		c.r, err = http.ReadRequest(br)
 		if err != nil {
 			return
 		}
@@ -88,22 +91,58 @@ func (c *obfsHTTPConn) Handshake() (err error) {
 			dump, _ := httputil.DumpRequest(c.r, false)
 			log.Logf("[ohttp] %s -> %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), string(dump))
 		}
-		b := bytes.NewBufferString("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n")
+
+		if br.Buffered() > 0 {
+			c.rbuf, err = br.Peek(br.Buffered())
+		} else {
+			c.rbuf, err = ioutil.ReadAll(c.r.Body)
+		}
+
+		if err != nil {
+			log.Logf("[ohttp] %s -> %s : %v", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), err)
+			return
+		}
+
+		b := bytes.Buffer{}
+		if c.r.Header.Get("Connection") == "Upgrade" &&
+			c.r.Header.Get("Upgrade") == "websocket" {
+			b.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
+			b.WriteString("Server: nginx/1.10.0\r\n")
+			b.WriteString("Connection: Upgrade\r\n")
+			b.WriteString("Upgrade: websocket\r\n")
+			b.WriteString(fmt.Sprintf("Sec-WebSocket-Accept: %s\r\n", computeAcceptKey(c.r.Header.Get("Sec-WebSocket-Key"))))
+			b.WriteString("\r\n")
+		} else {
+			b.WriteString("HTTP/1.1 200 OK\r\n")
+			b.WriteString("Server: nginx/1.10.0\r\n")
+			b.WriteString("Content-Type: application/octet-stream\r\n")
+			b.WriteString("Connection: keep-alive\r\n")
+			b.WriteString("Cache-Control: private, no-cache, no-store, proxy-revalidate, no-transform\r\n")
+			b.WriteString("Pragma: no-cache\r\n")
+			b.WriteString("\r\n")
+		}
 		if Debug {
 			log.Logf("[ohttp] %s <- %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), b.String())
 		}
 		if _, err = b.WriteTo(c.Conn); err != nil {
 			return
 		}
-
 	} else {
 		r := c.r
 		if r == nil {
-			r, err = http.NewRequest(http.MethodPost, "http://www.baidu.com/", nil)
-			if err != nil {
-				return
+			r = &http.Request{
+				Method:     http.MethodPost,
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				URL:        &url.URL{Scheme: "http", Host: "www.baidu.com"},
+				Header:     make(http.Header),
 			}
+			r.Header.Set("Connection", "keep-alive")
 			r.Header.Set("User-Agent", DefaultUserAgent)
+			if len(c.wbuf) > 0 {
+				r.Body = ioutil.NopCloser(bytes.NewReader(c.wbuf))
+				r.ContentLength = int64(len(c.wbuf))
+			}
 		}
 		if err = r.Write(c.Conn); err != nil {
 			return
@@ -117,12 +156,11 @@ func (c *obfsHTTPConn) Handshake() (err error) {
 		if err != nil {
 			return
 		}
+		defer resp.Body.Close()
+
 		if Debug {
 			dump, _ := httputil.DumpResponse(resp, false)
 			log.Logf("[ohttp] %s <- %s\n%s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), string(dump))
-		}
-		if resp.StatusCode != http.StatusOK {
-			return errors.New(resp.Status)
 		}
 	}
 	c.handshaked = true
@@ -133,11 +171,22 @@ func (c *obfsHTTPConn) Read(b []byte) (n int, err error) {
 	if err = c.Handshake(); err != nil {
 		return
 	}
+	if len(c.rbuf) > 0 {
+		n = copy(b, c.rbuf)
+		c.rbuf = c.rbuf[n:]
+		return
+	}
 	return c.Conn.Read(b)
 }
 
 func (c *obfsHTTPConn) Write(b []byte) (n int, err error) {
+	handshaked := c.handshaked
+	c.wbuf = b
 	if err = c.Handshake(); err != nil {
+		return
+	}
+	if !handshaked {
+		n = len(c.wbuf)
 		return
 	}
 	return c.Conn.Write(b)

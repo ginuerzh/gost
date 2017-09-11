@@ -1,7 +1,11 @@
 package gost
 
 import (
+	"crypto/rand"
+	"crypto/sha1"
 	"crypto/tls"
+	"encoding/base64"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -302,4 +306,21 @@ func WSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Listen
 	}
 
 	return l, nil
+}
+
+var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+
+func computeAcceptKey(challengeKey string) string {
+	h := sha1.New()
+	h.Write([]byte(challengeKey))
+	h.Write(keyGUID)
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func generateChallengeKey() (string, error) {
+	p := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, p); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(p), nil
 }

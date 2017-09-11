@@ -516,8 +516,9 @@ func (r *Reply) Write(w io.Writer) (err error) {
 	b[1] = r.Rep
 	b[2] = 0        //rsv
 	b[3] = AddrIPv4 // default
-
 	length := 10
+	b[4], b[5], b[6], b[7], b[8], b[9] = 0, 0, 0, 0, 0, 0 // reset address field
+
 	if r.Addr != nil {
 		n, _ := r.Addr.Encode(b[3:])
 		length = 3 + n
