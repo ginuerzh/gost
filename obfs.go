@@ -12,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/go-log/log"
 
@@ -65,7 +66,8 @@ func (l *obfsHTTPListener) Accept() (net.Conn, error) {
 
 type obfsHTTPConn struct {
 	net.Conn
-	r              *http.Request
+	request        *http.Request
+	response       *http.Response
 	rbuf           []byte
 	wbuf           []byte
 	isServer       bool
@@ -82,88 +84,103 @@ func (c *obfsHTTPConn) Handshake() (err error) {
 	}
 
 	if c.isServer {
-		br := bufio.NewReader(c.Conn)
-		c.r, err = http.ReadRequest(br)
-		if err != nil {
-			return
-		}
-		if Debug {
-			dump, _ := httputil.DumpRequest(c.r, false)
-			log.Logf("[ohttp] %s -> %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), string(dump))
-		}
-
-		if br.Buffered() > 0 {
-			c.rbuf, err = br.Peek(br.Buffered())
-		} else {
-			c.rbuf, err = ioutil.ReadAll(c.r.Body)
-		}
-
-		if err != nil {
-			log.Logf("[ohttp] %s -> %s : %v", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), err)
-			return
-		}
-
-		b := bytes.Buffer{}
-		if c.r.Header.Get("Connection") == "Upgrade" &&
-			c.r.Header.Get("Upgrade") == "websocket" {
-			b.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
-			b.WriteString("Server: nginx/1.10.0\r\n")
-			b.WriteString("Connection: Upgrade\r\n")
-			b.WriteString("Upgrade: websocket\r\n")
-			b.WriteString(fmt.Sprintf("Sec-WebSocket-Accept: %s\r\n", computeAcceptKey(c.r.Header.Get("Sec-WebSocket-Key"))))
-			b.WriteString("\r\n")
-		} else {
-			b.WriteString("HTTP/1.1 200 OK\r\n")
-			b.WriteString("Server: nginx/1.10.0\r\n")
-			b.WriteString("Content-Type: application/octet-stream\r\n")
-			b.WriteString("Connection: keep-alive\r\n")
-			b.WriteString("Cache-Control: private, no-cache, no-store, proxy-revalidate, no-transform\r\n")
-			b.WriteString("Pragma: no-cache\r\n")
-			b.WriteString("\r\n")
-		}
-		if Debug {
-			log.Logf("[ohttp] %s <- %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), b.String())
-		}
-		if _, err = b.WriteTo(c.Conn); err != nil {
-			return
-		}
+		err = c.serverHandshake()
 	} else {
-		r := c.r
-		if r == nil {
-			r = &http.Request{
-				Method:     http.MethodPost,
-				ProtoMajor: 1,
-				ProtoMinor: 1,
-				URL:        &url.URL{Scheme: "http", Host: "www.baidu.com"},
-				Header:     make(http.Header),
-			}
-			r.Header.Set("Connection", "keep-alive")
-			r.Header.Set("User-Agent", DefaultUserAgent)
-			if len(c.wbuf) > 0 {
-				r.Body = ioutil.NopCloser(bytes.NewReader(c.wbuf))
-				r.ContentLength = int64(len(c.wbuf))
-			}
-		}
-		if err = r.Write(c.Conn); err != nil {
-			return
-		}
-		if Debug {
-			dump, _ := httputil.DumpRequest(r, false)
-			log.Logf("[ohttp] %s -> %s\n%s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), string(dump))
-		}
-		var resp *http.Response
-		resp, err = http.ReadResponse(bufio.NewReader(c.Conn), r)
-		if err != nil {
-			return
-		}
-		defer resp.Body.Close()
+		err = c.clientHandshake()
+	}
+	if err != nil {
+		return
+	}
 
-		if Debug {
-			dump, _ := httputil.DumpResponse(resp, false)
-			log.Logf("[ohttp] %s <- %s\n%s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), string(dump))
+	c.handshaked = true
+	return nil
+}
+
+func (c *obfsHTTPConn) serverHandshake() (err error) {
+	br := bufio.NewReader(c.Conn)
+	c.request, err = http.ReadRequest(br)
+	if err != nil {
+		return
+	}
+	if Debug {
+		dump, _ := httputil.DumpRequest(c.request, false)
+		log.Logf("[ohttp] %s -> %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), string(dump))
+	}
+
+	if br.Buffered() > 0 {
+		c.rbuf, err = br.Peek(br.Buffered())
+	} else {
+		c.rbuf, err = ioutil.ReadAll(c.request.Body)
+	}
+
+	if err != nil {
+		log.Logf("[ohttp] %s -> %s : %v", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), err)
+		return
+	}
+
+	b := bytes.Buffer{}
+	if c.request.Header.Get("Upgrade") == "websocket" {
+		b.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
+		b.WriteString("Server: nginx/1.10.0\r\n")
+		b.WriteString("Date: " + time.Now().Format(time.RFC1123) + "\r\n")
+		b.WriteString("Connection: Upgrade\r\n")
+		b.WriteString("Upgrade: websocket\r\n")
+		b.WriteString(fmt.Sprintf("Sec-WebSocket-Accept: %s\r\n", computeAcceptKey(c.request.Header.Get("Sec-WebSocket-Key"))))
+		b.WriteString("\r\n")
+	} else {
+		b.WriteString("HTTP/1.1 200 OK\r\n")
+		b.WriteString("Server: nginx/1.10.0\r\n")
+		b.WriteString("Date: " + time.Now().Format(time.RFC1123) + "\r\n")
+		b.WriteString("Content-Type: application/octet-stream\r\n")
+		b.WriteString("Connection: keep-alive\r\n")
+		b.WriteString("Cache-Control: private, no-cache, no-store, proxy-revalidate, no-transform\r\n")
+		b.WriteString("Pragma: no-cache\r\n")
+		b.WriteString("\r\n")
+	}
+	if Debug {
+		log.Logf("[ohttp] %s <- %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), b.String())
+	}
+	_, err = b.WriteTo(c.Conn)
+	return
+}
+
+func (c *obfsHTTPConn) clientHandshake() (err error) {
+	r := c.request
+	if r == nil {
+		r = &http.Request{
+			Method:     http.MethodGet,
+			ProtoMajor: 1,
+			ProtoMinor: 1,
+			URL:        &url.URL{Scheme: "http", Host: "www.baidu.com"},
+			Header:     make(http.Header),
+		}
+		r.Header.Set("Connection", "keep-alive")
+		r.Header.Set("Upgrade", "websocket")
+		r.Header.Set("User-Agent", DefaultUserAgent)
+		if len(c.wbuf) > 0 {
+			log.Log("write buf", len(c.wbuf))
+			r.Body = ioutil.NopCloser(bytes.NewReader(c.wbuf))
+			r.ContentLength = int64(len(c.wbuf))
 		}
 	}
-	c.handshaked = true
+	if err = r.Write(c.Conn); err != nil {
+		return
+	}
+	if Debug {
+		dump, _ := httputil.DumpRequest(r, false)
+		log.Logf("[ohttp] %s -> %s\n%s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), string(dump))
+	}
+	var resp *http.Response
+	resp, err = http.ReadResponse(bufio.NewReader(c.Conn), r)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if Debug {
+		dump, _ := httputil.DumpResponse(resp, false)
+		log.Logf("[ohttp] %s <- %s\n%s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), string(dump))
+	}
 	return nil
 }
 

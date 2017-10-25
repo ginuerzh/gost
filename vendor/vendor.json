@@ -99,6 +99,12 @@
 			"revisionTime": "2017-02-05T06:52:49Z"
 		},
 		{
+			"checksumSHA1": "qBQox+0NNTwkyw+a4eMiuMjDxjY=",
+			"path": "github.com/ginuerzh/tls-dissector",
+			"revision": "7daf6e2af3aed2de50b3662683f6434297949d2a",
+			"revisionTime": "2017-10-25T09:37:20Z"
+		},
+		{
 			"checksumSHA1": "fBx0fqiyrl26gkGo14J9pJ8zB2Y=",
 			"path": "github.com/go-log/log",
 			"revision": "37e2e1f19306361e1fc152a1839f1236149cb4e4",
