@@ -17,8 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ginuerzh/gost"
 	"github.com/go-log/log"
+	"github.com/go-redis/redis"
+	"github.com/jinzhu/configor"
+	"github.com/xiaoli/gost"
 )
 
 var (
@@ -26,6 +28,7 @@ var (
 		ChainNodes, ServeNodes stringList
 		Debug                  bool
 	}
+	redisClient *redis.Client
 )
 
 func init() {
@@ -234,6 +237,10 @@ func serve(chain *gost.Chain) error {
 		if node.User != nil {
 			users = append(users, node.User)
 		}
+		redisClient, err := parseRedisUsersAuth(node.Values.Get("redis"))
+		if err != nil {
+			return err
+		}
 		certFile, keyFile := node.Values.Get("cert"), node.Values.Get("key")
 		tlsCfg, err := tlsConfig(certFile, keyFile)
 		if err != nil && certFile != "" && keyFile != "" {
@@ -334,6 +341,7 @@ func serve(chain *gost.Chain) error {
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
+			gost.RedisClientHandlerOption(redisClient),
 		)
 		var handler gost.Handler
 		switch node.Protocol {
@@ -475,6 +483,31 @@ func parseUsers(authFile string) (users []*url.Userinfo, err error) {
 	}
 
 	err = scanner.Err()
+	return
+}
+
+func parseRedisUsersAuth(configFile string) (client *redis.Client, err error) {
+	if configFile == "" {
+		return
+	}
+
+	var Config = struct {
+		RedisServer struct {
+			Address  string `default:"localhost:6379"`
+			Password string `default:""`
+			DB       int    `default:0`
+		}
+	}{}
+
+	configor.Load(&Config, configFile)
+	client = redis.NewClient(&redis.Options{
+		Addr:     Config.RedisServer.Address,
+		Password: Config.RedisServer.Password,
+		DB:       Config.RedisServer.DB,
+	})
+
+	_, err = client.Ping().Result()
+
 	return
 }
 
