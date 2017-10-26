@@ -5,7 +5,6 @@ package gost
 import (
 	"bufio"
 	"bytes"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -95,34 +94,6 @@ func (h *sniHandler) Handle(conn net.Conn) {
 	log.Logf("[sni] %s >-< %s", cc.LocalAddr(), host)
 }
 
-// clientHelloServerName returns the SNI server name inside the TLS ClientHello,
-// without consuming any bytes from br.
-// On any error, the empty string is returned.
-func clientHelloServerName(br *bufio.Reader) (isTLS bool, sni string, err error) {
-	const recordHeaderLen = 5
-	hdr, err := br.Peek(recordHeaderLen)
-	if err != nil {
-		return
-	}
-	const recordTypeHandshake = 0x16
-	if hdr[0] != recordTypeHandshake {
-		return // Not TLS.
-	}
-	isTLS = true
-	recLen := int(hdr[3])<<8 | int(hdr[4]) // ignoring version in hdr[1:3]
-	helloBytes, err := br.Peek(recordHeaderLen + recLen)
-	if err != nil {
-		return
-	}
-	tls.Server(sniSniffConn{r: bytes.NewReader(helloBytes)}, &tls.Config{
-		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-			sni = hello.ServerName
-			return nil, nil
-		},
-	}).Handshake()
-	return
-}
-
 // sniSniffConn is a net.Conn that reads from r, fails on Writes,
 // and crashes otherwise.
 type sniSniffConn struct {
@@ -176,8 +147,44 @@ func (c *sniClientConn) obfuscate(p []byte) ([]byte, error) {
 	}
 
 	// TODO: HTTP obfuscate
+	buf := &bytes.Buffer{}
+	br := bufio.NewReader(bytes.NewReader(p))
+	for {
+		s, err := br.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			if s != "" {
+				buf.Write([]byte(s))
+			}
+			break
+		}
+
+		// end of HTTP header
+		if s == "\r\n" {
+			buf.Write([]byte(s))
+			// drain the remain bytes.
+			io.Copy(buf, br)
+			break
+		}
+
+		if strings.HasPrefix(s, "Host") {
+			s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, "Host:"), "\r\n"))
+			name := encodeServerName(s) + "." + c.host
+			if Debug {
+				log.Logf("[sni] obfuscate: %s -> %s", s, name)
+			}
+			buf.WriteString("Host: " + name + "\r\n")
+
+			// drain the remain bytes.
+			io.Copy(buf, br)
+			break
+		}
+		buf.Write([]byte(s))
+	}
 	c.obfuscated = true
-	return p, nil
+	return buf.Bytes(), nil
 }
 
 func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, string, error) {
@@ -223,19 +230,19 @@ func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, str
 func encodeServerName(name string) string {
 	buf := &bytes.Buffer{}
 	binary.Write(buf, binary.BigEndian, crc32.ChecksumIEEE([]byte(name)))
-	buf.WriteString(base64.StdEncoding.EncodeToString([]byte(name)))
-	return base64.StdEncoding.EncodeToString(buf.Bytes())
+	buf.WriteString(base64.RawURLEncoding.EncodeToString([]byte(name)))
+	return base64.RawURLEncoding.EncodeToString(buf.Bytes())
 }
 
 func decodeServerName(s string) (string, error) {
-	b, err := base64.StdEncoding.DecodeString(s)
+	b, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return "", err
 	}
 	if len(b) < 4 {
 		return "", errors.New("invalid name")
 	}
-	v, err := base64.StdEncoding.DecodeString(string(b[4:]))
+	v, err := base64.RawURLEncoding.DecodeString(string(b[4:]))
 	if err != nil {
 		return "", err
 	}
