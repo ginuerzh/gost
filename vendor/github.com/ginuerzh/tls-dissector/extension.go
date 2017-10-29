@@ -46,6 +46,16 @@ type unknownExtension struct {
 	raw []byte
 }
 
+func NewExtension(t uint16, data []byte) Extension {
+	ext := &unknownExtension{
+		raw: make([]byte, 2+2+len(data)),
+	}
+	binary.BigEndian.PutUint16(ext.raw[:2], t)
+	binary.BigEndian.PutUint16(ext.raw[2:4], uint16(len(data)))
+	copy(ext.raw[4:], data)
+	return ext
+}
+
 func (ext *unknownExtension) Type() uint16 {
 	return binary.BigEndian.Uint16(ext.raw)
 }

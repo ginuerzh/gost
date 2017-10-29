@@ -146,7 +146,6 @@ func (c *sniClientConn) obfuscate(p []byte) ([]byte, error) {
 		return b, nil
 	}
 
-	// TODO: HTTP obfuscate
 	buf := &bytes.Buffer{}
 	br := bufio.NewReader(bytes.NewReader(p))
 	for {
@@ -171,12 +170,12 @@ func (c *sniClientConn) obfuscate(p []byte) ([]byte, error) {
 
 		if strings.HasPrefix(s, "Host") {
 			s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, "Host:"), "\r\n"))
-			name := encodeServerName(s) + "." + c.host
+			host := encodeServerName(s)
 			if Debug {
-				log.Logf("[sni] obfuscate: %s -> %s", s, name)
+				log.Logf("[sni] obfuscate: %s -> %s", s, c.host)
 			}
-			buf.WriteString("Host: " + name + "\r\n")
-
+			buf.WriteString("Host: " + c.host + "\r\n")
+			buf.WriteString("Gost-Target: " + host + "\r\n")
 			// drain the remain bytes.
 			io.Copy(buf, br)
 			break
@@ -196,21 +195,31 @@ func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, str
 	if err := clientHello.Decode(record.Opaque); err != nil {
 		return nil, "", err
 	}
+
+	if !isClient {
+		var extensions []dissector.Extension
+
+		for _, ext := range clientHello.Extensions {
+			if ext.Type() == 0xFFFE {
+				if host, err = decodeServerName(string(ext.Bytes()[4:])); err == nil {
+					continue
+				}
+			}
+			extensions = append(extensions, ext)
+		}
+		clientHello.Extensions = extensions
+	}
+
 	for _, ext := range clientHello.Extensions {
 		if ext.Type() == dissector.ExtServerName {
 			snExtension := ext.(*dissector.ServerNameExtension)
-			serverName := snExtension.Name
 			if isClient {
-				snExtension.Name = encodeServerName(serverName) + "." + host
-			} else {
-				if index := strings.IndexByte(serverName, '.'); index > 0 {
-					// try to decode the prefix
-					if name, err := decodeServerName(serverName[:index]); err == nil {
-						snExtension.Name = name
-					}
-				}
+				clientHello.Extensions = append(clientHello.Extensions,
+					dissector.NewExtension(0xFFFE, []byte(encodeServerName(snExtension.Name))))
 			}
-			host = snExtension.Name
+			if host != "" {
+				snExtension.Name = host
+			}
 			break
 		}
 	}

@@ -135,12 +135,9 @@ func (h *httpHandler) Handle(conn net.Conn) {
 	}
 
 	// try to get the actual host.
-	if req.Host != "" {
-		if index := strings.IndexByte(req.Host, '.'); index > 0 {
-			// try to decode the prefix
-			if name, err := decodeServerName(req.Host[:index]); err == nil {
-				req.Host = name
-			}
+	if v := req.Header.Get("Gost-Target"); v != "" {
+		if host, err := decodeServerName(v); err == nil {
+			req.Host = host
 		}
 	}
 
