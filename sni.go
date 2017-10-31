@@ -213,6 +213,9 @@ func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, str
 	for _, ext := range clientHello.Extensions {
 		if ext.Type() == dissector.ExtServerName {
 			snExtension := ext.(*dissector.ServerNameExtension)
+			if host == "" {
+				host = snExtension.Name
+			}
 			if isClient {
 				clientHello.Extensions = append(clientHello.Extensions,
 					dissector.NewExtension(0xFFFE, []byte(encodeServerName(snExtension.Name))))

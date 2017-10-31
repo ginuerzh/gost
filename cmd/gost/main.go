@@ -173,6 +173,8 @@ func initChain() (*gost.Chain, error) {
 			tr = gost.Obfs4Transporter()
 		case "ohttp":
 			tr = gost.ObfsHTTPTransporter()
+		case "mtls":
+			tr = gost.MTLSTransporter()
 		default:
 			tr = gost.TCPTransporter()
 		}
@@ -317,6 +319,8 @@ func serve(chain *gost.Chain) error {
 			ln, err = gost.Obfs4Listener(node.Addr)
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
+		case "mtls":
+			ln, err = gost.MTLSListener(node.Addr, tlsCfg)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}

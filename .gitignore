@@ -27,3 +27,4 @@ _testmain.go
 *.bak
 
 cmd/gost
+snap
