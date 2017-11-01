@@ -26,6 +26,7 @@ gost - GO Simple Tunnel
 * SSH通道 (2.4+)
 * QUIC通道 (2.4+)
 * obfs4通道 (2.4+)
+* SNI (2.5+)
 
 二进制文件下载：https://github.com/ginuerzh/gost/releases
 
@@ -53,7 +54,7 @@ $ sudo snap install gost
 ```
 scheme分为两部分: protocol+transport
 
-protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传输方式(ws, wss, tls, quic, kcp, ssh, h2, h2c, obfs4), 二者可以任意组合，或单独使用:
+protocol: 代理协议类型(http, socks4(a), socks5, ss, sni), transport: 数据传输方式(ws, wss, tls, mtls, quic, kcp, ssh, h2, h2c, obfs4), 二者可以任意组合，或单独使用:
 
 > http - 标准HTTP代理: http://:8080
 
@@ -73,6 +74,8 @@ protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传�
 
 > tls - HTTP/SOCKS5代理，使用TLS传输数据: tls://:443
 
+> mtls - HTTP/SOCKS5代理，使用TLS以多路复用方式传输数据: mtls://:443
+
 > ss - Shadowsocks代理: ss://chacha20:123456@:8338
 
 > ssu - Shadowsocks UDP relay: ssu://chacha20:123456@:8338
@@ -87,6 +90,7 @@ protocol: 代理协议类型(http, socks4(a), socks5, ss), transport: 数据传�
 
 > obfs4 - obfs4通道: obfs4://:8080
 
+> sni - SNI代理: sni://:443
 
 #### 端口转发
 

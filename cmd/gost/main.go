@@ -102,23 +102,26 @@ func initChain() (*gost.Chain, error) {
 			InsecureSkipVerify: !toBool(node.Values.Get("secure")),
 			RootCAs:            rootCAs,
 		}
+		wsOpts := &gost.WSOptions{}
+		wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
+		wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
+		wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
+		wsOpts.UserAgent = node.Values.Get("agent")
+
 		var tr gost.Transporter
 		switch node.Transport {
 		case "tls":
 			tr = gost.TLSTransporter()
+		case "mtls":
+			tr = gost.MTLSTransporter()
 		case "ws":
-			wsOpts := &gost.WSOptions{}
-			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
-			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
-			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
-			wsOpts.UserAgent = node.Values.Get("agent")
 			tr = gost.WSTransporter(wsOpts)
+		case "mws":
+			tr = gost.MWSTransporter(wsOpts)
 		case "wss":
-			wsOpts := &gost.WSOptions{}
-			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
-			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
-			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
 			tr = gost.WSSTransporter(wsOpts)
+		case "mwss":
+			tr = gost.MWSSTransporter(wsOpts)
 		case "kcp":
 			if !chain.IsEmpty() {
 				return nil, errors.New("KCP must be the first node in the proxy chain")
@@ -173,8 +176,6 @@ func initChain() (*gost.Chain, error) {
 			tr = gost.Obfs4Transporter()
 		case "ohttp":
 			tr = gost.ObfsHTTPTransporter()
-		case "mtls":
-			tr = gost.MTLSTransporter()
 		default:
 			tr = gost.TCPTransporter()
 		}
@@ -248,22 +249,26 @@ func serve(chain *gost.Chain) error {
 			return err
 		}
 
+		wsOpts := &gost.WSOptions{}
+		wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
+		wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
+		wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
+
 		var ln gost.Listener
 		switch node.Transport {
 		case "tls":
 			ln, err = gost.TLSListener(node.Addr, tlsCfg)
+		case "mtls":
+			ln, err = gost.MTLSListener(node.Addr, tlsCfg)
 		case "ws":
-			wsOpts := &gost.WSOptions{}
-			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
-			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
 			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
 			ln, err = gost.WSListener(node.Addr, wsOpts)
+		case "mws":
+			ln, err = gost.MWSListener(node.Addr, wsOpts)
 		case "wss":
-			wsOpts := &gost.WSOptions{}
-			wsOpts.EnableCompression = toBool(node.Values.Get("compression"))
-			wsOpts.ReadBufferSize, _ = strconv.Atoi(node.Values.Get("rbuf"))
-			wsOpts.WriteBufferSize, _ = strconv.Atoi(node.Values.Get("wbuf"))
 			ln, err = gost.WSSListener(node.Addr, tlsCfg, wsOpts)
+		case "mwss":
+			ln, err = gost.MWSSListener(node.Addr, tlsCfg, wsOpts)
 		case "kcp":
 			config, er := parseKCPConfig(node.Values.Get("c"))
 			if er != nil {
@@ -319,8 +324,6 @@ func serve(chain *gost.Chain) error {
 			ln, err = gost.Obfs4Listener(node.Addr)
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
-		case "mtls":
-			ln, err = gost.MTLSListener(node.Addr, tlsCfg)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
