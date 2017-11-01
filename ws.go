@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -195,10 +194,6 @@ func (tr *mwsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
-	if session != nil && session.conn != conn {
-		conn.Close()
-		return nil, errors.New("mws: unrecognized connection")
-	}
 	if !ok || session.session == nil {
 		s, err := tr.initSession(opts.Addr, conn, opts)
 		if err != nil {
@@ -332,10 +327,6 @@ func (tr *mwssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) 
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
-	if session != nil && session.conn != conn {
-		conn.Close()
-		return nil, errors.New("mws: unrecognized connection")
-	}
 	if !ok || session.session == nil {
 		s, err := tr.initSession(opts.Addr, conn, opts)
 		if err != nil {

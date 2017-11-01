@@ -168,10 +168,6 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
-	if session != nil && session.conn != conn {
-		conn.Close()
-		return nil, errors.New("ssh: unrecognized connection")
-	}
 	if !ok || session.client == nil {
 		sshConn, chans, reqs, err := ssh.NewClientConn(conn, opts.Addr, &config)
 		if err != nil {
@@ -268,10 +264,6 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
-	if session != nil && session.conn != conn {
-		conn.Close()
-		return nil, errors.New("ssh: unrecognized connection")
-	}
 	if !ok || session.client == nil {
 		sshConn, chans, reqs, err := ssh.NewClientConn(conn, opts.Addr, &config)
 		if err != nil {

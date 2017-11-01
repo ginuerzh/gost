@@ -148,10 +148,6 @@ func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[opts.Addr]
-	if session != nil && session.conn != conn {
-		conn.Close()
-		return nil, errors.New("kcp: unrecognized connection")
-	}
 	if !ok || session.session == nil {
 		s, err := tr.initSession(opts.Addr, conn, config)
 		if err != nil {
