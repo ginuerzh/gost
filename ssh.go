@@ -185,7 +185,7 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 			connChan: make(chan net.Conn, 1024),
 		}
 		tr.sessions[opts.Addr] = session
-		go session.Ping(opts.Interval, opts.Timeout, 1)
+		go session.Ping(opts.Interval, opts.Timeout, opts.Retry)
 		go session.waitServer()
 		go session.waitClose()
 	}
@@ -280,7 +280,7 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 			deaded: make(chan struct{}),
 		}
 		tr.sessions[opts.Addr] = session
-		go session.Ping(opts.Interval, 30*time.Second, 1)
+		go session.Ping(opts.Interval, opts.Timeout, opts.Retry)
 		go session.waitServer()
 		go session.waitClose()
 	}
@@ -317,11 +317,16 @@ func (s *sshSession) Ping(interval, timeout time.Duration, retries int) {
 		return
 	}
 	if timeout <= 0 {
-		timeout = 0
+		timeout = 10 * time.Second
 	}
+
+	if retries == 0 {
+		retries = 1
+	}
+
 	defer close(s.deaded)
 
-	log.Log("[ssh] ping is enabled, interval:", interval)
+	log.Logf("[ssh] ping is enabled, interval: %v, timeout: %v, retry: %d", interval, timeout, retries)
 	baseCtx := context.Background()
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -453,7 +458,7 @@ func (h *sshForwardHandler) handleForward(conn ssh.Conn, chans <-chan ssh.NewCha
 			case RemoteForwardRequest:
 				go h.tcpipForwardRequest(conn, req, quit)
 			default:
-				// log.Log("[ssh] unknown channel type:", req.Type)
+				// log.Log("[ssh] unknown request type:", req.Type, req.WantReply)
 				if req.WantReply {
 					req.Reply(false, nil)
 				}

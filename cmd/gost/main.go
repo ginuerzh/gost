@@ -214,11 +214,14 @@ func initChain() (*gost.Chain, error) {
 		)
 
 		interval, _ := strconv.Atoi(node.Values.Get("ping"))
+		retry, _ := strconv.Atoi(node.Values.Get("retry"))
 		node.HandshakeOptions = append(node.HandshakeOptions,
 			gost.AddrHandshakeOption(node.Addr),
 			gost.UserHandshakeOption(node.User),
 			gost.TLSConfigHandshakeOption(tlsCfg),
 			gost.IntervalHandshakeOption(time.Duration(interval)*time.Second),
+			gost.TimeoutHandshakeOption(time.Duration(timeout)*time.Second),
+			gost.RetryHandshakeOption(retry),
 		)
 		node.Client = &gost.Client{
 			Connector:   connector,
