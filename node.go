@@ -8,6 +8,7 @@ import (
 // Node is a proxy node, mainly used to construct a proxy chain.
 type Node struct {
 	Addr             string
+	IPs              []string
 	Protocol         string
 	Transport        string
 	Remote           string // remote address, used by tcp/udp port forwarding
@@ -16,6 +17,7 @@ type Node struct {
 	DialOptions      []DialOption
 	HandshakeOptions []HandshakeOption
 	Client           *Client
+	IPSelector       IPSelector
 }
 
 // ParseNode parses the node info.
@@ -81,7 +83,7 @@ func ParseNode(s string) (node Node, err error) {
 type NodeGroup struct {
 	nodes    []Node
 	Options  []SelectOption
-	Selector Selector
+	Selector NodeSelector
 }
 
 // NewNodeGroup creates a node group

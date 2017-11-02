@@ -81,6 +81,10 @@ func initChain() (*gost.Chain, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		node.IPs = parseIP(node.Values.Get("ip"))
+		node.IPSelector = &gost.RoundRobinIPSelector{}
+
 		users, err := parseUsers(node.Values.Get("secrets"))
 		if err != nil {
 			return nil, err
@@ -201,7 +205,6 @@ func initChain() (*gost.Chain, error) {
 		timeout, _ := strconv.Atoi(node.Values.Get("timeout"))
 		node.DialOptions = append(node.DialOptions,
 			gost.TimeoutDialOption(time.Duration(timeout)*time.Second),
-			gost.IPDialOption(parseIP(node.Values.Get("ip"))...),
 		)
 
 		interval, _ := strconv.Atoi(node.Values.Get("ping"))
@@ -511,9 +514,11 @@ func parseIP(s string) (ips []string) {
 	if err != nil {
 		ss := strings.Split(s, ",")
 		for _, s := range ss {
-			if ip := net.ParseIP(s); ip != nil {
+			s = strings.TrimSpace(s)
+			if s != "" {
 				ips = append(ips, s)
 			}
+
 		}
 		return
 	}
@@ -524,9 +529,7 @@ func parseIP(s string) (ips []string) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if ip := net.ParseIP(line); ip != nil {
-			ips = append(ips, line)
-		}
+		ips = append(ips, line)
 	}
 	return
 }

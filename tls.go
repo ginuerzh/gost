@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-log/log"
@@ -53,20 +52,10 @@ func (tr *mtlsTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 		option(opts)
 	}
 
-	if len(opts.IPs) > 0 {
-		count := atomic.AddUint64(&tr.count, 1)
-		_, sport, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-		n := uint64(len(opts.IPs))
-		addr = opts.IPs[int(count%n)] + ":" + sport
-	}
-
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
-	session, ok := tr.sessions[addr] // TODO: the addr may be changed.
+	session, ok := tr.sessions[addr]
 	if !ok {
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)

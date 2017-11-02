@@ -1,6 +1,10 @@
 package gost
 
-import "errors"
+import (
+	"errors"
+	"sync/atomic"
+	"time"
+)
 
 var (
 	// ErrNoneAvailable indicates there is no node available
@@ -10,8 +14,8 @@ var (
 // SelectOption used when making a select call
 type SelectOption func(*SelectOptions)
 
-// Selector as a mechanism to pick nodes and mark their status.
-type Selector interface {
+// NodeSelector as a mechanism to pick nodes and mark their status.
+type NodeSelector interface {
 	Select(nodes []Node, opts ...SelectOption) (Node, error)
 	// Mark(node Node)
 	String() string
@@ -70,4 +74,45 @@ func WithStrategy(s Strategy) SelectOption {
 	return func(o *SelectOptions) {
 		o.Strategy = s
 	}
+}
+
+// IPSelector as a mechanism to pick IPs and mark their status.
+type IPSelector interface {
+	Select(ips []string) (string, error)
+	String() string
+}
+
+// RandomIPSelector is an IP Selector that selects an IP with random strategy.
+type RandomIPSelector struct {
+}
+
+// Select selects an IP from ips list.
+func (s *RandomIPSelector) Select(ips []string) (string, error) {
+	if len(ips) == 0 {
+		return "", nil
+	}
+	return ips[time.Now().Nanosecond()%len(ips)], nil
+}
+
+func (s *RandomIPSelector) String() string {
+	return "random"
+}
+
+// RoundRobinIPSelector is an IP Selector that selects an IP with round-robin strategy.
+type RoundRobinIPSelector struct {
+	count uint64
+}
+
+// Select selects an IP from ips list.
+func (s *RoundRobinIPSelector) Select(ips []string) (string, error) {
+	if len(ips) == 0 {
+		return "", nil
+	}
+
+	count := atomic.AddUint64(&s.count, 1)
+	return ips[int(count%uint64(len(ips)))], nil
+}
+
+func (s *RoundRobinIPSelector) String() string {
+	return "round"
 }

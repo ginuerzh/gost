@@ -3,6 +3,9 @@ package gost
 import (
 	"errors"
 	"net"
+	"strings"
+
+	"github.com/go-log/log"
 )
 
 var (
@@ -122,13 +125,18 @@ func (c *Chain) getConn() (conn net.Conn, nodes []Node, err error) {
 	if selector == nil {
 		selector = &defaultSelector{}
 	}
+	// select node from node group
 	node, err := selector.Select(groups[0].Nodes(), groups[0].Options...)
 	if err != nil {
 		return
 	}
 	nodes = append(nodes, node)
 
-	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
+	addr, err := selectIP(&node)
+	if err != nil {
+		return
+	}
+	cn, err := node.Client.Dial(addr, node.DialOptions...)
 	if err != nil {
 		return
 	}
@@ -154,8 +162,13 @@ func (c *Chain) getConn() (conn net.Conn, nodes []Node, err error) {
 		}
 		nodes = append(nodes, node)
 
+		addr, err = selectIP(&node)
+		if err != nil {
+			return
+		}
+
 		var cc net.Conn
-		cc, err = preNode.Client.Connect(cn, node.Addr)
+		cc, err = preNode.Client.Connect(cn, addr)
 		if err != nil {
 			cn.Close()
 			return
@@ -171,4 +184,30 @@ func (c *Chain) getConn() (conn net.Conn, nodes []Node, err error) {
 
 	conn = cn
 	return
+}
+
+func selectIP(node *Node) (string, error) {
+	addr := node.Addr
+	s := node.IPSelector
+	if s == nil {
+		s = &RandomIPSelector{}
+	}
+	// select IP from IP list
+	ip, err := s.Select(node.IPs)
+	if err != nil {
+		return "", err
+	}
+	if ip != "" {
+		if !strings.Contains(ip, ":") {
+			_, sport, err := net.SplitHostPort(addr)
+			if err != nil {
+				return "", err
+			}
+			ip = ip + ":" + sport
+		}
+		addr = ip
+		node.HandshakeOptions = append(node.HandshakeOptions, AddrHandshakeOption(addr))
+	}
+	log.Log("select IP:", node.Addr, node.IPs, addr)
+	return addr, nil
 }

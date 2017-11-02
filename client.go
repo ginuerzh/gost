@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net"
 	"net/url"
-	"sync/atomic"
 	"time"
 )
 
@@ -64,7 +63,6 @@ type Transporter interface {
 }
 
 type tcpTransporter struct {
-	count uint64
 }
 
 // TCPTransporter creates a transporter for TCP proxy client.
@@ -76,16 +74,6 @@ func (tr *tcpTransporter) Dial(addr string, options ...DialOption) (net.Conn, er
 	opts := &DialOptions{}
 	for _, option := range options {
 		option(opts)
-	}
-
-	if len(opts.IPs) > 0 {
-		count := atomic.AddUint64(&tr.count, 1)
-		_, sport, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-		n := uint64(len(opts.IPs))
-		addr = opts.IPs[int(count%n)] + ":" + sport
 	}
 
 	if opts.Chain == nil {
@@ -106,7 +94,7 @@ func (tr *tcpTransporter) Multiplex() bool {
 type DialOptions struct {
 	Timeout time.Duration
 	Chain   *Chain
-	IPs     []string
+	// IPs     []string
 }
 
 // DialOption allows a common way to set dial options.
@@ -123,13 +111,6 @@ func TimeoutDialOption(timeout time.Duration) DialOption {
 func ChainDialOption(chain *Chain) DialOption {
 	return func(opts *DialOptions) {
 		opts.Chain = chain
-	}
-}
-
-// IPDialOption specifies an IP list used by Transporter.Dial
-func IPDialOption(ips ...string) DialOption {
-	return func(opts *DialOptions) {
-		opts.IPs = ips
 	}
 }
 
