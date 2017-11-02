@@ -137,11 +137,6 @@ func initChain() (*gost.Chain, error) {
 			} else {
 				tr = gost.SSHTunnelTransporter()
 			}
-
-			node.DialOptions = append(node.DialOptions,
-				gost.ChainDialOption(chain),
-			)
-			chain = gost.NewChain() // cutoff the chain for multiplex
 		case "quic":
 			if !chain.IsEmpty() {
 				return nil, errors.New("QUIC must be the first node in the proxy chain")
@@ -153,22 +148,11 @@ func initChain() (*gost.Chain, error) {
 			tr = gost.QUICTransporter(config)
 		case "http2":
 			tr = gost.HTTP2Transporter(tlsCfg)
-			node.DialOptions = append(node.DialOptions,
-				gost.ChainDialOption(chain),
-			)
-			chain = gost.NewChain() // cutoff the chain for multiplex
 		case "h2":
 			tr = gost.H2Transporter(tlsCfg)
-			node.DialOptions = append(node.DialOptions,
-				gost.ChainDialOption(chain),
-			)
-			chain = gost.NewChain() // cutoff the chain for multiplex
 		case "h2c":
 			tr = gost.H2CTransporter()
-			node.DialOptions = append(node.DialOptions,
-				gost.ChainDialOption(chain),
-			)
-			chain = gost.NewChain() // cutoff the chain for multiplex
+
 		case "obfs4":
 			if err := gost.Obfs4Init(node, false); err != nil {
 				return nil, err
@@ -178,6 +162,13 @@ func initChain() (*gost.Chain, error) {
 			tr = gost.ObfsHTTPTransporter()
 		default:
 			tr = gost.TCPTransporter()
+		}
+
+		if tr.Multiplex() {
+			node.DialOptions = append(node.DialOptions,
+				gost.ChainDialOption(chain),
+			)
+			chain = gost.NewChain() // cutoff the chain for multiplex
 		}
 
 		var connector gost.Connector
