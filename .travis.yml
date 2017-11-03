@@ -1,8 +1,7 @@
 language: go
 sudo: false
 go:
-  - 1.8
-  - 1.9
+  - 1.x
 
 install: true
 script:
