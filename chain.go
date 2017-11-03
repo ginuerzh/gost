@@ -95,12 +95,17 @@ func (c *Chain) Dial(addr string) (net.Conn, error) {
 		return net.Dial("tcp", addr)
 	}
 
-	conn, nodes, err := c.getConn()
+	route, err := c.selectRoute()
 	if err != nil {
 		return nil, err
 	}
 
-	cc, err := nodes[len(nodes)-1].Client.Connect(conn, addr)
+	conn, err := c.getConn(route)
+	if err != nil {
+		return nil, err
+	}
+
+	cc, err := route.LastNode().Client.Connect(conn, addr)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -111,26 +116,44 @@ func (c *Chain) Dial(addr string) (net.Conn, error) {
 // Conn obtains a handshaked connection to the last node of the chain.
 // If the chain is empty, it returns an ErrEmptyChain error.
 func (c *Chain) Conn() (conn net.Conn, err error) {
-	conn, _, err = c.getConn()
+	route, err := c.selectRoute()
+	if err != nil {
+		return nil, err
+	}
+	conn, err = c.getConn(route)
 	return
 }
 
-func (c *Chain) getConn() (conn net.Conn, nodes []Node, err error) {
-	if c.IsEmpty() {
+func (c *Chain) selectRoute() (route *Chain, err error) {
+	route = NewChain()
+	for _, group := range c.nodeGroups {
+		selector := group.Selector
+		if selector == nil {
+			selector = &defaultSelector{}
+		}
+		// select node from node group
+		node, err := selector.Select(group.Nodes(), group.Options...)
+		if err != nil {
+			return nil, err
+		}
+		if node.Client.Transporter.Multiplex() {
+			node.DialOptions = append(node.DialOptions,
+				ChainDialOption(route),
+			)
+			route = NewChain() // cutoff the chain for multiplex
+		}
+		route.AddNode(node)
+	}
+	return
+}
+
+func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
+	if route.IsEmpty() {
 		err = ErrEmptyChain
 		return
 	}
-	groups := c.nodeGroups
-	selector := groups[0].Selector
-	if selector == nil {
-		selector = &defaultSelector{}
-	}
-	// select node from node group
-	node, err := selector.Select(groups[0].Nodes(), groups[0].Options...)
-	if err != nil {
-		return
-	}
-	nodes = append(nodes, node)
+	nodes := route.Nodes()
+	node := nodes[0]
 
 	addr, err := selectIP(&node)
 	if err != nil {
@@ -147,21 +170,7 @@ func (c *Chain) getConn() (conn net.Conn, nodes []Node, err error) {
 	}
 
 	preNode := node
-	for i := range groups {
-		if i == len(groups)-1 {
-			break
-		}
-		selector = groups[i+1].Selector
-		if selector == nil {
-			selector = &defaultSelector{}
-		}
-		node, err = selector.Select(groups[i+1].Nodes(), groups[i+1].Options...)
-		if err != nil {
-			cn.Close()
-			return
-		}
-		nodes = append(nodes, node)
-
+	for _, node := range nodes[1:] {
 		addr, err = selectIP(&node)
 		if err != nil {
 			return
@@ -206,6 +215,7 @@ func selectIP(node *Node) (string, error) {
 			ip = ip + ":" + sport
 		}
 		addr = ip
+		// override the original address
 		node.HandshakeOptions = append(node.HandshakeOptions, AddrHandshakeOption(addr))
 	}
 	log.Log("select IP:", node.Addr, node.IPs, addr)

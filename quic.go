@@ -194,6 +194,7 @@ func (l *quicListener) sessionLoop(session quic.Session) {
 		stream, err := session.AcceptStream()
 		if err != nil {
 			log.Log("[quic] accept stream:", err)
+			session.Close(err)
 			return
 		}
 

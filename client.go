@@ -94,7 +94,6 @@ func (tr *tcpTransporter) Multiplex() bool {
 type DialOptions struct {
 	Timeout time.Duration
 	Chain   *Chain
-	// IPs     []string
 }
 
 // DialOption allows a common way to set dial options.
