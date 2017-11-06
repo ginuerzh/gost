@@ -124,11 +124,15 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 
 	log.Logf("[ss] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
 
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	addr, err := h.getRequest(conn)
 	if err != nil {
 		log.Logf("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
+	// clear timer
+	conn.SetReadDeadline(time.Time{})
+
 	log.Logf("[ss] %s -> %s", conn.RemoteAddr(), addr)
 
 	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
@@ -165,19 +169,16 @@ const (
 )
 
 // This function is copied from shadowsocks library with some modification.
-func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
+func (h *shadowHandler) getRequest(r io.Reader) (host string, err error) {
 	// buf size should at least have the same size with the largest possible
 	// request size (when addrType is 3, domain name has at most 256 bytes)
 	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
 	buf := make([]byte, smallBufferSize)
 
 	// read till we get possible domain length field
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	if _, err = io.ReadFull(conn, buf[:idType+1]); err != nil {
+	if _, err = io.ReadFull(r, buf[:idType+1]); err != nil {
 		return
 	}
-	// clear timer
-	conn.SetReadDeadline(time.Time{})
 
 	var reqStart, reqEnd int
 	addrType := buf[idType]
@@ -187,16 +188,16 @@ func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
 	case typeIPv6:
 		reqStart, reqEnd = idIP0, idIP0+lenIPv6
 	case typeDm:
-		if _, err = io.ReadFull(conn, buf[idType+1:idDmLen+1]); err != nil {
+		if _, err = io.ReadFull(r, buf[idType+1:idDmLen+1]); err != nil {
 			return
 		}
-		reqStart, reqEnd = idDm0, int(idDm0+buf[idDmLen]+lenDmBase)
+		reqStart, reqEnd = idDm0, idDm0+int(buf[idDmLen])+lenDmBase
 	default:
 		err = fmt.Errorf("addr type %d not supported", addrType&ss.AddrMask)
 		return
 	}
 
-	if _, err = io.ReadFull(conn, buf[reqStart:reqEnd]); err != nil {
+	if _, err = io.ReadFull(r, buf[reqStart:reqEnd]); err != nil {
 		return
 	}
 
@@ -209,7 +210,7 @@ func (h *shadowHandler) getRequest(conn net.Conn) (host string, err error) {
 	case typeIPv6:
 		host = net.IP(buf[idIP0 : idIP0+net.IPv6len]).String()
 	case typeDm:
-		host = string(buf[idDm0 : idDm0+buf[idDmLen]])
+		host = string(buf[idDm0 : idDm0+int(buf[idDmLen])])
 	}
 	// parse port
 	port := binary.BigEndian.Uint16(buf[reqEnd-2 : reqEnd])
