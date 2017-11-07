@@ -93,6 +93,13 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		return
 	}
 
+	h.handleRequest(conn, req)
+}
+
+func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
+	if req == nil {
+		return
+	}
 	if Debug {
 		dump, _ := httputil.DumpRequest(req, false)
 		log.Logf("[http] %s -> %s\n%s", conn.RemoteAddr(), req.Host, string(dump))

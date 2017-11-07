@@ -3,10 +3,12 @@ package gost
 import (
 	"net/url"
 	"strings"
+	"sync"
 )
 
 // Node is a proxy node, mainly used to construct a proxy chain.
 type Node struct {
+	ID               int
 	Addr             string
 	IPs              []string
 	Protocol         string
@@ -81,15 +83,21 @@ func ParseNode(s string) (node Node, err error) {
 
 // NodeGroup is a group of nodes.
 type NodeGroup struct {
-	nodes    []Node
-	Options  []SelectOption
-	Selector NodeSelector
+	nodes       []Node
+	Options     []SelectOption
+	Selector    NodeSelector
+	mutex       sync.Mutex
+	mFails      map[string]int // node -> fail count
+	MaxFails    int
+	FailTimeout int
+	Retries     int
 }
 
 // NewNodeGroup creates a node group
 func NewNodeGroup(nodes ...Node) *NodeGroup {
 	return &NodeGroup{
-		nodes: nodes,
+		nodes:  nodes,
+		mFails: make(map[string]int),
 	}
 }
 

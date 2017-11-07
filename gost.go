@@ -56,6 +56,7 @@ func SetLogger(logger log.Logger) {
 	log.DefaultLogger = logger
 }
 
+// GenCertificate generates a random TLS certificate
 func GenCertificate() (cert tls.Certificate, err error) {
 	rawCert, rawKey, err := generateKeyPair()
 	if err != nil {

@@ -94,6 +94,9 @@ func initChain() (*gost.Chain, error) {
 			return nil, err
 		}
 
+		id := 1 // start from 1
+
+		node.ID = id
 		ngroup := gost.NewNodeGroup(node)
 
 		// parse node peers if exists
@@ -110,6 +113,8 @@ func initChain() (*gost.Chain, error) {
 			if err != nil {
 				return nil, err
 			}
+			id++
+			node.ID = id
 			ngroup.AddNode(node)
 		}
 
@@ -126,6 +131,15 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 	}
 
 	node.IPs = parseIP(node.Values.Get("ip"))
+	for i, ip := range node.IPs {
+		if !strings.Contains(ip, ":") {
+			_, sport, _ := net.SplitHostPort(node.Addr)
+			if sport == "" {
+				sport = "8080" // default port
+			}
+			node.IPs[i] = ip + ":" + sport
+		}
+	}
 	node.IPSelector = &gost.RoundRobinIPSelector{}
 
 	users, err := parseUsers(node.Values.Get("secrets"))
@@ -592,11 +606,12 @@ func loadPeerConfig(peer string) (config peerConfig, err error) {
 
 func parseStrategy(s string) gost.Strategy {
 	switch s {
-	case "round":
-		return &gost.RoundStrategy{}
 	case "random":
+		return &gost.RandomStrategy{}
+	case "round":
 		fallthrough
 	default:
-		return &gost.RandomStrategy{}
+		return &gost.RoundStrategy{}
+
 	}
 }

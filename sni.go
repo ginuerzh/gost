@@ -11,6 +11,7 @@ import (
 	"hash/crc32"
 	"io"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -53,14 +54,21 @@ func (h *sniHandler) Handle(conn net.Conn) {
 		return
 	}
 	conn = &bufferdConn{br: br, Conn: conn}
+	defer conn.Close()
 
 	if hdr[0] != dissector.Handshake {
-		// We assume that it is HTTP request
-		HTTPHandler(h.options...).Handle(conn)
+		// We assume it is an HTTP request
+		req, err := http.ReadRequest(bufio.NewReader(conn))
+		if !req.URL.IsAbs() {
+			req.URL.Scheme = "http" // make sure that the URL is absolute
+		}
+		if err != nil {
+			log.Logf("[sni] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+			return
+		}
+		HTTPHandler(h.options...).(*httpHandler).handleRequest(conn, req)
 		return
 	}
-
-	defer conn.Close()
 
 	b, host, err := readClientHelloRecord(conn, "", false)
 	if err != nil {

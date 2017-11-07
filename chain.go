@@ -1,9 +1,10 @@
 package gost
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"net"
-	"strings"
 
 	"github.com/go-log/log"
 )
@@ -124,29 +125,6 @@ func (c *Chain) Conn() (conn net.Conn, err error) {
 	return
 }
 
-func (c *Chain) selectRoute() (route *Chain, err error) {
-	route = NewChain()
-	for _, group := range c.nodeGroups {
-		selector := group.Selector
-		if selector == nil {
-			selector = &defaultSelector{}
-		}
-		// select node from node group
-		node, err := selector.Select(group.Nodes(), group.Options...)
-		if err != nil {
-			return nil, err
-		}
-		if node.Client.Transporter.Multiplex() {
-			node.DialOptions = append(node.DialOptions,
-				ChainDialOption(route),
-			)
-			route = NewChain() // cutoff the chain for multiplex
-		}
-		route.AddNode(node)
-	}
-	return
-}
-
 func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
 	if route.IsEmpty() {
 		err = ErrEmptyChain
@@ -155,11 +133,7 @@ func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
 	nodes := route.Nodes()
 	node := nodes[0]
 
-	addr, err := selectIP(&node)
-	if err != nil {
-		return
-	}
-	cn, err := node.Client.Dial(addr, node.DialOptions...)
+	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
 		return
 	}
@@ -171,13 +145,8 @@ func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
 
 	preNode := node
 	for _, node := range nodes[1:] {
-		addr, err = selectIP(&node)
-		if err != nil {
-			return
-		}
-
 		var cc net.Conn
-		cc, err = preNode.Client.Connect(cn, addr)
+		cc, err = preNode.Client.Connect(cn, node.Addr)
 		if err != nil {
 			cn.Close()
 			return
@@ -195,8 +164,37 @@ func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
 	return
 }
 
+func (c *Chain) selectRoute() (route *Chain, err error) {
+	buf := bytes.Buffer{}
+	route = NewChain()
+	for _, group := range c.nodeGroups {
+		selector := group.Selector
+		if selector == nil {
+			selector = &defaultSelector{}
+		}
+		// select node from node group
+		node, err := selector.Select(group.Nodes(), group.Options...)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := selectIP(&node); err != nil {
+			return nil, err
+		}
+		buf.WriteString(fmt.Sprintf("%d@%s -> ", node.ID, node.Addr))
+
+		if node.Client.Transporter.Multiplex() {
+			node.DialOptions = append(node.DialOptions,
+				ChainDialOption(route),
+			)
+			route = NewChain() // cutoff the chain for multiplex
+		}
+		route.AddNode(node)
+	}
+	log.Log("select route:", buf.String())
+	return
+}
+
 func selectIP(node *Node) (string, error) {
-	addr := node.Addr
 	s := node.IPSelector
 	if s == nil {
 		s = &RandomIPSelector{}
@@ -207,17 +205,9 @@ func selectIP(node *Node) (string, error) {
 		return "", err
 	}
 	if ip != "" {
-		if !strings.Contains(ip, ":") {
-			_, sport, err := net.SplitHostPort(addr)
-			if err != nil {
-				return "", err
-			}
-			ip = ip + ":" + sport
-		}
-		addr = ip
 		// override the original address
-		node.HandshakeOptions = append(node.HandshakeOptions, AddrHandshakeOption(addr))
+		node.Addr = ip
+		node.HandshakeOptions = append(node.HandshakeOptions, AddrHandshakeOption(node.Addr))
 	}
-	log.Log("select IP:", node.Addr, node.IPs, addr)
-	return addr, nil
+	return node.Addr, nil
 }
