@@ -140,7 +140,7 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 			node.IPs[i] = ip + ":" + sport
 		}
 	}
-	node.IPSelector = &gost.RoundRobinIPSelector{}
+	node.Selector = &gost.RoundRobinIPSelector{}
 
 	users, err := parseUsers(node.Values.Get("secrets"))
 	if err != nil {
@@ -265,6 +265,7 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 	retry, _ := strconv.Atoi(node.Values.Get("retry"))
 	node.HandshakeOptions = append(node.HandshakeOptions,
 		gost.AddrHandshakeOption(node.Addr),
+		gost.HostHandshakeOption(node.Host),
 		gost.UserHandshakeOption(node.User),
 		gost.TLSConfigHandshakeOption(tlsCfg),
 		gost.IntervalHandshakeOption(time.Duration(interval)*time.Second),

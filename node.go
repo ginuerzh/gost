@@ -11,6 +11,7 @@ type Node struct {
 	ID               int
 	Addr             string
 	IPs              []string
+	Host             string
 	Protocol         string
 	Transport        string
 	Remote           string // remote address, used by tcp/udp port forwarding
@@ -19,7 +20,7 @@ type Node struct {
 	DialOptions      []DialOption
 	HandshakeOptions []HandshakeOption
 	Client           *Client
-	IPSelector       IPSelector
+	Selector         IPSelector
 }
 
 // ParseNode parses the node info.
@@ -40,6 +41,7 @@ func ParseNode(s string) (node Node, err error) {
 
 	node = Node{
 		Addr:   u.Host,
+		Host:   u.Host,
 		Remote: strings.Trim(u.EscapedPath(), "/"),
 		Values: u.Query(),
 		User:   u.User,

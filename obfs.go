@@ -35,7 +35,7 @@ func (tr *obfsHTTPTransporter) Handshake(conn net.Conn, options ...HandshakeOpti
 	for _, option := range options {
 		option(opts)
 	}
-	return &obfsHTTPConn{Conn: conn}, nil
+	return &obfsHTTPConn{Conn: conn, host: opts.Host}, nil
 }
 
 type obfsHTTPListener struct {
@@ -66,6 +66,7 @@ func (l *obfsHTTPListener) Accept() (net.Conn, error) {
 
 type obfsHTTPConn struct {
 	net.Conn
+	host           string
 	request        *http.Request
 	response       *http.Response
 	rbuf           []byte
@@ -151,7 +152,7 @@ func (c *obfsHTTPConn) clientHandshake() (err error) {
 			Method:     http.MethodGet,
 			ProtoMajor: 1,
 			ProtoMinor: 1,
-			URL:        &url.URL{Scheme: "http", Host: "www.baidu.com"},
+			URL:        &url.URL{Scheme: "http", Host: c.host},
 			Header:     make(http.Header),
 		}
 		r.Header.Set("Connection", "keep-alive")

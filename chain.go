@@ -100,7 +100,7 @@ func (c *Chain) IsEmpty() bool {
 // If the chain is empty, it will use the net.Dial directly.
 func (c *Chain) Dial(addr string) (net.Conn, error) {
 	if c.IsEmpty() {
-		return net.Dial("tcp", addr)
+		return net.DialTimeout("tcp", addr, DialTimeout)
 	}
 
 	route, err := c.selectRoute()
@@ -108,7 +108,7 @@ func (c *Chain) Dial(addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := c.getConn(route)
+	conn, err := route.getConn()
 	if err != nil {
 		return nil, err
 	}
@@ -128,16 +128,16 @@ func (c *Chain) Conn() (conn net.Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err = c.getConn(route)
+	conn, err = route.getConn()
 	return
 }
 
-func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
-	if route.IsEmpty() {
+func (c *Chain) getConn() (conn net.Conn, err error) {
+	if c.IsEmpty() {
 		err = ErrEmptyChain
 		return
 	}
-	nodes := route.Nodes()
+	nodes := c.Nodes()
 	node := nodes[0]
 
 	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
@@ -206,7 +206,7 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 }
 
 func selectIP(node *Node) (string, error) {
-	s := node.IPSelector
+	s := node.Selector
 	if s == nil {
 		s = &RandomIPSelector{}
 	}
