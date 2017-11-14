@@ -87,35 +87,53 @@ func main() {
 
 func initChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
+	gid := 1 // group ID
+
 	for _, ns := range options.ChainNodes {
+		ngroup := gost.NewNodeGroup()
+		ngroup.ID = gid
+		gid++
+
 		// parse the base node
-		node, err := parseChainNode(ns)
+		nodes, err := parseChainNode(ns)
 		if err != nil {
 			return nil, err
 		}
 
-		id := 1 // start from 1
+		nid := 1 // node ID
 
-		node.ID = id
-		ngroup := gost.NewNodeGroup(node)
+		for i := range nodes {
+			nodes[i].ID = nid
+			nid++
+		}
+		ngroup.AddNode(nodes...)
 
-		// parse node peers if exists
-		peerCfg, err := loadPeerConfig(node.Values.Get("peer"))
+		// parse peer nodes if exists
+		peerCfg, err := loadPeerConfig(nodes[0].Values.Get("peer"))
 		if err != nil {
 			log.Log(err)
 		}
+		peerCfg.Validate()
 		ngroup.Options = append(ngroup.Options,
-			// gost.WithFilter(),
+			gost.WithFilter(&gost.FailFilter{
+				MaxFails:    peerCfg.MaxFails,
+				FailTimeout: time.Duration(peerCfg.FailTimeout) * time.Second,
+			}),
 			gost.WithStrategy(parseStrategy(peerCfg.Strategy)),
 		)
+
 		for _, s := range peerCfg.Nodes {
-			node, err = parseChainNode(s)
+			nodes, err = parseChainNode(s)
 			if err != nil {
 				return nil, err
 			}
-			id++
-			node.ID = id
-			ngroup.AddNode(node)
+
+			for i := range nodes {
+				nodes[i].ID = nid
+				nid++
+			}
+
+			ngroup.AddNode(nodes...)
 		}
 
 		chain.AddNodeGroup(ngroup)
@@ -124,23 +142,11 @@ func initChain() (*gost.Chain, error) {
 	return chain, nil
 }
 
-func parseChainNode(ns string) (node gost.Node, err error) {
-	node, err = gost.ParseNode(ns)
+func parseChainNode(ns string) (nodes []gost.Node, err error) {
+	node, err := gost.ParseNode(ns)
 	if err != nil {
 		return
 	}
-
-	node.IPs = parseIP(node.Values.Get("ip"))
-	for i, ip := range node.IPs {
-		if !strings.Contains(ip, ":") {
-			_, sport, _ := net.SplitHostPort(node.Addr)
-			if sport == "" {
-				sport = "8080" // default port
-			}
-			node.IPs[i] = ip + ":" + sport
-		}
-	}
-	node.Selector = &gost.RoundRobinIPSelector{}
 
 	users, err := parseUsers(node.Values.Get("secrets"))
 	if err != nil {
@@ -149,7 +155,7 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 	if node.User == nil && len(users) > 0 {
 		node.User = users[0]
 	}
-	serverName, _, _ := net.SplitHostPort(node.Addr)
+	serverName, sport, _ := net.SplitHostPort(node.Addr)
 	if serverName == "" {
 		serverName = "localhost" // default server name
 	}
@@ -191,7 +197,7 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 		*/
 		config, err := parseKCPConfig(node.Values.Get("c"))
 		if err != nil {
-			return node, err
+			return nil, err
 		}
 		tr = gost.KCPTransporter(config)
 	case "ssh":
@@ -220,7 +226,7 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 
 	case "obfs4":
 		if err := gost.Obfs4Init(node, false); err != nil {
-			return node, err
+			return nil, err
 		}
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
@@ -263,18 +269,29 @@ func parseChainNode(ns string) (node gost.Node, err error) {
 
 	interval, _ := strconv.Atoi(node.Values.Get("ping"))
 	retry, _ := strconv.Atoi(node.Values.Get("retry"))
-	node.HandshakeOptions = append(node.HandshakeOptions,
+	handshakeOptions := []gost.HandshakeOption{
 		gost.AddrHandshakeOption(node.Addr),
 		gost.HostHandshakeOption(node.Host),
 		gost.UserHandshakeOption(node.User),
 		gost.TLSConfigHandshakeOption(tlsCfg),
-		gost.IntervalHandshakeOption(time.Duration(interval)*time.Second),
-		gost.TimeoutHandshakeOption(time.Duration(timeout)*time.Second),
+		gost.IntervalHandshakeOption(time.Duration(interval) * time.Second),
+		gost.TimeoutHandshakeOption(time.Duration(timeout) * time.Second),
 		gost.RetryHandshakeOption(retry),
-	)
+	}
 	node.Client = &gost.Client{
 		Connector:   connector,
 		Transporter: tr,
+	}
+
+	ips := parseIP(node.Values.Get("ip"), sport)
+	for _, ip := range ips {
+		node.Addr = ip
+		node.HandshakeOptions = append(handshakeOptions, gost.AddrHandshakeOption(ip))
+		nodes = append(nodes, node)
+	}
+	if len(ips) == 0 {
+		node.HandshakeOptions = handshakeOptions
+		nodes = []gost.Node{node}
 	}
 
 	return
@@ -559,16 +576,23 @@ func parseUsers(authFile string) (users []*url.Userinfo, err error) {
 	return
 }
 
-func parseIP(s string) (ips []string) {
+func parseIP(s string, port string) (ips []string) {
 	if s == "" {
-		return nil
+		return
 	}
+	if port == "" {
+		port = "8080" // default port
+	}
+
 	file, err := os.Open(s)
 	if err != nil {
 		ss := strings.Split(s, ",")
 		for _, s := range ss {
 			s = strings.TrimSpace(s)
 			if s != "" {
+				if !strings.Contains(s, ":") {
+					s = s + ":" + port
+				}
 				ips = append(ips, s)
 			}
 
@@ -582,15 +606,20 @@ func parseIP(s string) (ips []string) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+		if !strings.Contains(line, ":") {
+			line = line + ":" + port
+		}
 		ips = append(ips, line)
 	}
 	return
 }
 
 type peerConfig struct {
-	Strategy string   `json:"strategy"`
-	Filters  []string `json:"filters"`
-	Nodes    []string `json:"nodes"`
+	Strategy    string   `json:"strategy"`
+	Filters     []string `json:"filters"`
+	MaxFails    int      `json:"max_fails"`
+	FailTimeout int      `json:"fail_timeout"`
+	Nodes       []string `json:"nodes"`
 }
 
 func loadPeerConfig(peer string) (config peerConfig, err error) {
@@ -603,6 +632,15 @@ func loadPeerConfig(peer string) (config peerConfig, err error) {
 	}
 	err = json.Unmarshal(content, &config)
 	return
+}
+
+func (cfg *peerConfig) Validate() {
+	if cfg.MaxFails <= 0 {
+		cfg.MaxFails = 3
+	}
+	if cfg.FailTimeout <= 0 {
+		cfg.FailTimeout = 30 // seconds
+	}
 }
 
 func parseStrategy(s string) gost.Strategy {

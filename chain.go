@@ -142,13 +142,16 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 
 	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
+		node.MarkDead()
 		return
 	}
 
 	cn, err = node.Client.Handshake(cn, node.HandshakeOptions...)
 	if err != nil {
+		node.MarkDead()
 		return
 	}
+	node.ResetDead()
 
 	preNode := node
 	for _, node := range nodes[1:] {
@@ -156,13 +159,17 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 		cc, err = preNode.Client.Connect(cn, node.Addr)
 		if err != nil {
 			cn.Close()
+			node.MarkDead()
 			return
 		}
 		cc, err = node.Client.Handshake(cc, node.HandshakeOptions...)
 		if err != nil {
 			cn.Close()
+			node.MarkDead()
 			return
 		}
+		node.ResetDead()
+
 		cn = cc
 		preNode = node
 	}
@@ -179,46 +186,21 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 	buf := bytes.Buffer{}
 	route = newRoute()
 	for _, group := range c.nodeGroups {
-		selector := group.Selector
-		if selector == nil {
-			selector = &defaultSelector{}
-		}
-		// select node from node group
-		node, err := selector.Select(group.Nodes(), group.Options...)
+		node, err := group.Next()
 		if err != nil {
 			return nil, err
 		}
-		if _, err := selectIP(&node); err != nil {
-			return nil, err
-		}
-		buf.WriteString(fmt.Sprintf("%d@%s -> ", node.ID, node.Addr))
+		buf.WriteString(fmt.Sprintf("%s -> ", node.String()))
 
 		if node.Client.Transporter.Multiplex() {
 			node.DialOptions = append(node.DialOptions,
 				ChainDialOption(route),
 			)
-			route = newRoute() // cutoff the chain for multiplex
+			route = newRoute() // cutoff the chain for multiplex.
 		}
+
 		route.AddNode(node)
 	}
 	log.Log("select route:", buf.String())
 	return
-}
-
-func selectIP(node *Node) (string, error) {
-	s := node.Selector
-	if s == nil {
-		s = &RandomIPSelector{}
-	}
-	// select IP from IP list
-	ip, err := s.Select(node.IPs)
-	if err != nil {
-		return "", err
-	}
-	if ip != "" {
-		// override the original address
-		node.Addr = ip
-		node.HandshakeOptions = append(node.HandshakeOptions, AddrHandshakeOption(node.Addr))
-	}
-	return node.Addr, nil
 }
