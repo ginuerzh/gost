@@ -79,7 +79,7 @@ func (s *RoundStrategy) Apply(nodes []Node) Node {
 	if len(nodes) == 0 {
 		return Node{}
 	}
-	old := s.count
+	old := atomic.LoadUint64(&s.count)
 	atomic.AddUint64(&s.count, 1)
 	return nodes[int(old%uint64(len(nodes)))]
 }
@@ -134,10 +134,10 @@ func (f *FailFilter) Filter(nodes []Node) []Node {
 		return nodes
 	}
 	nl := []Node{}
-	for _, node := range nodes {
-		if node.failCount < uint32(f.MaxFails) ||
-			time.Since(node.failTime) >= f.FailTimeout {
-			nl = append(nl, node)
+	for i := range nodes {
+		if atomic.LoadUint32(&nodes[i].failCount) < uint32(f.MaxFails) ||
+			time.Since(time.Unix(atomic.LoadInt64(&nodes[i].failTime), 0)) >= f.FailTimeout {
+			nl = append(nl, nodes[i].Clone())
 		}
 	}
 	return nl

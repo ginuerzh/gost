@@ -22,10 +22,8 @@ import (
 )
 
 var (
-	options struct {
-		ChainNodes, ServeNodes stringList
-		Debug                  bool
-	}
+	options route
+	routes  []route
 )
 
 func init() {
@@ -43,12 +41,17 @@ func init() {
 	flag.BoolVar(&printVersion, "V", false, "print version")
 	flag.Parse()
 
+	if len(options.ServeNodes) > 0 {
+		routes = append(routes, options)
+	}
+	gost.Debug = options.Debug
+
 	if err := loadConfigureFile(configureFile); err != nil {
 		log.Log(err)
 		os.Exit(1)
 	}
 
-	if flag.NFlag() == 0 {
+	if flag.NFlag() == 0 || len(routes) == 0 {
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
@@ -58,7 +61,7 @@ func init() {
 		os.Exit(0)
 	}
 
-	gost.Debug = options.Debug
+	log.Log("Debug:", gost.Debug)
 }
 
 func main() {
@@ -72,24 +75,29 @@ func main() {
 		Certificates: []tls.Certificate{cert},
 	}
 
-	chain, err := initChain()
-	if err != nil {
-		log.Log(err)
-		os.Exit(1)
-	}
-	if err := serve(chain); err != nil {
-		log.Log(err)
-		os.Exit(1)
+	for _, route := range routes {
+		if err := route.serve(); err != nil {
+			log.Log(err)
+			os.Exit(1)
+		}
 	}
 
 	select {}
 }
 
-func initChain() (*gost.Chain, error) {
+type route struct {
+	ChainNodes, ServeNodes stringList
+	Retries                int
+	Debug                  bool
+}
+
+func (r *route) initChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
+	chain.Retries = r.Retries
+
 	gid := 1 // group ID
 
-	for _, ns := range options.ChainNodes {
+	for _, ns := range r.ChainNodes {
 		ngroup := gost.NewNodeGroup()
 		ngroup.ID = gid
 		gid++
@@ -297,8 +305,13 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	return
 }
 
-func serve(chain *gost.Chain) error {
-	for _, ns := range options.ServeNodes {
+func (r *route) serve() error {
+	chain, err := r.initChain()
+	if err != nil {
+		return err
+	}
+
+	for _, ns := range r.ServeNodes {
 		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return err
@@ -507,9 +520,24 @@ func loadConfigureFile(configureFile string) error {
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(content, &options); err != nil {
+	var cfg struct {
+		route
+		Routes []route
+	}
+	if err := json.Unmarshal(content, &cfg); err != nil {
 		return err
 	}
+
+	if len(cfg.route.ServeNodes) > 0 {
+		routes = append(routes, cfg.route)
+	}
+	for _, route := range cfg.Routes {
+		if len(cfg.route.ServeNodes) > 0 {
+			routes = append(routes, route)
+		}
+	}
+	gost.Debug = cfg.Debug
+
 	return nil
 }
 

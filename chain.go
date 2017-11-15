@@ -17,6 +17,7 @@ var (
 // Chain is a proxy chain that holds a list of proxy nodes.
 type Chain struct {
 	isRoute    bool
+	Retries    int
 	nodeGroups []*NodeGroup
 }
 
@@ -58,8 +59,8 @@ func (c *Chain) LastNode() Node {
 	if c.IsEmpty() {
 		return Node{}
 	}
-	last := c.nodeGroups[len(c.nodeGroups)-1]
-	return last.nodes[0]
+	group := c.nodeGroups[len(c.nodeGroups)-1]
+	return group.nodes[0].Clone()
 }
 
 // LastNodeGroup returns the last group of the group list.
@@ -185,6 +186,8 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 
 	buf := bytes.Buffer{}
 	route = newRoute()
+	route.Retries = c.Retries
+
 	for _, group := range c.nodeGroups {
 		node, err := group.Next()
 		if err != nil {
@@ -197,6 +200,7 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 				ChainDialOption(route),
 			)
 			route = newRoute() // cutoff the chain for multiplex.
+			route.Retries = c.Retries
 		}
 
 		route.AddNode(node)

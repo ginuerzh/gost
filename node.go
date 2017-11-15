@@ -23,7 +23,7 @@ type Node struct {
 	Client           *Client
 	group            *NodeGroup
 	failCount        uint32
-	failTime         time.Time
+	failTime         int64
 }
 
 // ParseNode parses the node info.
@@ -89,7 +89,7 @@ func ParseNode(s string) (node Node, err error) {
 // MarkDead marks the node fail status.
 func (node *Node) MarkDead() {
 	atomic.AddUint32(&node.failCount, 1)
-	node.failTime = time.Now()
+	atomic.StoreInt64(&node.failTime, time.Now().Unix())
 
 	if node.group == nil {
 		return
@@ -97,7 +97,7 @@ func (node *Node) MarkDead() {
 	for i := range node.group.nodes {
 		if node.group.nodes[i].ID == node.ID {
 			atomic.AddUint32(&node.group.nodes[i].failCount, 1)
-			node.group.nodes[i].failTime = time.Now()
+			atomic.StoreInt64(&node.group.nodes[i].failTime, time.Now().Unix())
 			break
 		}
 	}
@@ -106,7 +106,7 @@ func (node *Node) MarkDead() {
 // ResetDead resets the node fail status.
 func (node *Node) ResetDead() {
 	atomic.StoreUint32(&node.failCount, 0)
-	node.failTime = time.Time{}
+	atomic.StoreInt64(&node.failTime, 0)
 
 	if node.group == nil {
 		return
@@ -115,9 +115,29 @@ func (node *Node) ResetDead() {
 	for i := range node.group.nodes {
 		if node.group.nodes[i].ID == node.ID {
 			atomic.StoreUint32(&node.group.nodes[i].failCount, 0)
-			node.group.nodes[i].failTime = time.Time{}
+			atomic.StoreInt64(&node.group.nodes[i].failTime, 0)
 			break
 		}
+	}
+}
+
+// Clone clones the node, it will prevent data race.
+func (node *Node) Clone() Node {
+	return Node{
+		ID:               node.ID,
+		Addr:             node.Addr,
+		Host:             node.Host,
+		Protocol:         node.Protocol,
+		Transport:        node.Transport,
+		Remote:           node.Remote,
+		User:             node.User,
+		Values:           node.Values,
+		DialOptions:      node.DialOptions,
+		HandshakeOptions: node.HandshakeOptions,
+		Client:           node.Client,
+		group:            node.group,
+		failCount:        atomic.LoadUint32(&node.failCount),
+		failTime:         atomic.LoadInt64(&node.failTime),
 	}
 }
 
