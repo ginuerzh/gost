@@ -99,11 +99,21 @@ func (c *Chain) IsEmpty() bool {
 
 // Dial connects to the target address addr through the chain.
 // If the chain is empty, it will use the net.Dial directly.
-func (c *Chain) Dial(addr string) (net.Conn, error) {
+func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
 	if c.IsEmpty() {
 		return net.DialTimeout("tcp", addr, DialTimeout)
 	}
 
+	for i := 0; i < c.Retries+1; i++ {
+		conn, err = c.dial(addr)
+		if err == nil {
+			break
+		}
+	}
+	return
+}
+
+func (c *Chain) dial(addr string) (net.Conn, error) {
 	route, err := c.selectRoute()
 	if err != nil {
 		return nil, err
@@ -125,11 +135,19 @@ func (c *Chain) Dial(addr string) (net.Conn, error) {
 // Conn obtains a handshaked connection to the last node of the chain.
 // If the chain is empty, it returns an ErrEmptyChain error.
 func (c *Chain) Conn() (conn net.Conn, err error) {
-	route, err := c.selectRoute()
-	if err != nil {
-		return nil, err
+	for i := 0; i < c.Retries+1; i++ {
+		var route *Chain
+		route, err = c.selectRoute()
+		if err != nil {
+			continue
+		}
+		conn, err = route.getConn()
+		if err != nil {
+			continue
+		}
+
+		break
 	}
-	conn, err = route.getConn()
 	return
 }
 
@@ -205,6 +223,8 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 
 		route.AddNode(node)
 	}
-	log.Log("select route:", buf.String())
+	if Debug {
+		log.Log("select route:", buf.String())
+	}
 	return
 }
