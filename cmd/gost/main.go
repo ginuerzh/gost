@@ -60,8 +60,6 @@ func init() {
 		fmt.Fprintf(os.Stderr, "gost %s (%s)\n", gost.Version, runtime.Version())
 		os.Exit(0)
 	}
-
-	log.Log("Debug:", gost.Debug)
 }
 
 func main() {
