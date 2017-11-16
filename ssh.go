@@ -830,13 +830,13 @@ func (c *sshConn) RemoteAddr() net.Addr {
 }
 
 func (c *sshConn) SetDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "ssh", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+	return nil
 }
 
 func (c *sshConn) SetReadDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "ssh", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+	return nil
 }
 
 func (c *sshConn) SetWriteDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "ssh", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+	return nil
 }

@@ -116,6 +116,7 @@ func ChainDialOption(chain *Chain) DialOption {
 // HandshakeOptions describes the options for handshake.
 type HandshakeOptions struct {
 	Addr       string
+	Host       string
 	User       *url.Userinfo
 	Timeout    time.Duration
 	Interval   time.Duration
@@ -133,6 +134,13 @@ type HandshakeOption func(opts *HandshakeOptions)
 func AddrHandshakeOption(addr string) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.Addr = addr
+	}
+}
+
+// HostHandshakeOption specifies the hostname
+func HostHandshakeOption(host string) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.Host = host
 	}
 }
 

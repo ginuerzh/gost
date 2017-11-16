@@ -1,9 +1,10 @@
 package gost
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"net"
-	"strings"
 
 	"github.com/go-log/log"
 )
@@ -15,6 +16,8 @@ var (
 
 // Chain is a proxy chain that holds a list of proxy nodes.
 type Chain struct {
+	isRoute    bool
+	Retries    int
 	nodeGroups []*NodeGroup
 }
 
@@ -24,6 +27,12 @@ func NewChain(nodes ...Node) *Chain {
 	for _, node := range nodes {
 		chain.nodeGroups = append(chain.nodeGroups, NewNodeGroup(node))
 	}
+	return chain
+}
+
+func newRoute(nodes ...Node) *Chain {
+	chain := NewChain(nodes...)
+	chain.isRoute = true
 	return chain
 }
 
@@ -50,8 +59,8 @@ func (c *Chain) LastNode() Node {
 	if c.IsEmpty() {
 		return Node{}
 	}
-	last := c.nodeGroups[len(c.nodeGroups)-1]
-	return last.nodes[0]
+	group := c.nodeGroups[len(c.nodeGroups)-1]
+	return group.nodes[0].Clone()
 }
 
 // LastNodeGroup returns the last group of the group list.
@@ -90,17 +99,27 @@ func (c *Chain) IsEmpty() bool {
 
 // Dial connects to the target address addr through the chain.
 // If the chain is empty, it will use the net.Dial directly.
-func (c *Chain) Dial(addr string) (net.Conn, error) {
+func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
 	if c.IsEmpty() {
-		return net.Dial("tcp", addr)
+		return net.DialTimeout("tcp", addr, DialTimeout)
 	}
 
+	for i := 0; i < c.Retries+1; i++ {
+		conn, err = c.dial(addr)
+		if err == nil {
+			break
+		}
+	}
+	return
+}
+
+func (c *Chain) dial(addr string) (net.Conn, error) {
 	route, err := c.selectRoute()
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := c.getConn(route)
+	conn, err := route.getConn()
 	if err != nil {
 		return nil, err
 	}
@@ -116,77 +135,60 @@ func (c *Chain) Dial(addr string) (net.Conn, error) {
 // Conn obtains a handshaked connection to the last node of the chain.
 // If the chain is empty, it returns an ErrEmptyChain error.
 func (c *Chain) Conn() (conn net.Conn, err error) {
-	route, err := c.selectRoute()
-	if err != nil {
-		return nil, err
-	}
-	conn, err = c.getConn(route)
-	return
-}
-
-func (c *Chain) selectRoute() (route *Chain, err error) {
-	route = NewChain()
-	for _, group := range c.nodeGroups {
-		selector := group.Selector
-		if selector == nil {
-			selector = &defaultSelector{}
-		}
-		// select node from node group
-		node, err := selector.Select(group.Nodes(), group.Options...)
+	for i := 0; i < c.Retries+1; i++ {
+		var route *Chain
+		route, err = c.selectRoute()
 		if err != nil {
-			return nil, err
+			continue
 		}
-		if node.Client.Transporter.Multiplex() {
-			node.DialOptions = append(node.DialOptions,
-				ChainDialOption(route),
-			)
-			route = NewChain() // cutoff the chain for multiplex
+		conn, err = route.getConn()
+		if err != nil {
+			continue
 		}
-		route.AddNode(node)
+
+		break
 	}
 	return
 }
 
-func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
-	if route.IsEmpty() {
+func (c *Chain) getConn() (conn net.Conn, err error) {
+	if c.IsEmpty() {
 		err = ErrEmptyChain
 		return
 	}
-	nodes := route.Nodes()
+	nodes := c.Nodes()
 	node := nodes[0]
 
-	addr, err := selectIP(&node)
+	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
-		return
-	}
-	cn, err := node.Client.Dial(addr, node.DialOptions...)
-	if err != nil {
+		node.MarkDead()
 		return
 	}
 
 	cn, err = node.Client.Handshake(cn, node.HandshakeOptions...)
 	if err != nil {
+		node.MarkDead()
 		return
 	}
+	node.ResetDead()
 
 	preNode := node
 	for _, node := range nodes[1:] {
-		addr, err = selectIP(&node)
-		if err != nil {
-			return
-		}
-
 		var cc net.Conn
-		cc, err = preNode.Client.Connect(cn, addr)
+		cc, err = preNode.Client.Connect(cn, node.Addr)
 		if err != nil {
 			cn.Close()
+			node.MarkDead()
 			return
 		}
 		cc, err = node.Client.Handshake(cc, node.HandshakeOptions...)
 		if err != nil {
 			cn.Close()
+			node.MarkDead()
 			return
 		}
+		node.ResetDead()
+
 		cn = cc
 		preNode = node
 	}
@@ -195,29 +197,34 @@ func (c *Chain) getConn(route *Chain) (conn net.Conn, err error) {
 	return
 }
 
-func selectIP(node *Node) (string, error) {
-	addr := node.Addr
-	s := node.IPSelector
-	if s == nil {
-		s = &RandomIPSelector{}
+func (c *Chain) selectRoute() (route *Chain, err error) {
+	if c.isRoute {
+		return c, nil
 	}
-	// select IP from IP list
-	ip, err := s.Select(node.IPs)
-	if err != nil {
-		return "", err
-	}
-	if ip != "" {
-		if !strings.Contains(ip, ":") {
-			_, sport, err := net.SplitHostPort(addr)
-			if err != nil {
-				return "", err
-			}
-			ip = ip + ":" + sport
+
+	buf := bytes.Buffer{}
+	route = newRoute()
+	route.Retries = c.Retries
+
+	for _, group := range c.nodeGroups {
+		node, err := group.Next()
+		if err != nil {
+			return nil, err
 		}
-		addr = ip
-		// override the original address
-		node.HandshakeOptions = append(node.HandshakeOptions, AddrHandshakeOption(addr))
+		buf.WriteString(fmt.Sprintf("%s -> ", node.String()))
+
+		if node.Client.Transporter.Multiplex() {
+			node.DialOptions = append(node.DialOptions,
+				ChainDialOption(route),
+			)
+			route = newRoute() // cutoff the chain for multiplex.
+			route.Retries = c.Retries
+		}
+
+		route.AddNode(node)
 	}
-	log.Log("select IP:", node.Addr, node.IPs, addr)
-	return addr, nil
+	if Debug {
+		log.Log("select route:", buf.String())
+	}
+	return
 }

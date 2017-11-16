@@ -129,7 +129,7 @@ func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (n
 	if opts.WSOptions != nil {
 		wsOptions = opts.WSOptions
 	}
-	url := url.URL{Scheme: "ws", Host: opts.Addr, Path: "/ws"}
+	url := url.URL{Scheme: "ws", Host: opts.Host, Path: "/ws"}
 	return websocketClientConn(url.String(), conn, nil, wsOptions)
 }
 
@@ -210,7 +210,7 @@ func (tr *mwsTransporter) initSession(addr string, conn net.Conn, opts *Handshak
 	if opts.WSOptions != nil {
 		wsOptions = opts.WSOptions
 	}
-	url := url.URL{Scheme: "ws", Host: opts.Addr, Path: "/ws"}
+	url := url.URL{Scheme: "ws", Host: opts.Host, Path: "/ws"}
 	conn, err := websocketClientConn(url.String(), conn, nil, wsOptions)
 	if err != nil {
 		return nil, err
@@ -252,7 +252,7 @@ func (tr *wssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	if opts.TLSConfig == nil {
 		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	url := url.URL{Scheme: "wss", Host: opts.Addr, Path: "/ws"}
+	url := url.URL{Scheme: "wss", Host: opts.Host, Path: "/ws"}
 	return websocketClientConn(url.String(), conn, opts.TLSConfig, wsOptions)
 }
 
@@ -337,7 +337,7 @@ func (tr *mwssTransporter) initSession(addr string, conn net.Conn, opts *Handsha
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	url := url.URL{Scheme: "wss", Host: opts.Addr, Path: "/ws"}
+	url := url.URL{Scheme: "wss", Host: opts.Host, Path: "/ws"}
 	conn, err := websocketClientConn(url.String(), conn, tlsConfig, wsOptions)
 	if err != nil {
 		return nil, err
