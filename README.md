@@ -32,6 +32,8 @@ gost - GO Simple Tunnel
 
 Google讨论组: https://groups.google.com/d/forum/go-gost
 
+Wiki站点: https://docs.ginuerzh.xyz/gost/
+
 在gost中，gost与其他代理服务都被看作是代理节点，gost可以自己处理请求，或者将请求转发给任意一个或多个代理节点。
 
 
