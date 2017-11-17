@@ -24,39 +24,6 @@ func (c *forwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error)
 	return conn, nil
 }
 
-type forwardHandler struct {
-	raddr   string
-	options *HandlerOptions
-}
-
-// ForwardHandler creates a server Handler for data forwarding server.
-func ForwardHandler(raddr string, opts ...HandlerOption) Handler {
-	h := &forwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
-	return h
-}
-
-func (h *forwardHandler) Handle(conn net.Conn) {
-	defer conn.Close()
-
-	log.Logf("[forward] %s - %s", conn.RemoteAddr(), h.raddr)
-	cc, err := h.options.Chain.Dial(h.raddr)
-	if err != nil {
-		log.Logf("[forward] %s -> %s : %s", conn.RemoteAddr(), h.raddr, err)
-		return
-	}
-	defer cc.Close()
-
-	log.Logf("[forward] %s <-> %s", conn.RemoteAddr(), h.raddr)
-	transport(conn, cc)
-	log.Logf("[forward] %s >-< %s", conn.RemoteAddr(), h.raddr)
-}
-
 type tcpDirectForwardHandler struct {
 	raddr   string
 	options *HandlerOptions

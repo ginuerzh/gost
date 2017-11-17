@@ -41,6 +41,11 @@ func init() {
 	flag.BoolVar(&printVersion, "V", false, "print version")
 	flag.Parse()
 
+	if printVersion {
+		fmt.Fprintf(os.Stderr, "gost %s (%s)\n", gost.Version, runtime.Version())
+		os.Exit(0)
+	}
+
 	if len(options.ServeNodes) > 0 {
 		routes = append(routes, options)
 	}
@@ -56,10 +61,6 @@ func init() {
 		os.Exit(0)
 	}
 
-	if printVersion {
-		fmt.Fprintf(os.Stderr, "gost %s (%s)\n", gost.Version, runtime.Version())
-		os.Exit(0)
-	}
 }
 
 func main() {
@@ -378,6 +379,11 @@ func (r *route) serve() error {
 		case "h2c":
 			ln, err = gost.H2CListener(node.Addr)
 		case "tcp":
+			// Directly use SSH port forwarding if the last chain node is forward+ssh
+			if chain.LastNode().Protocol == "forward" && chain.LastNode().Transport == "ssh" {
+				chain.Nodes()[len(chain.Nodes())-1].Client.Connector = gost.SSHDirectForwardConnector()
+				chain.Nodes()[len(chain.Nodes())-1].Client.Transporter = gost.SSHForwardTransporter()
+			}
 			ln, err = gost.TCPListener(node.Addr)
 		case "rtcp":
 			// Directly use SSH port forwarding if the last chain node is forward+ssh
@@ -444,11 +450,6 @@ func (r *route) serve() error {
 		case "http":
 			handler = gost.HTTPHandler(handlerOptions...)
 		case "tcp":
-			// Directly use SSH port forwarding if the last chain node is forward+ssh
-			if chain.LastNode().Protocol == "forward" && chain.LastNode().Transport == "ssh" {
-				chain.Nodes()[len(chain.Nodes())-1].Client.Connector = gost.SSHDirectForwardConnector()
-				chain.Nodes()[len(chain.Nodes())-1].Client.Transporter = gost.SSHForwardTransporter()
-			}
 			handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
 		case "rtcp":
 			handler = gost.TCPRemoteForwardHandler(node.Remote, handlerOptions...)
@@ -467,7 +468,7 @@ func (r *route) serve() error {
 		default:
 			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel
 			if node.Remote != "" {
-				handler = gost.ForwardHandler(node.Remote, handlerOptions...)
+				handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
 			} else {
 				handler = gost.AutoHandler(handlerOptions...)
 			}
@@ -662,7 +663,7 @@ func loadPeerConfig(peer string) (config peerConfig, err error) {
 
 func (cfg *peerConfig) Validate() {
 	if cfg.MaxFails <= 0 {
-		cfg.MaxFails = 3
+		cfg.MaxFails = 1
 	}
 	if cfg.FailTimeout <= 0 {
 		cfg.FailTimeout = 30 // seconds
