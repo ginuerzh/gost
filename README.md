@@ -18,9 +18,9 @@ gost - GO Simple Tunnel
 * 可设置转发代理，支持多级转发(代理链)
 * 支持标准HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5代理协议
 * [支持多种隧道类型](https://docs.ginuerzh.xyz/gost/configuration/)
-* SOCKS5代理支持TLS协商加密
-* Tunnel UDP over TCP
-* TCP透明代理
+* [SOCKS5代理支持TLS协商加密](https://docs.ginuerzh.xyz/gost/socks/)
+* [Tunnel UDP over TCP](https://docs.ginuerzh.xyz/gost/socks/)
+* [TCP透明代理](https://docs.ginuerzh.xyz/gost/redirect/)
 * [本地/远程TCP/UDP端口转发](https://docs.ginuerzh.xyz/gost/port-forwarding/)
 * [支持Shadowsocks(TCP/UDP)协议](https://docs.ginuerzh.xyz/gost/ss/)
 * [支持SNI代理](https://docs.ginuerzh.xyz/gost/sni/)
@@ -241,31 +241,40 @@ gost -L=:8888 -F='obfs4://server_ip:443?cert=4UbQjIfjJEQHPOs8vs5sagrSXx1gfrDCGdV
 
 加密机制
 ------
+
 #### HTTP
+
 对于HTTP可以使用TLS加密整个通讯过程，即HTTPS代理：
 
 服务端:
+
 ```bash
 gost -L=https://:443
 ```
 客户端:
+
 ```bash
 gost -L=:8080 -F=http+tls://server_ip:443
 ```
 
 #### HTTP2
+
 gost的HTTP2代理模式仅支持使用TLS加密的HTTP2协议，不支持明文HTTP2传输。
 
 gost的HTTP2通道模式支持加密(h2)和明文(h2c)两种模式。
 
 #### SOCKS5
+
 gost支持标准SOCKS5协议的no-auth(0x00)和user/pass(0x02)方法，并在此基础上扩展了两个：tls(0x80)和tls-auth(0x82)，用于数据加密。
 
 服务端:
+
 ```bash
 gost -L=socks5://:1080
 ```
+
 客户端:
+
 ```bash
 gost -L=:8080 -F=socks5://server_ip:1080
 ```
@@ -276,10 +285,12 @@ gost -L=:8080 -F=socks5://server_ip:1080
 gost对shadowsocks的支持是基于[shadowsocks-go](https://github.com/shadowsocks/shadowsocks-go)库。
 
 服务端:
+
 ```bash
 gost -L=ss://chacha20:123456@:8338
 ```
 客户端:
+
 ```bash
 gost -L=:8080 -F=ss://chacha20:123456@server_ip:8338
 ```
@@ -289,6 +300,7 @@ gost -L=:8080 -F=ss://chacha20:123456@server_ip:8338
 目前仅服务端支持UDP Relay。
 
 服务端:
+
 ```bash
 gost -L=ssu://chacha20:123456@:8338
 ```
