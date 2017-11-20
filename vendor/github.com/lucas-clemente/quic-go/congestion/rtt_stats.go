@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// Note: This constant is also defined in the ackhandler package.
 	initialRTTus          = 100 * 1000
 	rttAlpha      float32 = 0.125
 	oneMinusAlpha float32 = (1 - rttAlpha)

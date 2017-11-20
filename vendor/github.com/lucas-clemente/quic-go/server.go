@@ -8,10 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/crypto"
-	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/crypto"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -19,6 +20,7 @@ import (
 type packetHandler interface {
 	Session
 	handlePacket(*receivedPacket)
+	GetVersion() protocol.VersionNumber
 	run() error
 	closeRemote(error)
 }
@@ -88,14 +90,15 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		errorChan:                 make(chan struct{}),
 	}
 	go s.serve()
+	utils.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
 	return s, nil
 }
 
-var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
-	if stk == nil {
+var defaultAcceptCookie = func(clientAddr net.Addr, cookie *Cookie) bool {
+	if cookie == nil {
 		return false
 	}
-	if time.Now().After(stk.sentTime.Add(protocol.STKExpiryTime)) {
+	if time.Now().After(cookie.SentTime.Add(protocol.CookieExpiryTime)) {
 		return false
 	}
 	var sourceAddr string
@@ -104,7 +107,7 @@ var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
 	} else {
 		sourceAddr = clientAddr.String()
 	}
-	return sourceAddr == stk.remoteAddr
+	return sourceAddr == cookie.RemoteAddr
 }
 
 // populateServerConfig populates fields in the quic.Config with their default values, if none are set
@@ -118,14 +121,18 @@ func populateServerConfig(config *Config) *Config {
 		versions = protocol.SupportedVersions
 	}
 
-	vsa := defaultAcceptSTK
-	if config.AcceptSTK != nil {
-		vsa = config.AcceptSTK
+	vsa := defaultAcceptCookie
+	if config.AcceptCookie != nil {
+		vsa = config.AcceptCookie
 	}
 
 	handshakeTimeout := protocol.DefaultHandshakeTimeout
 	if config.HandshakeTimeout != 0 {
 		handshakeTimeout = config.HandshakeTimeout
+	}
+	idleTimeout := protocol.DefaultIdleTimeout
+	if config.IdleTimeout != 0 {
+		idleTimeout = config.IdleTimeout
 	}
 
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
@@ -140,7 +147,9 @@ func populateServerConfig(config *Config) *Config {
 	return &Config{
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
-		AcceptSTK:                             vsa,
+		IdleTimeout:                           idleTimeout,
+		AcceptCookie:                          vsa,
+		KeepAlive:                             config.KeepAlive,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 	}
@@ -181,14 +190,19 @@ func (s *server) Accept() (Session, error) {
 // Close the server
 func (s *server) Close() error {
 	s.sessionsMutex.Lock()
+	var wg sync.WaitGroup
 	for _, session := range s.sessions {
 		if session != nil {
-			s.sessionsMutex.Unlock()
-			_ = session.Close(nil)
-			s.sessionsMutex.Lock()
+			wg.Add(1)
+			go func(sess packetHandler) {
+				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
+				_ = sess.Close(nil)
+				wg.Done()
+			}(session)
 		}
 	}
 	s.sessionsMutex.Unlock()
+	wg.Wait()
 
 	if s.conn == nil {
 		return nil
@@ -205,25 +219,31 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
+	hdr, err := wire.ParseHeaderSentByClient(r)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
+	connID := hdr.ConnectionID
 
 	s.sessionsMutex.RLock()
-	session, ok := s.sessions[hdr.ConnectionID]
+	session, sessionKnown := s.sessions[connID]
 	s.sessionsMutex.RUnlock()
+
+	if sessionKnown && session == nil {
+		// Late packet for closed session
+		return nil
+	}
 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
-		if ok {
-			var pr *publicReset
-			pr, err = parsePublicReset(r)
+		if sessionKnown {
+			var pr *wire.PublicReset
+			pr, err = wire.ParsePublicReset(r)
 			if err != nil {
 				utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
 			} else {
-				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.rejectedPacketNumber)
+				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.RejectedPacketNumber)
 			}
 		} else {
 			utils.Infof("Received Public Reset for unknown connection %x.", hdr.ConnectionID)
@@ -231,35 +251,46 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		return nil
 	}
 
+	// If we don't have a session for this connection, and this packet cannot open a new connection, send a Public Reset
+	// This should only happen after a server restart, when we still receive packets for connections that we lost the state for.
+	// TODO(#943): implement sending of IETF draft style stateless resets
+	if !sessionKnown && (!hdr.VersionFlag && hdr.Type != protocol.PacketTypeInitial) {
+		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
+		return err
+	}
+
 	// a session is only created once the client sent a supported version
 	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
 	// it is safe to drop it
-	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
+	if sessionKnown && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		return nil
 	}
 
-	// Send Version Negotiation Packet if the client is speaking a different protocol version
-	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
+	// send a Version Negotiation Packet if the client is speaking a different protocol version
+	// since the client send a Public Header (only gQUIC has a Version Flag), we need to send a gQUIC Version Negotiation Packet
+	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		// drop packets that are too small to be valid first packets
 		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
 			return errors.New("dropping small packet with unknown version")
 		}
-		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
+		if _, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr); err != nil {
+			return err
+		}
+	}
+	// send an IETF draft style Version Negotiation Packet, if the client sent an unsupported version with an IETF draft style header
+	if hdr.Type == protocol.PacketTypeInitial && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
+		_, err := pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, hdr.PacketNumber, hdr.Version, s.config.Versions), remoteAddr)
 		return err
 	}
 
-	if !ok {
-		if !hdr.VersionFlag {
-			_, err = pconn.WriteTo(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
-			return err
-		}
-		version := hdr.VersionNumber
+	if !sessionKnown {
+		version := hdr.Version
 		if !protocol.IsSupportedVersion(s.config.Versions, version) {
 			return errors.New("Server BUG: negotiated version not supported")
 		}
 
-		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
+		utils.Infof("Serving new connection: %x, version %s from %v", hdr.ConnectionID, version, remoteAddr)
 		var handshakeChan <-chan handshakeEvent
 		session, handshakeChan, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
@@ -273,13 +304,13 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return err
 		}
 		s.sessionsMutex.Lock()
-		s.sessions[hdr.ConnectionID] = session
+		s.sessions[connID] = session
 		s.sessionsMutex.Unlock()
 
 		go func() {
 			// session.run() returns as soon as the session is closed
 			_ = session.run()
-			s.removeConnection(hdr.ConnectionID)
+			s.removeConnection(connID)
 		}()
 
 		go func() {
@@ -295,15 +326,11 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			s.sessionQueue <- session
 		}()
 	}
-	if session == nil {
-		// Late packet for closed session
-		return nil
-	}
 	session.handlePacket(&receivedPacket{
-		remoteAddr:   remoteAddr,
-		publicHeader: hdr,
-		data:         packet[len(packet)-r.Len():],
-		rcvTime:      rcvTime,
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packet[len(packet)-r.Len():],
+		rcvTime:    rcvTime,
 	})
 	return nil
 }
@@ -318,21 +345,4 @@ func (s *server) removeConnection(id protocol.ConnectionID) {
 		delete(s.sessions, id)
 		s.sessionsMutex.Unlock()
 	})
-}
-
-func composeVersionNegotiation(connectionID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
-	fullReply := &bytes.Buffer{}
-	responsePublicHeader := PublicHeader{
-		ConnectionID: connectionID,
-		PacketNumber: 1,
-		VersionFlag:  true,
-	}
-	err := responsePublicHeader.Write(fullReply, protocol.VersionWhatever, protocol.PerspectiveServer)
-	if err != nil {
-		utils.Errorf("error composing version negotiation packet: %s", err.Error())
-	}
-	for _, v := range versions {
-		utils.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
-	}
-	return fullReply.Bytes()
 }
