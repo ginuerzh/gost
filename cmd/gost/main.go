@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -223,6 +224,18 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 			TLSConfig: tlsCfg,
 			KeepAlive: toBool(node.Values.Get("keepalive")),
 		}
+
+		timeout, _ := strconv.Atoi(node.Values.Get("timeout"))
+		config.Timeout = time.Duration(timeout) * time.Second
+
+		idle, _ := strconv.Atoi(node.Values.Get("idle"))
+		config.IdleTimeout = time.Duration(idle) * time.Second
+
+		if key := node.Values.Get("key"); key != "" {
+			sum := sha256.Sum256([]byte(key))
+			config.Key = sum[:]
+		}
+
 		tr = gost.QUICTransporter(config)
 	case "http2":
 		tr = gost.HTTP2Transporter(tlsCfg)
@@ -371,6 +384,15 @@ func (r *route) serve() error {
 			}
 			timeout, _ := strconv.Atoi(node.Values.Get("timeout"))
 			config.Timeout = time.Duration(timeout) * time.Second
+
+			idle, _ := strconv.Atoi(node.Values.Get("idle"))
+			config.IdleTimeout = time.Duration(idle) * time.Second
+
+			if key := node.Values.Get("key"); key != "" {
+				sum := sha256.Sum256([]byte(key))
+				config.Key = sum[:]
+			}
+
 			ln, err = gost.QUICListener(node.Addr, config)
 		case "http2":
 			ln, err = gost.HTTP2Listener(node.Addr, tlsCfg)
