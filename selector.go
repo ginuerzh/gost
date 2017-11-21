@@ -16,7 +16,6 @@ var (
 // NodeSelector as a mechanism to pick nodes and mark their status.
 type NodeSelector interface {
 	Select(nodes []Node, opts ...SelectOption) (Node, error)
-	// Mark(node Node)
 }
 
 type defaultSelector struct {
@@ -130,7 +129,7 @@ type FailFilter struct {
 
 // Filter filters nodes.
 func (f *FailFilter) Filter(nodes []Node) []Node {
-	if f.MaxFails <= 0 {
+	if len(nodes) <= 1 || f.MaxFails <= 0 {
 		return nodes
 	}
 	nl := []Node{}
