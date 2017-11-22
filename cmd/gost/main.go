@@ -17,13 +17,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ginuerzh/gost"
 	"github.com/go-log/log"
+	"github.com/go-redis/redis"
+	"github.com/ginuerzh/gost"
 )
 
 var (
 	options route
 	routes  []route
+	redisClient *redis.Client
 )
 
 func init() {
@@ -322,6 +324,10 @@ func (r *route) serve() error {
 		if node.User != nil {
 			users = append(users, node.User)
 		}
+                redisClient, err := connectToRedis(node.Values.Get("redis"))
+		if err != nil {
+			return err
+		}
 		certFile, keyFile := node.Values.Get("cert"), node.Values.Get("key")
 		tlsCfg, err := tlsConfig(certFile, keyFile)
 		if err != nil && certFile != "" && keyFile != "" {
@@ -436,6 +442,7 @@ func (r *route) serve() error {
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
+			gost.RedisClientHandlerOption(redisClient),
 		)
 		var handler gost.Handler
 		switch node.Protocol {
@@ -600,6 +607,39 @@ func parseUsers(authFile string) (users []*url.Userinfo, err error) {
 	}
 
 	err = scanner.Err()
+	return
+}
+
+type redisConfig struct {
+        Address  string `json:"address"`
+        Password string `json:"password"`
+        DB       int    `json:"db"`
+}
+
+func connectToRedis(redisCfg string) (client *redis.Client, err error){
+	if redisCfg == "" {
+		return
+	}
+
+        content, err := ioutil.ReadFile(redisCfg)
+        if err != nil {
+                return
+        }
+
+        config := new(redisConfig)
+        err = json.Unmarshal(content, &config)
+        if err != nil {
+                return
+        }
+
+	client = redis.NewClient(&redis.Options{
+		Addr:     config.Address,
+		Password: config.Password,
+		DB:       config.DB,
+	})
+
+	_, err = client.Ping().Result()
+
 	return
 }
 

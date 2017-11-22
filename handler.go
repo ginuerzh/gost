@@ -9,6 +9,7 @@ import (
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
+	"github.com/go-redis/redis"
 )
 
 // Handler is a proxy server handler
@@ -18,12 +19,13 @@ type Handler interface {
 
 // HandlerOptions describes the options for Handler.
 type HandlerOptions struct {
-	Addr      string
-	Chain     *Chain
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
-	Whitelist *Permissions
-	Blacklist *Permissions
+	Addr        string
+	Chain       *Chain
+	Users       []*url.Userinfo
+	TLSConfig   *tls.Config
+	Whitelist   *Permissions
+	Blacklist   *Permissions
+	RedisClient *redis.Client
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -68,6 +70,13 @@ func WhitelistHandlerOption(whitelist *Permissions) HandlerOption {
 func BlacklistHandlerOption(blacklist *Permissions) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Blacklist = blacklist
+	}
+}
+
+// RedisClientHandlerOption sets the RedisClient option of HandlerOptions.
+func RedisClientHandlerOption(client *redis.Client) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.RedisClient = client
 	}
 }
 
