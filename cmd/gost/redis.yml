@@ -1,5 +1,0 @@
-redisserver:
-    address:     localhost:6379
-    password:    
-    db:
-

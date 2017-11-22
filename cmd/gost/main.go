@@ -19,7 +19,6 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/go-redis/redis"
-	"github.com/jinzhu/configor"
 	"github.com/ginuerzh/gost"
 )
 
@@ -325,7 +324,7 @@ func (r *route) serve() error {
 		if node.User != nil {
 			users = append(users, node.User)
 		}
-		redisClient, err := parseRedisUsersAuth(node.Values.Get("redis"))
+                redisClient, err := connectToRedis(node.Values.Get("redis"))
 		if err != nil {
 			return err
 		}
@@ -611,24 +610,32 @@ func parseUsers(authFile string) (users []*url.Userinfo, err error) {
 	return
 }
 
-func parseRedisUsersAuth(configFile string) (client *redis.Client, err error) {
-	if configFile == "" {
+type redisConfig struct {
+        Address  string `json:"address"`
+        Password string `json:"password"`
+        DB       int    `json:"db"`
+}
+
+func connectToRedis(redisCfg string) (client *redis.Client, err error){
+	if redisCfg == "" {
 		return
 	}
 
-	var Config = struct {
-		RedisServer struct {
-			Address  string `default:"localhost:6379"`
-			Password string `default:""`
-			DB       int    `default:0`
-		}
-	}{}
+        content, err := ioutil.ReadFile(redisCfg)
+        if err != nil {
+                return
+        }
 
-	configor.Load(&Config, configFile)
+        config := new(redisConfig)
+        err = json.Unmarshal(content, &config)
+        if err != nil {
+                return
+        }
+
 	client = redis.NewClient(&redis.Options{
-		Addr:     Config.RedisServer.Address,
-		Password: Config.RedisServer.Password,
-		DB:       Config.RedisServer.DB,
+		Addr:     config.Address,
+		Password: config.Password,
+		DB:       config.DB,
 	})
 
 	_, err = client.Ping().Result()
@@ -636,7 +643,7 @@ func parseRedisUsersAuth(configFile string) (client *redis.Client, err error) {
 	return
 }
 
-func parseIP(s string) (ips []string) {
+func parseIP(s string, port string) (ips []string) {
 	if s == "" {
 		return
 	}
