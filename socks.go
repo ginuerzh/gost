@@ -15,6 +15,7 @@ import (
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
+	"github.com/go-redis/redis"
 )
 
 const (
@@ -90,9 +91,10 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 }
 
 type serverSelector struct {
-	methods   []uint8
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
+	methods     []uint8
+	Users       []*url.Userinfo
+	TLSConfig   *tls.Config
+	RedisClient *redis.Client
 }
 
 func (selector *serverSelector) Methods() []uint8 {
@@ -116,7 +118,7 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 	}
 
 	// when user/pass is set, auth is mandatory
-	if len(selector.Users) > 0 {
+	if len(selector.Users) > 0 || selector.RedisClient != nil {
 		if method == gosocks5.MethodNoAuth {
 			method = gosocks5.MethodUserPass
 		}
@@ -150,17 +152,25 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 			log.Log("[socks5]", req.String())
 		}
 		valid := false
-		for _, user := range selector.Users {
-			username := user.Username()
-			password, _ := user.Password()
-			if (req.Username == username && req.Password == password) ||
-				(req.Username == username && password == "") ||
-				(username == "" && req.Password == password) {
+		if selector.RedisClient != nil {
+			password, err := selector.RedisClient.Get(req.Username).Result()
+			if err == nil && req.Password == password {
 				valid = true
-				break
 			}
 		}
-		if len(selector.Users) > 0 && !valid {
+		if len(selector.Users) > 0 {
+			for _, user := range selector.Users {
+				username := user.Username()
+				password, _ := user.Password()
+				if (req.Username == username && req.Password == password) ||
+					(req.Username == username && password == "") ||
+					(username == "" && req.Password == password) {
+					valid = true
+					break
+				}
+			}
+		}
+		if (selector.RedisClient != nil || len(selector.Users) > 0) && !valid {
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
 				log.Log("[socks5]", err)
@@ -353,8 +363,9 @@ func SOCKS5Handler(opts ...HandlerOption) Handler {
 		tlsConfig = DefaultTLSConfig
 	}
 	selector := &serverSelector{ // socks5 server selector
-		Users:     options.Users,
-		TLSConfig: tlsConfig,
+		Users:       options.Users,
+		TLSConfig:   tlsConfig,
+		RedisClient: options.RedisClient,
 	}
 	// methods that socks5 server supported
 	selector.AddMethod(
