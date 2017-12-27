@@ -59,12 +59,12 @@ func (h *sniHandler) Handle(conn net.Conn) {
 	if hdr[0] != dissector.Handshake {
 		// We assume it is an HTTP request
 		req, err := http.ReadRequest(bufio.NewReader(conn))
-		if !req.URL.IsAbs() {
-			req.URL.Scheme = "http" // make sure that the URL is absolute
-		}
 		if err != nil {
 			log.Logf("[sni] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 			return
+		}
+		if !req.URL.IsAbs() {
+			req.URL.Scheme = "http" // make sure that the URL is absolute
 		}
 		HTTPHandler(h.options...).(*httpHandler).handleRequest(conn, req)
 		return
