@@ -56,6 +56,11 @@ func (tr *mtlsTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
+	if session != nil && session.session != nil && session.session.IsClosed() {
+		session.Close()
+		delete(tr.sessions, addr)
+		ok = false
+	}
 	if !ok {
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)

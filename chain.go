@@ -53,7 +53,7 @@ func (c *Chain) NodeGroups() []*NodeGroup {
 }
 
 // LastNode returns the last node of the node list.
-// If the chain is empty, an empty node is returns.
+// If the chain is empty, an empty node will be returned.
 // If the last node is a node group, the first node in the group will be returned.
 func (c *Chain) LastNode() Node {
 	if c.IsEmpty() {
