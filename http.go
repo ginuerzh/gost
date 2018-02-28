@@ -92,6 +92,7 @@ func (h *httpHandler) Handle(conn net.Conn) {
 		log.Logf("[http] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
+	defer req.Body.Close()
 
 	h.handleRequest(conn, req)
 }
