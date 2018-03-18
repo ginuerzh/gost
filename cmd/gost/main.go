@@ -541,7 +541,7 @@ func loadConfigureFile(configureFile string) error {
 		routes = append(routes, cfg.route)
 	}
 	for _, route := range cfg.Routes {
-		if len(cfg.route.ServeNodes) > 0 {
+		if len(route.ServeNodes) > 0 {
 			routes = append(routes, route)
 		}
 	}
