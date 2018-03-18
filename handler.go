@@ -95,8 +95,18 @@ func (h *autoHandler) Handle(conn net.Conn) {
 	cc := &bufferdConn{Conn: conn, br: br}
 	switch b[0] {
 	case gosocks4.Ver4:
-		cc.Close()
-		return // SOCKS4(a) does not suppport authentication method, so we ignore it for security reason.
+		options := &HandlerOptions{}
+		for _, opt := range h.options {
+			opt(options)
+		}
+		// SOCKS4(a) does not suppport authentication method,
+		// so we ignore it when credentials are specified for security reason.
+		if len(options.Users) > 0 {
+			cc.Close()
+			return
+		}
+		h := &socks4Handler{options}
+		h.Handle(cc)
 	case gosocks5.Ver5:
 		SOCKS5Handler(h.options...).Handle(cc)
 	default: // http
