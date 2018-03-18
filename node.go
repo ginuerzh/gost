@@ -3,6 +3,7 @@ package gost
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -139,6 +140,23 @@ func (node *Node) Clone() Node {
 		failCount:        atomic.LoadUint32(&node.failCount),
 		failTime:         atomic.LoadInt64(&node.failTime),
 	}
+}
+
+// Get returns node parameter specified by key.
+func (node *Node) Get(key string) string {
+	return node.Values.Get(key)
+}
+
+// GetBool likes Get, but convert parameter value to bool.
+func (node *Node) GetBool(key string) bool {
+	b, _ := strconv.ParseBool(node.Values.Get(key))
+	return b
+}
+
+// GetInt likes Get, but convert parameter value to int.
+func (node *Node) GetInt(key string) int {
+	n, _ := strconv.Atoi(node.Values.Get(key))
+	return n
 }
 
 func (node *Node) String() string {

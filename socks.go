@@ -5,16 +5,16 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strconv"
 	"time"
 
-	"io"
-
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
+	smux "gopkg.in/xtaci/smux.v1"
 )
 
 const (
@@ -22,10 +22,15 @@ const (
 	MethodTLS uint8 = 0x80
 	// MethodTLSAuth is an extended SOCKS5 method for TLS+AUTH.
 	MethodTLSAuth uint8 = 0x82
+	// MethodMux is an extended SOCKS5 method for stream multiplexing.
+	MethodMux = 0x88
 )
 
 const (
-	// CmdUDPTun is an extended SOCKS5 method for UDP over TCP.
+	// CMDMuxBind is an extended SOCKS5 request CMD for
+	// multiplexing transport with the binding server.
+	CMDMuxBind uint8 = 0xF2
+	// CmdUDPTun is an extended SOCKS5 request CMD for UDP over TCP.
 	CmdUDPTun uint8 = 0xF3
 )
 
@@ -391,6 +396,9 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 
 	case gosocks5.CmdUdp:
 		h.handleUDPRelay(conn, req)
+
+	case CMDMuxBind:
+		h.handleMuxBind(conn, req)
 
 	case CmdUDPTun:
 		h.handleUDPTunnel(conn, req)
@@ -940,6 +948,98 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 	}
 
 	return
+}
+
+func (h *socks5Handler) handleMuxBind(conn net.Conn, req *gosocks5.Request) {
+	if h.options.Chain.IsEmpty() {
+		addr := req.Addr.String()
+		if !Can("rtcp", addr, h.options.Whitelist, h.options.Blacklist) {
+			log.Logf("Unauthorized to tcp mbind to %s", addr)
+			return
+		}
+		h.muxBindOn(conn, addr)
+		return
+	}
+
+	cc, err := h.options.Chain.Conn()
+	if err != nil {
+		log.Logf("[socks5-mbind] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+		reply := gosocks5.NewReply(gosocks5.Failure, nil)
+		reply.Write(conn)
+		if Debug {
+			log.Logf("[socks5-mbind] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, reply)
+		}
+		return
+	}
+
+	// forward request
+	// note: this type of request forwarding is defined when starting server,
+	// so we don't need to authenticate it, as it's as explicit as whitelisting.
+	defer cc.Close()
+	req.Write(cc)
+	log.Logf("[socks5-mbind] %s <-> %s", conn.RemoteAddr(), cc.RemoteAddr())
+	transport(conn, cc)
+	log.Logf("[socks5-mbind] %s >-< %s", conn.RemoteAddr(), cc.RemoteAddr())
+}
+
+func (h *socks5Handler) muxBindOn(conn net.Conn, addr string) {
+	bindAddr, _ := net.ResolveTCPAddr("tcp", addr)
+	ln, err := net.ListenTCP("tcp", bindAddr) // strict mode: if the port already in use, it will return error
+	if err != nil {
+		log.Logf("[socks5-mbind] %s -> %s : %s", conn.RemoteAddr(), addr, err)
+		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
+		return
+	}
+	defer ln.Close()
+
+	socksAddr := toSocksAddr(ln.Addr())
+	// Issue: may not reachable when host has multi-interface.
+	socksAddr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
+	reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
+	if err := reply.Write(conn); err != nil {
+		log.Logf("[socks5-mbind] %s <- %s : %s", conn.RemoteAddr(), addr, err)
+		return
+	}
+	if Debug {
+		log.Logf("[socks5-mbind] %s <- %s\n%s", conn.RemoteAddr(), addr, reply)
+	}
+	log.Logf("[socks5-mbind] %s - %s BIND ON %s OK", conn.RemoteAddr(), addr, socksAddr)
+
+	// Upgrade connection to multiplex stream.
+	s, err := smux.Client(conn, smux.DefaultConfig())
+	if err != nil {
+		log.Logf("[socks5-mbind] %s - %s : %s", conn.RemoteAddr(), socksAddr, err)
+		return
+	}
+
+	log.Logf("[socks5-mbind] %s <-> %s", conn.RemoteAddr(), socksAddr)
+	defer log.Logf("[socks5-mbind] %s >-< %s", conn.RemoteAddr(), socksAddr)
+
+	session := &muxSession{
+		conn:    conn,
+		session: s,
+	}
+
+	for {
+		cc, err := ln.Accept()
+		if err != nil {
+			log.Logf("[socks5-mbind] %s <- %s : %v", conn.RemoteAddr(), socksAddr, err)
+			return
+		}
+		log.Logf("[socks5-mbind %s <- %s : ACCEPT peer %s",
+			conn.RemoteAddr(), socksAddr, cc.RemoteAddr())
+
+		go func(c net.Conn) {
+			defer c.Close()
+
+			sc, err := session.GetConn()
+			if err != nil {
+				log.Logf("[socks5-mbind %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
+				return
+			}
+			transport(sc, c)
+		}(cc)
+	}
 }
 
 func toSocksAddr(addr net.Addr) *gosocks5.Addr {

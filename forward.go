@@ -422,10 +422,13 @@ func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
 }
 
 type tcpRemoteForwardListener struct {
-	addr   net.Addr
-	chain  *Chain
-	ln     net.Listener
-	closed chan struct{}
+	addr    net.Addr
+	chain   *Chain
+	ln      net.Listener
+	session *muxSession
+	once    sync.Once
+	mutex   sync.Mutex
+	closed  chan struct{}
 }
 
 // TCPRemoteForwardListener creates a Listener for TCP remote port forwarding server.
@@ -474,6 +477,10 @@ func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 	if lastNode.Protocol == "forward" && lastNode.Transport == "ssh" {
 		conn, err = l.chain.Dial(l.addr.String())
 	} else if lastNode.Protocol == "socks5" {
+		if lastNode.GetBool("mbind") {
+			return l.muxAccept() // multiplexing support for binding.
+		}
+
 		cc, er := l.chain.Conn()
 		if er != nil {
 			return nil, er
@@ -492,6 +499,14 @@ func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 		conn, err = l.ln.Accept()
 	}
 	return
+}
+
+func (l *tcpRemoteForwardListener) muxAccept() (conn net.Conn, err error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	
+	return nil, nil
 }
 
 func (l *tcpRemoteForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, error) {
