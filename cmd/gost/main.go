@@ -488,7 +488,7 @@ func (r *route) serve() error {
 		case "sni":
 			handler = gost.SNIHandler(handlerOptions...)
 		default:
-			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel
+			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
 			if node.Remote != "" {
 				handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
 			} else {
@@ -696,6 +696,8 @@ func parseStrategy(s string) gost.Strategy {
 	switch s {
 	case "random":
 		return &gost.RandomStrategy{}
+	case "fifo":
+		return &gost.FIFOStrategy{}
 	case "round":
 		fallthrough
 	default:
