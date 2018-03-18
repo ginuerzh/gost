@@ -27,9 +27,9 @@ const (
 )
 
 const (
-	// CMDMuxBind is an extended SOCKS5 request CMD for
+	// CmdMuxBind is an extended SOCKS5 request CMD for
 	// multiplexing transport with the binding server.
-	CMDMuxBind uint8 = 0xF2
+	CmdMuxBind uint8 = 0xF2
 	// CmdUDPTun is an extended SOCKS5 request CMD for UDP over TCP.
 	CmdUDPTun uint8 = 0xF3
 )
@@ -397,7 +397,7 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 	case gosocks5.CmdUdp:
 		h.handleUDPRelay(conn, req)
 
-	case CMDMuxBind:
+	case CmdMuxBind:
 		h.handleMuxBind(conn, req)
 
 	case CmdUDPTun:
@@ -1019,14 +1019,26 @@ func (h *socks5Handler) muxBindOn(conn net.Conn, addr string) {
 		conn:    conn,
 		session: s,
 	}
+	defer session.Close()
+
+	go func() {
+		for {
+			conn, err := session.Accept()
+			if err != nil {
+				ln.Close()
+				return
+			}
+			conn.Close() // we do not handle incoming connection.
+		}
+	}()
 
 	for {
 		cc, err := ln.Accept()
 		if err != nil {
-			log.Logf("[socks5-mbind] %s <- %s : %v", conn.RemoteAddr(), socksAddr, err)
+			// log.Logf("[socks5-mbind] %s <- %s : %v", conn.RemoteAddr(), socksAddr, err)
 			return
 		}
-		log.Logf("[socks5-mbind %s <- %s : ACCEPT peer %s",
+		log.Logf("[socks5-mbind] %s <- %s : ACCEPT peer %s",
 			conn.RemoteAddr(), socksAddr, cc.RemoteAddr())
 
 		go func(c net.Conn) {
@@ -1034,7 +1046,7 @@ func (h *socks5Handler) muxBindOn(conn net.Conn, addr string) {
 
 			sc, err := session.GetConn()
 			if err != nil {
-				log.Logf("[socks5-mbind %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
+				log.Logf("[socks5-mbind] %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
 				return
 			}
 			transport(sc, c)

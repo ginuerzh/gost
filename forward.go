@@ -10,6 +10,7 @@ import (
 
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
+	smux "gopkg.in/xtaci/smux.v1"
 )
 
 type forwardConnector struct {
@@ -426,7 +427,6 @@ type tcpRemoteForwardListener struct {
 	chain   *Chain
 	ln      net.Listener
 	session *muxSession
-	once    sync.Once
 	mutex   sync.Mutex
 	closed  chan struct{}
 }
@@ -502,11 +502,66 @@ func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 }
 
 func (l *tcpRemoteForwardListener) muxAccept() (conn net.Conn, err error) {
+	session, err := l.getSession()
+	if err != nil {
+		return nil, err
+	}
+	cc, err := session.Accept()
+	if err != nil {
+		session.Close()
+		return nil, err
+	}
+
+	return cc, nil
+}
+
+func (l *tcpRemoteForwardListener) getSession() (*muxSession, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	
-	return nil, nil
+	if l.session != nil && !l.session.IsClosed() {
+		return l.session, nil
+	}
+
+	conn, err := l.chain.Conn()
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err = socks5Handshake(conn, l.chain.LastNode().User)
+	if err != nil {
+		return nil, err
+	}
+	req := gosocks5.NewRequest(CmdMuxBind, toSocksAddr(l.addr))
+	if err := req.Write(conn); err != nil {
+		log.Log("[rtcp] SOCKS5 BIND request: ", err)
+		return nil, err
+	}
+
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	rep, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		log.Log("[rtcp] SOCKS5 BIND reply: ", err)
+		return nil, err
+	}
+	conn.SetReadDeadline(time.Time{})
+	if rep.Rep != gosocks5.Succeeded {
+		log.Logf("[rtcp] bind on %s failure", l.addr)
+		return nil, fmt.Errorf("Bind on %s failure", l.addr.String())
+	}
+	log.Logf("[rtcp] BIND ON %s OK", rep.Addr)
+
+	// Upgrade connection to multiplex stream.
+	session, err := smux.Server(conn, smux.DefaultConfig())
+	if err != nil {
+		return nil, err
+	}
+	l.session = &muxSession{
+		conn:    conn,
+		session: session,
+	}
+
+	return l.session, nil
 }
 
 func (l *tcpRemoteForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, error) {
