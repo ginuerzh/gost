@@ -24,9 +24,35 @@ Features
 * [Permission control](https://docs.ginuerzh.xyz/gost/en/permission/)
 * [Load balancing](https://docs.ginuerzh.xyz/gost/en/load-balancing/)
 
-Wiki: https://docs.ginuerzh.xyz/gost/en/
+Wiki: <https://docs.ginuerzh.xyz/gost/en/>
 
-Google group: https://groups.google.com/d/forum/go-gost
+Google group: <https://groups.google.com/d/forum/go-gost>
+
+
+Installation
+------
+
+#### Binary files
+
+<https://github.com/ginuerzh/gost/releases>
+
+#### From source
+
+```bash
+go get -u github.com/ginuerzh/gost/cmd/gost
+```
+
+#### Docker
+
+```bash
+docker pull ginuerzh/gost
+```
+
+#### Ubuntu store
+
+```bash
+sudo snap install gost
+```
 
 Getting started
 ------
