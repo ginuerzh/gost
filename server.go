@@ -11,6 +11,17 @@ import (
 // Server is a proxy server.
 type Server struct {
 	Listener Listener
+	options  *ServerOptions
+}
+
+// Init intializes server with given options.
+func (s *Server) Init(opts ...ServerOption) {
+	if s.options == nil {
+		s.options = &ServerOptions{}
+	}
+	for _, opt := range opts {
+		opt(s.options)
+	}
 }
 
 // Addr returns the address of the server
@@ -24,7 +35,9 @@ func (s *Server) Close() error {
 }
 
 // Serve serves as a proxy server.
-func (s *Server) Serve(h Handler) error {
+func (s *Server) Serve(h Handler, opts ...ServerOption) error {
+	s.Init(opts...)
+
 	if s.Listener == nil {
 		ln, err := TCPListener("")
 		if err != nil {
@@ -57,9 +70,31 @@ func (s *Server) Serve(h Handler) error {
 			return e
 		}
 		tempDelay = 0
+
+		ip := extractIP(conn.RemoteAddr())
+		if s.options.Bypass.Contains(ip.String()) {
+			log.Log("bypass", ip.String())
+			conn.Close()
+			continue
+		}
+
 		go h.Handle(conn)
 	}
+}
 
+// ServerOptions holds the options for Server.
+type ServerOptions struct {
+	Bypass *Bypass
+}
+
+// ServerOption allows a common way to set server options.
+type ServerOption func(opts *ServerOptions)
+
+// BypassServerOption sets the bypass option of ServerOptions.
+func BypassServerOption(bypass *Bypass) ServerOption {
+	return func(opts *ServerOptions) {
+		opts.Bypass = bypass
+	}
 }
 
 // Listener is a proxy server listener, just like a net.Listener.
@@ -115,4 +150,17 @@ func transport(rw1, rw2 io.ReadWriter) error {
 		err = nil
 	}
 	return err
+}
+
+func extractIP(addr net.Addr) net.IP {
+	switch v := addr.(type) {
+	case *net.IPAddr:
+		return v.IP
+	case *net.TCPAddr:
+		return v.IP
+	case *net.UDPAddr:
+		return v.IP
+	default:
+	}
+	return net.IPv4zero
 }

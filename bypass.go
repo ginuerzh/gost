@@ -1,6 +1,8 @@
 package gost
 
 import (
+	"bytes"
+	"fmt"
 	"net"
 
 	glob "github.com/gobwas/glob"
@@ -10,6 +12,7 @@ import (
 // it gives the match result of the given pattern for specific v.
 type Matcher interface {
 	Match(v string) bool
+	String() string
 }
 
 // NewMatcher creates a Matcher for the given pattern.
@@ -48,6 +51,10 @@ func (m *ipMatcher) Match(ip string) bool {
 	return m.ip.Equal(net.ParseIP(ip))
 }
 
+func (m *ipMatcher) String() string {
+	return "ip " + m.ip.String()
+}
+
 type cidrMatcher struct {
 	ipNet *net.IPNet
 }
@@ -66,8 +73,13 @@ func (m *cidrMatcher) Match(ip string) bool {
 	return m.ipNet.Contains(net.ParseIP(ip))
 }
 
+func (m *cidrMatcher) String() string {
+	return "cidr " + m.ipNet.String()
+}
+
 type domainMatcher struct {
-	glob glob.Glob
+	pattern string
+	glob    glob.Glob
 }
 
 // DomainMatcher creates a Matcher for a specific domain pattern,
@@ -75,7 +87,8 @@ type domainMatcher struct {
 // or a wildcard such as '*.exmaple.com'.
 func DomainMatcher(pattern string) Matcher {
 	return &domainMatcher{
-		glob: glob.MustCompile(pattern),
+		pattern: pattern,
+		glob:    glob.MustCompile(pattern),
 	}
 }
 
@@ -84,6 +97,10 @@ func (m *domainMatcher) Match(domain string) bool {
 		return false
 	}
 	return m.glob.Match(domain)
+}
+
+func (m *domainMatcher) String() string {
+	return "domain " + m.pattern
 }
 
 // Bypass is a filter for address (IP or domain).
@@ -116,15 +133,45 @@ func NewBypassPatterns(patterns []string, reverse bool) *Bypass {
 
 // Contains reports whether the bypass includes addr.
 func (bp *Bypass) Contains(addr string) bool {
+	if bp == nil {
+		return false
+	}
+
+	var matched bool
 	for _, matcher := range bp.matchers {
 		if matcher == nil {
 			continue
 		}
-		matched := matcher.Match(addr)
-		if (matched && !bp.reverse) ||
-			(!matched && bp.reverse) {
-			return true
+		if matcher.Match(addr) {
+			matched = true
+			break
 		}
 	}
-	return false
+	return !bp.reverse && matched ||
+		bp.reverse && !matched
+}
+
+// AddMatchers appends matchers to the bypass matcher list.
+func (bp *Bypass) AddMatchers(matchers ...Matcher) {
+	bp.matchers = append(bp.matchers, matchers...)
+}
+
+// Matchers return the bypass matcher list.
+func (bp *Bypass) Matchers() []Matcher {
+	return bp.matchers
+}
+
+// Reversed reports whether the rules of the bypass are reversed.
+func (bp *Bypass) Reversed() bool {
+	return bp.reverse
+}
+
+func (bp *Bypass) String() string {
+	b := &bytes.Buffer{}
+	fmt.Fprintf(b, "reversed: %v\n", bp.Reversed())
+	for _, m := range bp.Matchers() {
+		b.WriteString(m.String())
+		b.WriteByte('\n')
+	}
+	return b.String()
 }

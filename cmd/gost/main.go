@@ -484,7 +484,15 @@ func (r *route) serve() error {
 			}
 		}
 
+		fBypass := node.Get("bypass")
+		if fBypass == "" {
+			fBypass = "bypass" // default bypass file
+		}
+
 		srv := &gost.Server{Listener: ln}
+		srv.Init(
+			gost.BypassServerOption(parseBypass(fBypass)),
+		)
 		go srv.Serve(handler)
 	}
 
@@ -684,4 +692,30 @@ func parseStrategy(s string) gost.Strategy {
 		return &gost.RoundStrategy{}
 
 	}
+}
+
+func parseBypass(fpath string) (bypass *gost.Bypass) {
+	if fpath == "" {
+		return
+	}
+	f, err := os.Open(fpath)
+	if err != nil {
+		return
+	}
+
+	var matchers []gost.Matcher
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if n := strings.IndexByte(line, '#'); n >= 0 {
+			line = line[:n]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		matchers = append(matchers, gost.NewMatcher(line))
+	}
+	bypass = gost.NewBypass(matchers, strings.HasPrefix(fpath, "~"))
+	return
 }
