@@ -150,10 +150,15 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 		}
 	}
 
+	route, err := h.options.Chain.selectRouteFor(req.Host)
+	if err != nil {
+		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+		return
+	}
 	// forward http request
-	lastNode := h.options.Chain.LastNode()
+	lastNode := route.LastNode()
 	if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
-		h.forwardRequest(conn, req)
+		h.forwardRequest(conn, req, route)
 		return
 	}
 
@@ -162,7 +167,7 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 		host += ":80"
 	}
 
-	cc, err := h.options.Chain.Dial(host)
+	cc, err := route.Dial(host)
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), host, err)
 
@@ -197,13 +202,13 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	log.Logf("[http] %s >-< %s", cc.LocalAddr(), host)
 }
 
-func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request) {
-	if h.options.Chain.IsEmpty() {
+func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Chain) {
+	if route.IsEmpty() {
 		return
 	}
-	lastNode := h.options.Chain.LastNode()
+	lastNode := route.LastNode()
 
-	cc, err := h.options.Chain.Conn()
+	cc, err := route.Conn()
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), lastNode.Addr, err)
 

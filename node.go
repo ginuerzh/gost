@@ -25,6 +25,7 @@ type Node struct {
 	group            *NodeGroup
 	failCount        uint32
 	failTime         int64
+	Bypass           *Bypass
 }
 
 // ParseNode parses the node info.

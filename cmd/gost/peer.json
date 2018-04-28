@@ -6,5 +6,13 @@
         "socks5://:1081",
         "socks://:1082",
         "socks4a://:1083"
-    ]
+    ],
+    "bypass":{
+        "reverse": false,
+        "patterns": [
+            "10.0.0.1",
+            "192.168.0.0/24",
+            "*.example.com"
+        ]
+    }
 }

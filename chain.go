@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/go-log/log"
 )
@@ -100,11 +101,7 @@ func (c *Chain) IsEmpty() bool {
 // Dial connects to the target address addr through the chain.
 // If the chain is empty, it will use the net.Dial directly.
 func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
-	if c.IsEmpty() {
-		return net.DialTimeout("tcp", addr, DialTimeout)
-	}
-
-	for i := 0; i < c.Retries+1; i++ {
+	for i := 0; i < c.Retries; i++ {
 		conn, err = c.dial(addr)
 		if err == nil {
 			break
@@ -114,9 +111,12 @@ func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
 }
 
 func (c *Chain) dial(addr string) (net.Conn, error) {
-	route, err := c.selectRoute()
+	route, err := c.selectRouteFor(addr)
 	if err != nil {
 		return nil, err
+	}
+	if route.IsEmpty() {
+		return net.DialTimeout("tcp", addr, DialTimeout)
 	}
 
 	conn, err := route.getConn()
@@ -135,7 +135,7 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 // Conn obtains a handshaked connection to the last node of the chain.
 // If the chain is empty, it returns an ErrEmptyChain error.
 func (c *Chain) Conn() (conn net.Conn, err error) {
-	for i := 0; i < c.Retries+1; i++ {
+	for i := 0; i < c.Retries; i++ {
 		var route *Chain
 		route, err = c.selectRoute()
 		if err != nil {
@@ -211,6 +211,53 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 		if err != nil {
 			return nil, err
 		}
+		buf.WriteString(fmt.Sprintf("%s -> ", node.String()))
+
+		if node.Client.Transporter.Multiplex() {
+			node.DialOptions = append(node.DialOptions,
+				ChainDialOption(route),
+			)
+			route = newRoute() // cutoff the chain for multiplex.
+			route.Retries = c.Retries
+		}
+
+		route.AddNode(node)
+	}
+	if Debug {
+		log.Log("select route:", buf.String())
+	}
+	return
+}
+
+// selectRouteFor selects route with bypass testing.
+func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
+	if c.IsEmpty() || c.isRoute {
+		return c, nil
+	}
+
+	buf := bytes.Buffer{}
+	route = newRoute()
+	route.Retries = c.Retries
+
+	for _, group := range c.nodeGroups {
+		var node Node
+		node, err = group.Next()
+		if err != nil {
+			return
+		}
+
+		// NOTE: IPv6 will not work.
+		if strings.Contains(addr, ":") {
+			addr = strings.Split(addr, ":")[0]
+		}
+		if node.Bypass.Contains(addr) {
+			if Debug {
+				buf.WriteString(fmt.Sprintf("[%d@bypass: %s]", node.ID, addr))
+				log.Log("select route:", buf.String())
+			}
+			return
+		}
+
 		buf.WriteString(fmt.Sprintf("%s -> ", node.String()))
 
 		if node.Client.Transporter.Multiplex() {

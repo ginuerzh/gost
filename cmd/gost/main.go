@@ -92,7 +92,11 @@ type route struct {
 
 func (r *route) initChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
+
 	chain.Retries = r.Retries
+	if chain.Retries == 0 {
+		chain.Retries = 1
+	}
 
 	gid := 1 // group ID
 
@@ -141,6 +145,17 @@ func (r *route) initChain() (*gost.Chain, error) {
 			}
 
 			ngroup.AddNode(nodes...)
+		}
+
+		var bypass *gost.Bypass
+		if peerCfg.Bypass != nil {
+			bypass = gost.NewBypassPatterns(peerCfg.Bypass.Patterns, peerCfg.Bypass.Reverse)
+		}
+		nodes = ngroup.Nodes()
+		for i := range nodes {
+			if nodes[i].Bypass == nil {
+				nodes[i].Bypass = bypass // use global bypass if local bypass does not exist.
+			}
 		}
 
 		chain.AddNodeGroup(ngroup)
@@ -297,9 +312,12 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		Transporter: tr,
 	}
 
+	node.Bypass = parseBypass(node.Get("bypass"))
+
 	ips := parseIP(node.Get("ip"), sport)
 	for _, ip := range ips {
 		node.Addr = ip
+		// override the default node address
 		node.HandshakeOptions = append(handshakeOptions, gost.AddrHandshakeOption(ip))
 		nodes = append(nodes, node)
 	}
@@ -484,14 +502,9 @@ func (r *route) serve() error {
 			}
 		}
 
-		fBypass := node.Get("bypass")
-		if fBypass == "" {
-			fBypass = "bypass" // default bypass file
-		}
-
 		srv := &gost.Server{Listener: ln}
 		srv.Init(
-			gost.BypassServerOption(parseBypass(fBypass)),
+			gost.BypassServerOption(parseBypass(node.Get("bypass"))),
 		)
 		go srv.Serve(handler)
 	}
@@ -657,6 +670,12 @@ type peerConfig struct {
 	MaxFails    int      `json:"max_fails"`
 	FailTimeout int      `json:"fail_timeout"`
 	Nodes       []string `json:"nodes"`
+	Bypass      *bypass  `json:"bypass"` // global bypass
+}
+
+type bypass struct {
+	Reverse  bool     `json:"reverse"`
+	Patterns []string `json:"patterns"`
 }
 
 func loadPeerConfig(peer string) (config peerConfig, err error) {
@@ -694,16 +713,29 @@ func parseStrategy(s string) gost.Strategy {
 	}
 }
 
-func parseBypass(fpath string) (bypass *gost.Bypass) {
-	if fpath == "" {
-		return
+func parseBypass(s string) *gost.Bypass {
+	if s == "" {
+		return nil
 	}
-	f, err := os.Open(fpath)
-	if err != nil {
-		return
+	var matchers []gost.Matcher
+	var reversed bool
+	if strings.HasPrefix(s, "~") {
+		reversed = true
+		s = strings.TrimLeft(s, "~")
 	}
 
-	var matchers []gost.Matcher
+	f, err := os.Open(s)
+	if err != nil {
+		for _, s := range strings.Split(s, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			matchers = append(matchers, gost.NewMatcher(s))
+		}
+		return gost.NewBypass(matchers, reversed)
+	}
+
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -716,6 +748,5 @@ func parseBypass(fpath string) (bypass *gost.Bypass) {
 		}
 		matchers = append(matchers, gost.NewMatcher(line))
 	}
-	bypass = gost.NewBypass(matchers, strings.HasPrefix(fpath, "~"))
-	return
+	return gost.NewBypass(matchers, reversed)
 }
