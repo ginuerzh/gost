@@ -150,6 +150,7 @@ func (r *route) initChain() (*gost.Chain, error) {
 }
 
 func parseChainNode(ns string) (nodes []gost.Node, err error) {
+
 	node, err := gost.ParseNode(ns)
 	if err != nil {
 		return
@@ -247,6 +248,20 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
 		tr = gost.ObfsHTTPTransporter()
+	case "p2p":
+		config := &gost.P2PConfig{
+			Peer:      node.Get("ircPeer"),
+			User:      node.Get("ircUser"),
+			Pass:      node.Get("ircPass"),
+			Addr:      node.Addr,
+			PingIntvl: time.Second * time.Duration(node.GetInt("pingIntvl")),
+			Timeout:   time.Second * time.Duration(node.GetInt("timeout")),
+			StunAddr:  node.Get("stunAddr"),
+		}
+		tr, err = gost.P2PTransporter(config)
+		if err != nil {
+			return
+		}
 	default:
 		tr = gost.TCPTransporter()
 	}
@@ -418,6 +433,16 @@ func (r *route) serve() error {
 			ln, err = gost.Obfs4Listener(node.Addr)
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
+		case "p2p":
+			config := &gost.P2PConfig{
+				User:      node.Get("ircUser"),
+				Pass:      node.Get("ircPass"),
+				Addr:      node.Addr,
+				PingIntvl: time.Second * time.Duration(node.GetInt("pingIntvl")),
+				Timeout:   time.Second * time.Duration(node.GetInt("timeout")),
+				StunAddr:  node.Get("stunAddr"),
+			}
+			ln, err = gost.P2PListener(config)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
