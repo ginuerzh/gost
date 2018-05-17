@@ -3,7 +3,7 @@ package flowcontrol
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -13,6 +13,8 @@ type streamFlowController struct {
 	baseFlowController
 
 	streamID protocol.StreamID
+
+	queueWindowUpdate func()
 
 	connection              connectionFlowControllerI
 	contributesToConnection bool // does the stream contribute to connection level flow control
@@ -30,18 +32,22 @@ func NewStreamFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
+	queueWindowUpdate func(protocol.StreamID),
 	rttStats *congestion.RTTStats,
+	logger utils.Logger,
 ) StreamFlowController {
 	return &streamFlowController{
 		streamID:                streamID,
 		contributesToConnection: contributesToConnection,
 		connection:              cfc.(connectionFlowControllerI),
+		queueWindowUpdate:       func() { queueWindowUpdate(streamID) },
 		baseFlowController: baseFlowController{
-			rttStats:                  rttStats,
-			receiveWindow:             receiveWindow,
-			receiveWindowIncrement:    receiveWindow,
-			maxReceiveWindowIncrement: maxReceiveWindow,
-			sendWindow:                initialSendWindow,
+			rttStats:             rttStats,
+			receiveWindow:        receiveWindow,
+			receiveWindowSize:    receiveWindow,
+			maxReceiveWindowSize: maxReceiveWindow,
+			sendWindow:           initialSendWindow,
+			logger:               logger,
 		},
 	}
 }
@@ -102,9 +108,6 @@ func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	window := c.baseFlowController.sendWindowSize()
 	if c.contributesToConnection {
 		window = utils.MinByteCount(window, c.connection.SendWindowSize())
@@ -112,17 +115,44 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return window
 }
 
-func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+// IsBlocked says if it is blocked by stream-level flow control.
+// If it is blocked, the offset is returned.
+func (c *streamFlowController) IsBlocked() (bool, protocol.ByteCount) {
+	if c.sendWindowSize() != 0 {
+		return false, 0
+	}
+	return true, c.sendWindow
+}
 
-	oldWindowIncrement := c.receiveWindowIncrement
+func (c *streamFlowController) MaybeQueueWindowUpdate() {
+	c.mutex.Lock()
+	hasWindowUpdate := !c.receivedFinalOffset && c.hasWindowUpdate()
+	c.mutex.Unlock()
+	if hasWindowUpdate {
+		c.queueWindowUpdate()
+	}
+	if c.contributesToConnection {
+		c.connection.MaybeQueueWindowUpdate()
+	}
+}
+
+func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
+	// don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
+	c.mutex.Lock()
+	// if we already received the final offset for this stream, the peer won't need any additional flow control credit
+	if c.receivedFinalOffset {
+		c.mutex.Unlock()
+		return 0
+	}
+
+	oldWindowSize := c.receiveWindowSize
 	offset := c.baseFlowController.getWindowUpdate()
-	if c.receiveWindowIncrement > oldWindowIncrement { // auto-tuning enlarged the window increment
-		utils.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowIncrement/(1<<10))
+	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
+		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
 		if c.contributesToConnection {
-			c.connection.EnsureMinimumWindowIncrement(protocol.ByteCount(float64(c.receiveWindowIncrement) * protocol.ConnectionFlowControlMultiplier))
+			c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
 		}
 	}
+	c.mutex.Unlock()
 	return offset
 }

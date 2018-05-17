@@ -10,35 +10,43 @@ import (
 // A StreamBlockedFrame in QUIC
 type StreamBlockedFrame struct {
 	StreamID protocol.StreamID
+	Offset   protocol.ByteCount
 }
 
-// ParseStreamBlockedFrame parses a STREAM_BLOCKED frame
-func ParseStreamBlockedFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamBlockedFrame, error) {
-	frame := &StreamBlockedFrame{}
-
-	// read the TypeByte
-	if _, err := r.ReadByte(); err != nil {
+// parseStreamBlockedFrame parses a STREAM_BLOCKED frame
+func parseStreamBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamBlockedFrame, error) {
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
-	sid, err := utils.GetByteOrder(version).ReadUint32(r)
+	sid, err := utils.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
-	frame.StreamID = protocol.StreamID(sid)
-	return frame, nil
+	offset, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, err
+	}
+	return &StreamBlockedFrame{
+		StreamID: protocol.StreamID(sid),
+		Offset:   protocol.ByteCount(offset),
+	}, nil
 }
 
 // Write writes a STREAM_BLOCKED frame
 func (f *StreamBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesMaxDataFrame() {
+	if !version.UsesIETFFrameFormat() {
 		return (&blockedFrameLegacy{StreamID: f.StreamID}).Write(b, version)
 	}
 	b.WriteByte(0x09)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
+	utils.WriteVarInt(b, uint64(f.StreamID))
+	utils.WriteVarInt(b, uint64(f.Offset))
 	return nil
 }
 
-// MinLength of a written frame
-func (f *StreamBlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return 1 + 4, nil
+// Length of a written frame
+func (f *StreamBlockedFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+	if !version.UsesIETFFrameFormat() {
+		return 1 + 4
+	}
+	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.Offset))
 }

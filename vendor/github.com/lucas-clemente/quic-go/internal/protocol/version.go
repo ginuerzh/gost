@@ -1,11 +1,14 @@
 package protocol
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 // VersionNumber is a version number as int
-type VersionNumber int
+type VersionNumber uint32
 
 // gQUIC version range as defined in the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
 const (
@@ -18,13 +21,18 @@ const (
 	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9 + iota
 	VersionTLS      VersionNumber = 101
 	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
-	VersionUnknown  VersionNumber = -1
+	VersionUnknown  VersionNumber = math.MaxUint32
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
 	Version39,
+}
+
+// IsValidVersion says if the version is known to quic-go
+func IsValidVersion(v VersionNumber) bool {
+	return v == VersionTLS || IsSupportedVersion(SupportedVersions, v)
 }
 
 // UsesTLS says if this QUIC version uses TLS 1.3 for the handshake
@@ -44,7 +52,7 @@ func (vn VersionNumber) String() string {
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
-		return fmt.Sprintf("%d", vn)
+		return fmt.Sprintf("%#x", uint32(vn))
 	}
 }
 
@@ -64,9 +72,14 @@ func (vn VersionNumber) CryptoStreamID() StreamID {
 	return 0
 }
 
-// UsesMaxDataFrame tells if this version uses MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED instead of WINDOW_UDPATE and BLOCKED frames
-func (vn VersionNumber) UsesMaxDataFrame() bool {
-	return vn.CryptoStreamID() == 0
+// UsesIETFFrameFormat tells if this version uses the IETF frame format
+func (vn VersionNumber) UsesIETFFrameFormat() bool {
+	return vn != Version39
+}
+
+// UsesStopWaitingFrames tells if this version uses STOP_WAITING frames
+func (vn VersionNumber) UsesStopWaitingFrames() bool {
+	return vn == Version39
 }
 
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
@@ -111,4 +124,23 @@ func ChooseSupportedVersion(ours, theirs []VersionNumber) (VersionNumber, bool) 
 		}
 	}
 	return 0, false
+}
+
+// generateReservedVersion generates a reserved version number (v & 0x0f0f0f0f == 0x0a0a0a0a)
+func generateReservedVersion() VersionNumber {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
+	return VersionNumber((binary.BigEndian.Uint32(b) | 0x0a0a0a0a) & 0xfafafafa)
+}
+
+// GetGreasedVersions adds one reserved version number to a slice of version numbers, at a random position
+func GetGreasedVersions(supported []VersionNumber) []VersionNumber {
+	b := make([]byte, 1)
+	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
+	randPos := int(b[0]) % (len(supported) + 1)
+	greased := make([]VersionNumber, len(supported)+1)
+	copy(greased, supported[:randPos])
+	greased[randPos] = generateReservedVersion()
+	copy(greased[randPos+1:], supported[randPos:])
+	return greased
 }

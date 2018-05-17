@@ -9,8 +9,8 @@ import (
 // A PingFrame is a ping frame
 type PingFrame struct{}
 
-// ParsePingFrame parses a Ping frame
-func ParsePingFrame(r *bytes.Reader, version protocol.VersionNumber) (*PingFrame, error) {
+// parsePingFrame parses a Ping frame
+func parsePingFrame(r *bytes.Reader, version protocol.VersionNumber) (*PingFrame, error) {
 	frame := &PingFrame{}
 
 	_, err := r.ReadByte()
@@ -27,7 +27,7 @@ func (f *PingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error
 	return nil
 }
 
-// MinLength of a written frame
-func (f *PingFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return 1, nil
+// Length of a written frame
+func (f *PingFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+	return 1
 }

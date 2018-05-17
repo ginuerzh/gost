@@ -11,16 +11,15 @@ type blockedFrameLegacy struct {
 	StreamID protocol.StreamID
 }
 
-// ParseBlockedFrameLegacy parses a BLOCKED frame (in gQUIC format)
+// parseBlockedFrameLegacy parses a BLOCKED frame (in gQUIC format)
 // The frame returned is
 // * a STREAM_BLOCKED frame, if the BLOCKED applies to a stream
 // * a BLOCKED frame, if the BLOCKED applies to the connection
-func ParseBlockedFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (Frame, error) {
-	// read the TypeByte
-	if _, err := r.ReadByte(); err != nil {
+func parseBlockedFrameLegacy(r *bytes.Reader, _ protocol.VersionNumber) (Frame, error) {
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
-	streamID, err := utils.GetByteOrder(version).ReadUint32(r)
+	streamID, err := utils.BigEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
@@ -31,8 +30,8 @@ func ParseBlockedFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (F
 }
 
 //Write writes a BLOCKED frame
-func (f *blockedFrameLegacy) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *blockedFrameLegacy) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x05)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
+	utils.BigEndian.WriteUint32(b, uint32(f.StreamID))
 	return nil
 }

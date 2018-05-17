@@ -14,8 +14,8 @@ clone_folder: c:\gopath\src\github.com\lucas-clemente\quic-go
 
 install:
   - rmdir c:\go /s /q
-  - appveyor DownloadFile https://storage.googleapis.com/golang/go1.9.2.windows-amd64.zip
-  - 7z x go1.9.2.windows-amd64.zip -y -oC:\ > NUL
+  - appveyor DownloadFile https://storage.googleapis.com/golang/go1.10.2.windows-amd64.zip
+  - 7z x go1.10.2.windows-amd64.zip -y -oC:\ > NUL
   - set PATH=%PATH%;%GOPATH%\bin\windows_%GOARCH%;%GOPATH%\bin
   - echo %PATH%
   - echo %GOPATH%

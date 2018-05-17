@@ -1,6 +1,18 @@
 # Changelog
 
-## v0.6.0 (unreleased)
+## v0.8.0 (unreleased)
+
+- Add support for unidirectional streams (for IETF QUIC).
+- Add a `quic.Config` option for the maximum number of incoming streams.
+
+## v0.7.0 (2018-02-03)
+
+- The lower boundary for packets included in ACKs is now derived, and the value sent in STOP_WAITING frames is ignored.
+- Remove `DialNonFWSecure` and `DialAddrNonFWSecure`.
+- Expose the `ConnectionState` in the `Session` (experimental API).
+- Implement packet pacing.
+
+## v0.6.0 (2017-12-12)
 
 - Add support for QUIC 39, drop support for QUIC 35 - 37
 - Added `quic.Config` options for maximal flow control windows

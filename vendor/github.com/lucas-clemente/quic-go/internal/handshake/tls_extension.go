@@ -9,13 +9,13 @@ type transportParameterID uint16
 const quicTLSExtensionType = 26
 
 const (
-	initialMaxStreamDataParameterID transportParameterID = iota
-	initialMaxDataParameterID
-	initialMaxStreamIDParameterID
-	idleTimeoutParameterID
-	omitConnectionIDParameterID
-	maxPacketSizeParameterID
-	statelessResetTokenParameterID
+	initialMaxStreamDataParameterID  transportParameterID = 0x0
+	initialMaxDataParameterID        transportParameterID = 0x1
+	initialMaxBidiStreamsParameterID transportParameterID = 0x2
+	idleTimeoutParameterID           transportParameterID = 0x3
+	maxPacketSizeParameterID         transportParameterID = 0x5
+	statelessResetTokenParameterID   transportParameterID = 0x6
+	initialMaxUniStreamsParameterID  transportParameterID = 0x8
 )
 
 type transportParameter struct {
@@ -24,12 +24,12 @@ type transportParameter struct {
 }
 
 type clientHelloTransportParameters struct {
-	NegotiatedVersion uint32               // actually a protocol.VersionNumber
-	InitialVersion    uint32               // actually a protocol.VersionNumber
-	Parameters        []transportParameter `tls:"head=2"`
+	InitialVersion uint32               // actually a protocol.VersionNumber
+	Parameters     []transportParameter `tls:"head=2"`
 }
 
 type encryptedExtensionsTransportParameters struct {
+	NegotiatedVersion uint32               // actually a protocol.VersionNumber
 	SupportedVersions []uint32             `tls:"head=1"` // actually a protocol.VersionNumber
 	Parameters        []transportParameter `tls:"head=2"`
 }

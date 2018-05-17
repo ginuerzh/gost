@@ -72,3 +72,13 @@ The available annotations right now are all related to vectors:
   fragment[TLSPlaintext.length]`.  Note, however, that in cases where the length
   immediately preceds the array, these can be reframed as vectors with
   appropriate sizes.
+
+
+QUIC Extensions Syntax
+======================
+syntax also supports some minor extensions to allow implementing QUIC.
+
+* The `varint` annotation describes a QUIC-style varint
+* `head=none` means no header, i.e., the bytes are encoded directly on the wire.
+  On reading, the decoder will consume all available data.
+* `head=varint` means to encode the header as a varint

@@ -18,6 +18,12 @@ library](https://golang.org/pkg/crypto/tls/), especially where TLS 1.3 aligns
 with earlier TLS versions.  However, unnecessary parts will be ruthlessly cut
 off.
 
+## DTLS Support
+
+Mint has partial support for DTLS, but that support is not yet complete
+and may still contain serious defects.
+
+
 ## Quickstart
 
 Installation is the same as for any other Go package:

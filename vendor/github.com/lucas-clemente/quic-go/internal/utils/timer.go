@@ -21,7 +21,7 @@ func (t *Timer) Chan() <-chan time.Time {
 
 // Reset the timer, no matter whether the value was read or not
 func (t *Timer) Reset(deadline time.Time) {
-	if deadline.Equal(t.deadline) {
+	if deadline.Equal(t.deadline) && !t.read {
 		// No need to reset the timer
 		return
 	}
@@ -31,7 +31,7 @@ func (t *Timer) Reset(deadline time.Time) {
 	if !t.t.Stop() && !t.read {
 		<-t.t.C
 	}
-	t.t.Reset(deadline.Sub(time.Now()))
+	t.t.Reset(time.Until(deadline))
 
 	t.read = false
 	t.deadline = deadline

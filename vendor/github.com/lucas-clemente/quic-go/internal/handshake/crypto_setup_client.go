@@ -38,23 +38,24 @@ type cryptoSetupClient struct {
 	lastSentCHLO     []byte
 	certManager      crypto.CertManager
 
-	divNonceChan         chan []byte
+	divNonceChan         chan struct{}
 	diversificationNonce []byte
 
 	clientHelloCounter int
 	serverVerified     bool // has the certificate chain and the proof already been verified
 	keyDerivation      QuicCryptoKeyDerivationFunction
-	keyExchange        KeyExchangeFunction
 
 	receivedSecurePacket bool
 	nullAEAD             crypto.AEAD
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
 
-	paramsChan  chan<- TransportParameters
-	aeadChanged chan<- protocol.EncryptionLevel
+	paramsChan     chan<- TransportParameters
+	handshakeEvent chan<- struct{}
 
 	params *TransportParameters
+
+	logger utils.Logger
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -74,15 +75,17 @@ func NewCryptoSetupClient(
 	tlsConfig *tls.Config,
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
-	aeadChanged chan<- protocol.EncryptionLevel,
+	handshakeEvent chan<- struct{},
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
+	logger utils.Logger,
 ) (CryptoSetup, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
 	if err != nil {
 		return nil, err
 	}
-	return &cryptoSetupClient{
+	divNonceChan := make(chan struct{})
+	cs := &cryptoSetupClient{
 		cryptoStream:       cryptoStream,
 		hostname:           hostname,
 		connID:             connID,
@@ -90,19 +93,20 @@ func NewCryptoSetupClient(
 		certManager:        crypto.NewCertManager(tlsConfig),
 		params:             params,
 		keyDerivation:      crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:        getEphermalKEX,
 		nullAEAD:           nullAEAD,
 		paramsChan:         paramsChan,
-		aeadChanged:        aeadChanged,
+		handshakeEvent:     handshakeEvent,
 		initialVersion:     initialVersion,
 		negotiatedVersions: negotiatedVersions,
-		divNonceChan:       make(chan []byte),
-	}, nil
+		divNonceChan:       divNonceChan,
+		logger:             logger,
+	}
+	return cs, nil
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
 	messageChan := make(chan HandshakeMessage)
-	errorChan := make(chan error)
+	errorChan := make(chan error, 1)
 
 	go func() {
 		for {
@@ -116,37 +120,30 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 	}()
 
 	for {
-		err := h.maybeUpgradeCrypto()
-		if err != nil {
+		if err := h.maybeUpgradeCrypto(); err != nil {
 			return err
 		}
 
 		h.mutex.RLock()
 		sendCHLO := h.secureAEAD == nil
 		h.mutex.RUnlock()
-
 		if sendCHLO {
-			err = h.sendCHLO()
-			if err != nil {
+			if err := h.sendCHLO(); err != nil {
 				return err
 			}
 		}
 
 		var message HandshakeMessage
 		select {
-		case divNonce := <-h.divNonceChan:
-			if len(h.diversificationNonce) != 0 && !bytes.Equal(h.diversificationNonce, divNonce) {
-				return errConflictingDiversificationNonces
-			}
-			h.diversificationNonce = divNonce
+		case <-h.divNonceChan:
 			// there's no message to process, but we should try upgrading the crypto again
 			continue
 		case message = <-messageChan:
-		case err = <-errorChan:
+		case err := <-errorChan:
 			return err
 		}
 
-		utils.Debugf("Got %s", message)
+		h.logger.Debugf("Got %s", message)
 		switch message.Tag {
 		case TagREJ:
 			if err := h.handleREJMessage(message.Data); err != nil {
@@ -159,8 +156,8 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			}
 			// blocks until the session has received the parameters
 			h.paramsChan <- *params
-			h.aeadChanged <- protocol.EncryptionForwardSecure
-			close(h.aeadChanged)
+			h.handshakeEvent <- struct{}{}
+			close(h.handshakeEvent)
 		default:
 			return qerr.InvalidCryptoMessageType
 		}
@@ -211,7 +208,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 
 		err = h.certManager.Verify(h.hostname)
 		if err != nil {
-			utils.Infof("Certificate validation failed: %s", err.Error())
+			h.logger.Infof("Certificate validation failed: %s", err.Error())
 			return qerr.ProofInvalid
 		}
 	}
@@ -219,7 +216,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	if h.serverConfig != nil && len(h.proof) != 0 && h.certManager.GetLeafCert() != nil {
 		validProof := h.certManager.VerifyServerProof(h.proof, h.chloForSignature, h.serverConfig.Get())
 		if !validProof {
-			utils.Infof("Server proof verification failed")
+			h.logger.Infof("Server proof verification failed")
 			return qerr.ProofInvalid
 		}
 
@@ -277,6 +274,7 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) (*Trans
 	if err != nil {
 		return nil, err
 	}
+	h.logger.Debugf("Creating AEAD for forward-secure encryption. Stopping to accept all lower encryption levels.")
 
 	params, err := readHelloMap(cryptoData)
 	if err != nil {
@@ -322,6 +320,7 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 	if h.secureAEAD != nil {
 		data, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
+			h.logger.Debugf("Received first secure packet. Stopping to accept unencrypted packets.")
 			h.receivedSecurePacket = true
 			return data, protocol.EncryptionSecure, nil
 		}
@@ -373,16 +372,28 @@ func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 	return nil, errors.New("CryptoSetupClient: no encryption level specified")
 }
 
-func (h *cryptoSetupClient) DiversificationNonce() []byte {
-	panic("not needed for cryptoSetupClient")
+func (h *cryptoSetupClient) ConnectionState() ConnectionState {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	return ConnectionState{
+		HandshakeComplete: h.forwardSecureAEAD != nil,
+		PeerCertificates:  h.certManager.GetChain(),
+	}
 }
 
-func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
-	h.divNonceChan <- data
-}
-
-func (h *cryptoSetupClient) GetNextPacketType() protocol.PacketType {
-	panic("not needed for cryptoSetupServer")
+func (h *cryptoSetupClient) SetDiversificationNonce(divNonce []byte) error {
+	h.mutex.Lock()
+	if len(h.diversificationNonce) > 0 {
+		defer h.mutex.Unlock()
+		if !bytes.Equal(h.diversificationNonce, divNonce) {
+			return errConflictingDiversificationNonces
+		}
+		return nil
+	}
+	h.diversificationNonce = divNonce
+	h.mutex.Unlock()
+	h.divNonceChan <- struct{}{}
+	return nil
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {
@@ -403,7 +414,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 		Data: tags,
 	}
 
-	utils.Debugf("Sending %s", message)
+	h.logger.Debugf("Sending %s", message)
 	message.Write(b)
 
 	_, err = h.cryptoStream.Write(b.Bytes())
@@ -462,7 +473,7 @@ func (h *cryptoSetupClient) addPadding(tags map[Tag][]byte) {
 	for _, tag := range tags {
 		size += 8 + len(tag) // 4 bytes for the tag + 4 bytes for the offset + the length of the data
 	}
-	paddingSize := protocol.ClientHelloMinimumSize - size
+	paddingSize := protocol.MinClientHelloSize - size
 	if paddingSize > 0 {
 		tags[TagPAD] = bytes.Repeat([]byte{0}, paddingSize)
 	}
@@ -500,10 +511,9 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 		if err != nil {
 			return err
 		}
-
-		h.aeadChanged <- protocol.EncryptionSecure
+		h.logger.Debugf("Creating AEAD for secure encryption.")
+		h.handshakeEvent <- struct{}{}
 	}
-
 	return nil
 }
 
