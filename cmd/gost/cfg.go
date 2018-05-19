@@ -17,13 +17,18 @@ import (
 	"github.com/ginuerzh/gost"
 )
 
+var (
+	defaultCertFile = "cert.pem"
+	defaultKeyFile  = "key.pem"
+)
+
 // Load the certificate from cert and key files, will use the default certificate if the provided info are invalid.
 func tlsConfig(certFile, keyFile string) (*tls.Config, error) {
 	if certFile == "" {
-		certFile = "cert.pem"
+		certFile = defaultCertFile
 	}
 	if keyFile == "" {
-		keyFile = "key.pem"
+		keyFile = defaultKeyFile
 	}
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {

@@ -57,15 +57,20 @@ func init() {
 }
 
 func main() {
-	// generate random self-signed certificate.
-	cert, err := gost.GenCertificate()
+	// NOTE: as of 2.6, you can use custom cert/key files to initialize the default certificate.
+	config, err := tlsConfig(defaultCertFile, defaultKeyFile)
 	if err != nil {
-		log.Log(err)
-		os.Exit(1)
+		// generate random self-signed certificate.
+		cert, err := gost.GenCertificate()
+		if err != nil {
+			log.Log(err)
+			os.Exit(1)
+		}
+		config = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
 	}
-	gost.DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
+	gost.DefaultTLSConfig = config
 
 	for _, route := range routes {
 		if err := route.serve(); err != nil {
