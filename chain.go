@@ -130,11 +130,7 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 		if err == nil {
 			addrs, er := c.Resolver.Resolve(host)
 			if er != nil {
-				log.Logf("[resolver] %s: %v", addr, er)
-				return nil, er
-			}
-			if Debug {
-				log.Logf("[resolver] %s %v", addr, addrs)
+				log.Logf("[resolver] %s: %v", host, er)
 			}
 			if len(addrs) > 0 {
 				addr = net.JoinHostPort(addrs[0].IP.String(), port)
@@ -280,7 +276,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 		if node.Bypass.Contains(addr) {
 			if Debug {
 				buf.WriteString(fmt.Sprintf("[%d@bypass: %s]", node.ID, addr))
-				log.Log("select route:", buf.String())
+				log.Log("[route]", buf.String())
 			}
 			return
 		}
@@ -301,7 +297,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 	route.Resolver = c.Resolver
 
 	if Debug {
-		log.Log("select route:", buf.String())
+		log.Log("[route]", buf.String())
 	}
 	return
 }

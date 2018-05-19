@@ -506,7 +506,9 @@ func (r *route) serve() error {
 		)
 
 		chain.Resolver = parseResolver(node.Get("dns"))
-
+		if gost.Debug {
+			log.Logf("[resolver]\n%v", chain.Resolver)
+		}
 		go srv.Serve(handler)
 	}
 

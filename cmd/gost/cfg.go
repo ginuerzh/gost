@@ -266,6 +266,7 @@ func parseResolver(cfg string) gost.Resolver {
 		return nil
 	}
 	timeout := 30 * time.Second
+	ttl := 60 * time.Second
 	var nss []gost.NameServer
 
 	f, err := os.Open(cfg)
@@ -288,7 +289,7 @@ func parseResolver(cfg string) gost.Resolver {
 				})
 			}
 		}
-		return gost.NewResolver(nss, timeout)
+		return gost.NewResolver(nss, timeout, ttl)
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -312,11 +313,18 @@ func parseResolver(cfg string) gost.Resolver {
 			continue
 		}
 
-		if ss[0] == "timeout" {
+		if strings.ToLower(ss[0]) == "timeout" {
 			if len(ss) >= 2 {
 				if n, _ := strconv.Atoi(ss[1]); n > 0 {
 					timeout = time.Second * time.Duration(n)
 				}
+			}
+			continue
+		}
+		if strings.ToLower(ss[0]) == "ttl" {
+			if len(ss) >= 2 {
+				n, _ := strconv.Atoi(ss[1])
+				ttl = time.Second * time.Duration(n)
 			}
 			continue
 		}
@@ -335,5 +343,5 @@ func parseResolver(cfg string) gost.Resolver {
 		}
 		nss = append(nss, ns)
 	}
-	return gost.NewResolver(nss, timeout)
+	return gost.NewResolver(nss, timeout, ttl)
 }
