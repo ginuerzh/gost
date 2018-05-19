@@ -19,6 +19,7 @@ var (
 type Chain struct {
 	isRoute    bool
 	Retries    int
+	Resolver   Resolver
 	nodeGroups []*NodeGroup
 }
 
@@ -101,7 +102,15 @@ func (c *Chain) IsEmpty() bool {
 // Dial connects to the target address addr through the chain.
 // If the chain is empty, it will use the net.Dial directly.
 func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
-	for i := 0; i < c.Retries; i++ {
+	var retries int
+	if c != nil {
+		retries = c.Retries
+	}
+	if retries == 0 {
+		retries = 1
+	}
+
+	for i := 0; i < retries; i++ {
 		conn, err = c.dial(addr)
 		if err == nil {
 			break
@@ -115,6 +124,18 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if c != nil && c.Resolver != nil {
+		host, port, err := net.SplitHostPort(addr)
+		if err == nil {
+			addrs, _ := c.Resolver.Resolve(host)
+			log.Log(addr, addrs)
+			if len(addrs) > 0 {
+				addr = net.JoinHostPort(addrs[0].IP.String(), port)
+			}
+		}
+	}
+
 	if route.IsEmpty() {
 		return net.DialTimeout("tcp", addr, DialTimeout)
 	}
@@ -204,7 +225,6 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 
 	buf := bytes.Buffer{}
 	route = newRoute()
-	route.Retries = c.Retries
 
 	for _, group := range c.nodeGroups {
 		node, err := group.Next()
@@ -218,11 +238,13 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 				ChainDialOption(route),
 			)
 			route = newRoute() // cutoff the chain for multiplex.
-			route.Retries = c.Retries
 		}
 
 		route.AddNode(node)
 	}
+	route.Retries = c.Retries
+	route.Resolver = c.Resolver
+
 	if Debug {
 		log.Log("select route:", buf.String())
 	}
@@ -237,7 +259,6 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 
 	buf := bytes.Buffer{}
 	route = newRoute()
-	route.Retries = c.Retries
 
 	for _, group := range c.nodeGroups {
 		var node Node
@@ -265,11 +286,14 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 				ChainDialOption(route),
 			)
 			route = newRoute() // cutoff the chain for multiplex.
-			route.Retries = c.Retries
 		}
 
 		route.AddNode(node)
 	}
+
+	route.Retries = c.Retries
+	route.Resolver = c.Resolver
+
 	if Debug {
 		log.Log("select route:", buf.String())
 	}

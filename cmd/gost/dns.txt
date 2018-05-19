@@ -1,0 +1,10 @@
+# ip[:port]  [protocol]  [hostname]
+
+# resolver timeout
+timeout     10
+
+1.1.1.1:853 tls     cloudflare-dns.com
+8.8.8.8
+8.8.8.8     tcp
+1.1.1.1     udp
+1.1.1.1:53  tcp
