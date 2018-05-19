@@ -128,8 +128,14 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 	if c != nil && c.Resolver != nil {
 		host, port, err := net.SplitHostPort(addr)
 		if err == nil {
-			addrs, _ := c.Resolver.Resolve(host)
-			log.Log(addr, addrs)
+			addrs, er := c.Resolver.Resolve(host)
+			if er != nil {
+				log.Logf("[resolver] %s: %v", addr, er)
+				return nil, er
+			}
+			if Debug {
+				log.Logf("[resolver] %s %v", addr, addrs)
+			}
 			if len(addrs) > 0 {
 				addr = net.JoinHostPort(addrs[0].IP.String(), port)
 			}

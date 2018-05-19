@@ -1,7 +1,7 @@
-# ip[:port]  [protocol]  [hostname]
-
-# resolver timeout
+# resolver timeout, default 30s.
 timeout     10
+
+# ip[:port]  [protocol]  [hostname]
 
 1.1.1.1:853 tls     cloudflare-dns.com
 8.8.8.8

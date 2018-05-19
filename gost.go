@@ -44,19 +44,19 @@ var (
 )
 
 var (
-	// DefaultTLSConfig is a default TLS config for internal use
+	// DefaultTLSConfig is a default TLS config for internal use.
 	DefaultTLSConfig *tls.Config
 
-	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket
+	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket.
 	DefaultUserAgent = "Chrome/60.0.3112.90"
 )
 
-// SetLogger sets a new logger for internal log system
+// SetLogger sets a new logger for internal log system.
 func SetLogger(logger log.Logger) {
 	log.DefaultLogger = logger
 }
 
-// GenCertificate generates a random TLS certificate
+// GenCertificate generates a random TLS certificate.
 func GenCertificate() (cert tls.Certificate, err error) {
 	rawCert, rawKey, err := generateKeyPair()
 	if err != nil {

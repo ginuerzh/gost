@@ -265,6 +265,9 @@ func parseResolver(cfg string) gost.Resolver {
 	if cfg == "" {
 		return nil
 	}
+	timeout := 30 * time.Second
+	var nss []gost.NameServer
+
 	f, err := os.Open(cfg)
 	if err != nil {
 		for _, s := range strings.Split(cfg, ",") {
@@ -272,13 +275,22 @@ func parseResolver(cfg string) gost.Resolver {
 			if s == "" {
 				continue
 			}
+			ss := strings.Split(s, "/")
+			if len(ss) == 1 {
+				nss = append(nss, gost.NameServer{
+					Addr: ss[0],
+				})
+			}
+			if len(ss) == 2 {
+				nss = append(nss, gost.NameServer{
+					Addr:     ss[0],
+					Protocol: ss[1],
+				})
+			}
 		}
-		// return gost.NewBypass(matchers, reversed)
+		return gost.NewResolver(nss, timeout)
 	}
 
-	timeout := 30 * time.Second
-
-	var nss []gost.NameServer
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -310,14 +322,13 @@ func parseResolver(cfg string) gost.Resolver {
 		}
 
 		var ns gost.NameServer
-		if len(ss) == 1 {
+		switch len(ss) {
+		case 1:
 			ns.Addr = ss[0]
-		}
-		if len(ss) == 2 {
+		case 2:
 			ns.Addr = ss[0]
 			ns.Protocol = ss[1]
-		}
-		if len(ss) == 3 {
+		default:
 			ns.Addr = ss[0]
 			ns.Protocol = ss[1]
 			ns.Hostname = ss[2]

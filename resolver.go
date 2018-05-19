@@ -6,7 +6,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strings"
 	"time"
+
+	"github.com/go-log/log"
 )
 
 var (
@@ -27,6 +30,19 @@ type NameServer struct {
 	Addr     string
 	Protocol string
 	Hostname string // for TLS handshake verification
+}
+
+func (ns *NameServer) String() string {
+	addr := ns.Addr
+	prot := ns.Protocol
+	host := ns.Hostname
+	if !strings.Contains(addr, ":") {
+		addr += ":53"
+	}
+	if prot == "" {
+		prot = "udp"
+	}
+	return fmt.Sprintf("%s/%s %s", addr, prot, host)
 }
 
 type resolver struct {
@@ -54,6 +70,7 @@ func (r *resolver) init() {
 				if err == nil {
 					break
 				}
+				log.Logf("[resolver] %s : %s", ns, err)
 			}
 			return
 		},
@@ -63,11 +80,15 @@ func (r *resolver) init() {
 func (r *resolver) dial(ctx context.Context, ns NameServer) (net.Conn, error) {
 	var d net.Dialer
 
-	switch ns.Protocol {
+	addr := ns.Addr
+	if !strings.Contains(addr, ":") {
+		addr += ":53"
+	}
+	switch strings.ToLower(ns.Protocol) {
 	case "tcp":
-		return d.DialContext(ctx, "tcp", ns.Addr)
+		return d.DialContext(ctx, "tcp", addr)
 	case "tls":
-		conn, err := d.DialContext(ctx, "tcp", ns.Addr)
+		conn, err := d.DialContext(ctx, "tcp", addr)
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +102,7 @@ func (r *resolver) dial(ctx context.Context, ns NameServer) (net.Conn, error) {
 	case "udp":
 		fallthrough
 	default:
-		return d.DialContext(ctx, "udp", ns.Addr)
+		return d.DialContext(ctx, "udp", addr)
 	}
 }
 
@@ -104,7 +125,7 @@ func (r *resolver) String() string {
 	b := &bytes.Buffer{}
 	fmt.Fprintf(b, "timeout %v\n", r.Timeout)
 	for i := range r.Servers {
-		fmt.Fprintf(b, "%s/%s %s\n", r.Servers[i].Addr, r.Servers[i].Protocol, r.Servers[i].Hostname)
+		fmt.Fprintln(b, r.Servers[i])
 	}
 	return b.String()
 }
