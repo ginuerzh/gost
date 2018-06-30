@@ -36,9 +36,17 @@ type tcpDirectForwardHandler struct {
 // The raddr is the remote address that the server will forward to.
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &tcpDirectForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+
 	group := NewNodeGroup()
 	group.SetSelector(&defaultSelector{},
-		WithStrategy(&RoundStrategy{}),
+		WithStrategy(h.options.Strategy),
 		WithFilter(&FailFilter{
 			MaxFails:    1,
 			FailTimeout: 30 * time.Second,
@@ -57,15 +65,8 @@ func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 			Host: addr,
 		})
 	}
+	h.group = group
 
-	h := &tcpDirectForwardHandler{
-		raddr:   raddr,
-		group:   group,
-		options: &HandlerOptions{},
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
 	return h
 }
 
@@ -104,9 +105,17 @@ type udpDirectForwardHandler struct {
 // The raddr is the remote address that the server will forward to.
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &udpDirectForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+
 	group := NewNodeGroup()
 	group.SetSelector(&defaultSelector{},
-		WithStrategy(&RoundStrategy{}),
+		WithStrategy(h.options.Strategy),
 		WithFilter(&FailFilter{
 			MaxFails:    1,
 			FailTimeout: 30 * time.Second,
@@ -125,15 +134,8 @@ func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 			Host: addr,
 		})
 	}
+	h.group = group
 
-	h := &udpDirectForwardHandler{
-		raddr:   raddr,
-		group:   group,
-		options: &HandlerOptions{},
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
 	return h
 }
 
@@ -188,9 +190,17 @@ type tcpRemoteForwardHandler struct {
 // The raddr is the remote address that the server will forward to.
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func TCPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &tcpRemoteForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+
 	group := NewNodeGroup()
 	group.SetSelector(&defaultSelector{},
-		WithStrategy(&RoundStrategy{}),
+		WithStrategy(h.options.Strategy),
 		WithFilter(&FailFilter{
 			MaxFails:    1,
 			FailTimeout: 30 * time.Second,
@@ -209,15 +219,8 @@ func TCPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 			Host: addr,
 		})
 	}
+	h.group = group
 
-	h := &tcpRemoteForwardHandler{
-		raddr:   raddr,
-		group:   group,
-		options: &HandlerOptions{},
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
 	return h
 }
 
@@ -254,9 +257,17 @@ type udpRemoteForwardHandler struct {
 // The raddr is the remote address that the server will forward to.
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func UDPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
+	h := &udpRemoteForwardHandler{
+		raddr:   raddr,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
+	}
+
 	group := NewNodeGroup()
 	group.SetSelector(&defaultSelector{},
-		WithStrategy(&RoundStrategy{}),
+		WithStrategy(h.options.Strategy),
 		WithFilter(&FailFilter{
 			MaxFails:    1,
 			FailTimeout: 30 * time.Second,
@@ -274,15 +285,8 @@ func UDPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 			Host: addr,
 		})
 	}
+	h.group = group
 
-	h := &udpRemoteForwardHandler{
-		raddr:   raddr,
-		group:   group,
-		options: &HandlerOptions{},
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
 	return h
 }
 

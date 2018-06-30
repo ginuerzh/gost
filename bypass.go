@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 
 	glob "github.com/gobwas/glob"
@@ -147,8 +148,10 @@ func (bp *Bypass) Contains(addr string) bool {
 		return false
 	}
 	// try to strip the port
-	if host, _, _ := net.SplitHostPort(addr); host != "" {
-		addr = host
+	if host, port, _ := net.SplitHostPort(addr); host != "" && port != "" {
+		if p, _ := strconv.Atoi(port); p > 0 { // port is valid
+			addr = host
+		}
 	}
 	var matched bool
 	for _, matcher := range bp.matchers {

@@ -123,12 +123,18 @@ func (r *route) initChain() (*gost.Chain, error) {
 			log.Log(err)
 		}
 		peerCfg.Validate()
+
+		strategy := peerCfg.Strategy
+		// overwrite the strategry in the peer config if `strategy` param exists.
+		if s := nodes[0].Get("strategy"); s != "" {
+			strategy = s
+		}
 		ngroup.Options = append(ngroup.Options,
 			gost.WithFilter(&gost.FailFilter{
 				MaxFails:    peerCfg.MaxFails,
 				FailTimeout: time.Duration(peerCfg.FailTimeout) * time.Second,
 			}),
-			gost.WithStrategy(parseStrategy(peerCfg.Strategy)),
+			gost.WithStrategy(parseStrategy(strategy)),
 		)
 
 		for _, s := range peerCfg.Nodes {
@@ -146,6 +152,7 @@ func (r *route) initChain() (*gost.Chain, error) {
 		}
 
 		var bypass *gost.Bypass
+		// global bypass
 		if peerCfg.Bypass != nil {
 			bypass = gost.NewBypassPatterns(peerCfg.Bypass.Patterns, peerCfg.Bypass.Reverse)
 		}
@@ -464,6 +471,7 @@ func (r *route) serve() error {
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
 			gost.BypassHandlerOption(parseBypass(node.Get("bypass"))),
+			gost.StrategyHandlerOption(parseStrategy(node.Get("strategy"))),
 		)
 		var handler gost.Handler
 		switch node.Protocol {

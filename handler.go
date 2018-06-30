@@ -25,6 +25,7 @@ type HandlerOptions struct {
 	Whitelist *Permissions
 	Blacklist *Permissions
 	Bypass    *Bypass
+	Strategy  Strategy
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -76,6 +77,13 @@ func BlacklistHandlerOption(blacklist *Permissions) HandlerOption {
 func BypassHandlerOption(bypass *Bypass) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Bypass = bypass
+	}
+}
+
+// StrategyHandlerOption sets the strategy option of HandlerOptions.
+func StrategyHandlerOption(strategy Strategy) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Strategy = strategy
 	}
 }
 

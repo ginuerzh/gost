@@ -77,15 +77,15 @@ var bypassTests = []struct {
 }
 
 func TestBypass(t *testing.T) {
-	for i, test := range bypassTests {
+	for _, test := range bypassTests {
 		bp := NewBypassPatterns(test.patterns, test.reversed)
 		if bp.Contains(test.addr) != test.bypassed {
-			t.Errorf("test %d failed", i)
+			t.Errorf("test failed: %v, %s", test.patterns, test.addr)
 		}
 
 		rbp := NewBypassPatterns(test.patterns, !test.reversed)
 		if rbp.Contains(test.addr) == test.bypassed {
-			t.Errorf("reverse test %d failed", i)
+			t.Errorf("reverse test failed: %v, %s", test.patterns, test.addr)
 		}
 	}
 }
