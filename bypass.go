@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strings"
 
 	glob "github.com/gobwas/glob"
 )
@@ -83,11 +84,16 @@ type domainMatcher struct {
 }
 
 // DomainMatcher creates a Matcher for a specific domain pattern,
-// the pattern can be a plain domain such as 'example.com'
-// or a wildcard such as '*.exmaple.com'.
+// the pattern can be a plain domain such as 'example.com',
+// a wildcard such as '*.exmaple.com' or a special wildcard '.example.com'.
 func DomainMatcher(pattern string) Matcher {
+	p := pattern
+	if strings.HasPrefix(pattern, ".") {
+		p = pattern[1:] // trim the prefix '.'
+		pattern = "*" + pattern
+	}
 	return &domainMatcher{
-		pattern: pattern,
+		pattern: p,
 		glob:    glob.MustCompile(pattern),
 	}
 }
@@ -95,6 +101,10 @@ func DomainMatcher(pattern string) Matcher {
 func (m *domainMatcher) Match(domain string) bool {
 	if m == nil || m.glob == nil {
 		return false
+	}
+
+	if domain == m.pattern {
+		return true
 	}
 	return m.glob.Match(domain)
 }

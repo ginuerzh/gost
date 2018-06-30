@@ -317,6 +317,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		node.Addr = ip
 		// override the default node address
 		node.HandshakeOptions = append(handshakeOptions, gost.AddrHandshakeOption(ip))
+		// One node per IP
 		nodes = append(nodes, node)
 	}
 	if len(ips) == 0 {
