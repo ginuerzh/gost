@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/go-log/log"
 )
@@ -269,13 +268,9 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 			return
 		}
 
-		// NOTE: IPv6 will not work.
-		if strings.Contains(addr, ":") {
-			addr = strings.Split(addr, ":")[0]
-		}
 		if node.Bypass.Contains(addr) {
 			if Debug {
-				buf.WriteString(fmt.Sprintf("[%d@bypass: %s]", node.ID, addr))
+				buf.WriteString(fmt.Sprintf("[bypass]%s -> %s", node.String(), addr))
 				log.Log("[route]", buf.String())
 			}
 			return
@@ -297,6 +292,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 	route.Resolver = c.Resolver
 
 	if Debug {
+		buf.WriteString(addr)
 		log.Log("[route]", buf.String())
 	}
 	return

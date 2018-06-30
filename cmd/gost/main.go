@@ -444,12 +444,12 @@ func (r *route) serve() error {
 
 		var whitelist, blacklist *gost.Permissions
 		if node.Values.Get("whitelist") != "" {
-			if whitelist, err = gost.ParsePermissions(node.Values.Get("whitelist")); err != nil {
+			if whitelist, err = gost.ParsePermissions(node.Get("whitelist")); err != nil {
 				return err
 			}
 		}
 		if node.Values.Get("blacklist") != "" {
-			if blacklist, err = gost.ParsePermissions(node.Values.Get("blacklist")); err != nil {
+			if blacklist, err = gost.ParsePermissions(node.Get("blacklist")); err != nil {
 				return err
 			}
 		}
@@ -463,6 +463,7 @@ func (r *route) serve() error {
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
+			gost.BypassHandlerOption(parseBypass(node.Get("bypass"))),
 		)
 		var handler gost.Handler
 		switch node.Protocol {
@@ -502,9 +503,6 @@ func (r *route) serve() error {
 		}
 
 		srv := &gost.Server{Listener: ln}
-		srv.Init(
-			gost.BypassServerOption(parseBypass(node.Get("bypass"))),
-		)
 
 		chain.Resolver = parseResolver(node.Get("dns"))
 		if gost.Debug {

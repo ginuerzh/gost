@@ -24,6 +24,7 @@ type HandlerOptions struct {
 	TLSConfig *tls.Config
 	Whitelist *Permissions
 	Blacklist *Permissions
+	Bypass    *Bypass
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -68,6 +69,13 @@ func WhitelistHandlerOption(whitelist *Permissions) HandlerOption {
 func BlacklistHandlerOption(blacklist *Permissions) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Blacklist = blacklist
+	}
+}
+
+// BypassHandlerOption sets the bypass option of HandlerOptions.
+func BypassHandlerOption(bypass *Bypass) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Bypass = bypass
 	}
 }
 

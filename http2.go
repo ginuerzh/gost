@@ -296,6 +296,12 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.options.Bypass.Contains(target) {
+		log.Logf("[http2] [bypass] %s", target)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
 	if Debug && (u != "" || p != "") {
 		log.Logf("[http] %s - %s : Authorization: '%s' '%s'", r.RemoteAddr, target, u, p)

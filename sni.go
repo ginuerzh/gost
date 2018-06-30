@@ -33,13 +33,16 @@ func (c *sniConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 }
 
 type sniHandler struct {
-	options []HandlerOption
+	options *HandlerOptions
 }
 
 // SNIHandler creates a server Handler for SNI proxy server.
 func SNIHandler(opts ...HandlerOption) Handler {
 	h := &sniHandler{
-		options: opts,
+		options: &HandlerOptions{},
+	}
+	for _, opt := range opts {
+		opt(h.options)
 	}
 	return h
 }
@@ -66,7 +69,8 @@ func (h *sniHandler) Handle(conn net.Conn) {
 		if !req.URL.IsAbs() {
 			req.URL.Scheme = "http" // make sure that the URL is absolute
 		}
-		HTTPHandler(h.options...).(*httpHandler).handleRequest(conn, req)
+		handler := &httpHandler{options: h.options}
+		handler.handleRequest(conn, req)
 		return
 	}
 
@@ -76,19 +80,20 @@ func (h *sniHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	options := &HandlerOptions{}
-	for _, opt := range h.options {
-		opt(options)
-	}
+	addr := net.JoinHostPort(host, "443")
 
-	if !Can("tcp", host, options.Whitelist, options.Blacklist) {
-		log.Logf("[sni] Unauthorized to tcp connect to %s", host)
+	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[sni] Unauthorized to tcp connect to %s", addr)
+		return
+	}
+	if h.options.Bypass.Contains(addr) {
+		log.Log("[sni] [bypass]", addr)
 		return
 	}
 
-	cc, err := options.Chain.Dial(host + ":443")
+	cc, err := h.options.Chain.Dial(addr)
 	if err != nil {
-		log.Logf("[sni] %s -> %s : %s", conn.RemoteAddr(), host, err)
+		log.Logf("[sni] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 		return
 	}
 	defer cc.Close()

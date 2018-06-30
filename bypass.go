@@ -146,7 +146,10 @@ func (bp *Bypass) Contains(addr string) bool {
 	if bp == nil {
 		return false
 	}
-
+	// try to strip the port
+	if host, _, _ := net.SplitHostPort(addr); host != "" {
+		addr = host
+	}
 	var matched bool
 	for _, matcher := range bp.matchers {
 		if matcher == nil {

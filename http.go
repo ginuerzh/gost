@@ -116,8 +116,26 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 		return
 	}
 
+	// try to get the actual host.
+	if v := req.Header.Get("Gost-Target"); v != "" {
+		if host, err := decodeServerName(v); err == nil {
+			req.Host = host
+		}
+	}
+
 	if !Can("tcp", req.Host, h.options.Whitelist, h.options.Blacklist) {
 		log.Logf("[http] Unauthorized to tcp connect to %s", req.Host)
+		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		conn.Write(b)
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
+		}
+		return
+	}
+
+	if h.options.Bypass.Contains(req.Host) {
+		log.Logf("[http] [bypass] %s", req.Host)
 		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
 		conn.Write(b)
@@ -143,13 +161,6 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	req.Header.Del("Proxy-Authorization")
 	// req.Header.Del("Proxy-Connection")
 
-	// try to get the actual host.
-	if v := req.Header.Get("Gost-Target"); v != "" {
-		if host, err := decodeServerName(v); err == nil {
-			req.Host = host
-		}
-	}
-
 	route, err := h.options.Chain.selectRouteFor(req.Host)
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
@@ -163,8 +174,8 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	}
 
 	host := req.Host
-	if !strings.Contains(host, ":") {
-		host += ":80"
+	if _, port, _ := net.SplitHostPort(host); port == "" {
+		host = net.JoinHostPort(req.Host, "80")
 	}
 
 	cc, err := route.Dial(host)

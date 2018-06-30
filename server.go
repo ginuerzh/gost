@@ -71,9 +71,8 @@ func (s *Server) Serve(h Handler, opts ...ServerOption) error {
 		}
 		tempDelay = 0
 
-		ip := extractIP(conn.RemoteAddr())
-		if s.options.Bypass.Contains(ip.String()) {
-			log.Log("bypass", ip.String())
+		if s.options.Bypass.Contains(conn.RemoteAddr().String()) {
+			log.Log("[bypass]", conn.RemoteAddr())
 			conn.Close()
 			continue
 		}
@@ -150,17 +149,4 @@ func transport(rw1, rw2 io.ReadWriter) error {
 		err = nil
 	}
 	return err
-}
-
-func extractIP(addr net.Addr) net.IP {
-	switch v := addr.(type) {
-	case *net.IPAddr:
-		return v.IP
-	case *net.TCPAddr:
-		return v.IP
-	case *net.UDPAddr:
-		return v.IP
-	default:
-	}
-	return net.IPv4zero
 }
