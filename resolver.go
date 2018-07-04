@@ -24,7 +24,7 @@ var (
 // It contains a list of name servers.
 type Resolver interface {
 	// Resolve returns a slice of that host's IPv4 and IPv6 addresses.
-	Resolve(host string) ([]net.IPAddr, error)
+	Resolve(host string) ([]net.IP, error)
 }
 
 // NameServer is a name server.
@@ -39,8 +39,8 @@ func (ns NameServer) String() string {
 	addr := ns.Addr
 	prot := ns.Protocol
 	host := ns.Hostname
-	if !strings.Contains(addr, ":") {
-		addr += ":53"
+	if _, port, _ := net.SplitHostPort(addr); port == "" {
+		addr = net.JoinHostPort(addr, "53")
 	}
 	if prot == "" {
 		prot = "udp"
@@ -49,8 +49,8 @@ func (ns NameServer) String() string {
 }
 
 type resolverCacheItem struct {
-	IPAddrs []net.IPAddr
-	ts      int64
+	IPs []net.IP
+	ts  int64
 }
 
 type resolver struct {
@@ -100,8 +100,8 @@ func (r *resolver) dial(ctx context.Context, ns NameServer) (net.Conn, error) {
 	var d net.Dialer
 
 	addr := ns.Addr
-	if !strings.Contains(addr, ":") {
-		addr += ":53"
+	if _, port, _ := net.SplitHostPort(addr); port == "" {
+		addr = net.JoinHostPort(addr, "53")
 	}
 	switch strings.ToLower(ns.Protocol) {
 	case "tcp":
@@ -125,28 +125,38 @@ func (r *resolver) dial(ctx context.Context, ns NameServer) (net.Conn, error) {
 	}
 }
 
-func (r *resolver) Resolve(name string) (addrs []net.IPAddr, err error) {
+func (r *resolver) Resolve(name string) (ips []net.IP, err error) {
+	if r == nil {
+		return
+	}
 	timeout := r.Timeout
 
-	addrs = r.loadCache(name)
-	if len(addrs) > 0 {
+	if ip := net.ParseIP(name); ip != nil {
+		return []net.IP{ip}, nil
+	}
+
+	ips = r.loadCache(name)
+	if len(ips) > 0 {
 		if Debug {
-			log.Logf("[resolver] cache hit: %s %v", name, addrs)
+			log.Logf("[resolver] cache hit: %s %v", name, ips)
 		}
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	addrs, err = r.Resolver.LookupIPAddr(ctx, name)
-	r.storeCache(name, addrs)
-	if len(addrs) > 0 && Debug {
-		log.Logf("[resolver] %s %v", name, addrs)
+	addrs, err := r.Resolver.LookupIPAddr(ctx, name)
+	for _, addr := range addrs {
+		ips = append(ips, addr.IP)
+	}
+	r.storeCache(name, ips)
+	if len(ips) > 0 && Debug {
+		log.Logf("[resolver] %s %v", name, ips)
 	}
 	return
 }
 
-func (r *resolver) loadCache(name string) []net.IPAddr {
+func (r *resolver) loadCache(name string) []net.IP {
 	ttl := r.TTL
 	if ttl < 0 {
 		return nil
@@ -157,20 +167,20 @@ func (r *resolver) loadCache(name string) []net.IPAddr {
 		if item == nil || time.Since(time.Unix(item.ts, 0)) > ttl {
 			return nil
 		}
-		return item.IPAddrs
+		return item.IPs
 	}
 
 	return nil
 }
 
-func (r *resolver) storeCache(name string, addrs []net.IPAddr) {
+func (r *resolver) storeCache(name string, ips []net.IP) {
 	ttl := r.TTL
-	if ttl < 0 || name == "" || len(addrs) == 0 {
+	if ttl < 0 || name == "" || len(ips) == 0 {
 		return
 	}
 	r.mCache.Store(name, &resolverCacheItem{
-		IPAddrs: addrs,
-		ts:      time.Now().Unix(),
+		IPs: ips,
+		ts:  time.Now().Unix(),
 	})
 }
 
@@ -180,8 +190,8 @@ func (r *resolver) String() string {
 	}
 
 	b := &bytes.Buffer{}
-	fmt.Fprintf(b, "timeout %v\n", r.Timeout)
-	fmt.Fprintf(b, "ttl %v\n", r.TTL)
+	fmt.Fprintf(b, "Timeout %v\n", r.Timeout)
+	fmt.Fprintf(b, "TTL %v\n", r.TTL)
 	for i := range r.Servers {
 		fmt.Fprintln(b, r.Servers[i])
 	}

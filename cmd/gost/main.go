@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"time"
@@ -57,6 +59,9 @@ func init() {
 }
 
 func main() {
+	go func() {
+		log.Log(http.ListenAndServe("localhost:6060", nil))
+	}()
 	// NOTE: as of 2.6, you can use custom cert/key files to initialize the default certificate.
 	config, err := tlsConfig(defaultCertFile, defaultKeyFile)
 	if err != nil {
@@ -336,12 +341,15 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 }
 
 func (r *route) serve() error {
-	chain, err := r.initChain()
+	baseChain, err := r.initChain()
 	if err != nil {
 		return err
 	}
 
 	for _, ns := range r.ServeNodes {
+		chain := &gost.Chain{}
+		*chain = *baseChain
+
 		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return err
@@ -462,7 +470,6 @@ func (r *route) serve() error {
 		}
 
 		var handlerOptions []gost.HandlerOption
-
 		handlerOptions = append(handlerOptions,
 			gost.AddrHandlerOption(node.Addr),
 			gost.ChainHandlerOption(chain),
@@ -516,6 +523,14 @@ func (r *route) serve() error {
 		if gost.Debug {
 			log.Logf("[resolver]\n%v", chain.Resolver)
 		}
+
+		if f, _ := os.Open(node.Get("hosts")); f != nil {
+			chain.Hosts, err = gost.ParseHosts(f)
+			if err != nil {
+				log.Logf("[hosts] %s: %v", f.Name(), err)
+			}
+		}
+
 		go srv.Serve(handler)
 	}
 

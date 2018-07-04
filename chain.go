@@ -18,6 +18,7 @@ var (
 type Chain struct {
 	isRoute    bool
 	Retries    int
+	Hosts      *Hosts
 	Resolver   Resolver
 	nodeGroups []*NodeGroup
 }
@@ -124,18 +125,7 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	if c != nil && c.Resolver != nil {
-		host, port, err := net.SplitHostPort(addr)
-		if err == nil {
-			addrs, er := c.Resolver.Resolve(host)
-			if er != nil {
-				log.Logf("[resolver] %s: %v", host, er)
-			}
-			if len(addrs) > 0 {
-				addr = net.JoinHostPort(addrs[0].IP.String(), port)
-			}
-		}
-	}
+	addr = c.resolve(addr)
 
 	if route.IsEmpty() {
 		return net.DialTimeout("tcp", addr, DialTimeout)
@@ -152,6 +142,27 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 		return nil, err
 	}
 	return cc, nil
+}
+
+func (c *Chain) resolve(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+
+	if ip := c.Hosts.Lookup(host); ip != nil {
+		return net.JoinHostPort(ip.String(), port)
+	}
+	if c.Resolver != nil {
+		ips, err := c.Resolver.Resolve(host)
+		if err != nil {
+			log.Logf("[resolver] %s: %v", host, err)
+		}
+		if len(ips) > 0 {
+			return net.JoinHostPort(ips[0].String(), port)
+		}
+	}
+	return addr
 }
 
 // Conn obtains a handshaked connection to the last node of the chain.
