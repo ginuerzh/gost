@@ -17,15 +17,20 @@ type tcpRedirectHandler struct {
 
 // TCPRedirectHandler creates a server Handler for TCP redirect server.
 func TCPRedirectHandler(opts ...HandlerOption) Handler {
-	h := &tcpRedirectHandler{
-		options: &HandlerOptions{
-			Chain: new(Chain),
-		},
+	h := &tcpRedirectHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *tcpRedirectHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *tcpRedirectHandler) Handle(c net.Conn) {

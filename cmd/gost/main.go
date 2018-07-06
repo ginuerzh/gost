@@ -341,15 +341,12 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 }
 
 func (r *route) serve() error {
-	baseChain, err := r.initChain()
+	chain, err := r.initChain()
 	if err != nil {
 		return err
 	}
 
 	for _, ns := range r.ServeNodes {
-		chain := &gost.Chain{}
-		*chain = *baseChain
-
 		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return err
@@ -469,8 +466,43 @@ func (r *route) serve() error {
 			}
 		}
 
-		var handlerOptions []gost.HandlerOption
-		handlerOptions = append(handlerOptions,
+		var handler gost.Handler
+		switch node.Protocol {
+		case "http2":
+			handler = gost.HTTP2Handler()
+		case "socks", "socks5":
+			handler = gost.SOCKS5Handler()
+		case "socks4", "socks4a":
+			handler = gost.SOCKS4Handler()
+		case "ss":
+			handler = gost.ShadowHandler()
+		case "http":
+			handler = gost.HTTPHandler()
+		case "tcp":
+			handler = gost.TCPDirectForwardHandler(node.Remote)
+		case "rtcp":
+			handler = gost.TCPRemoteForwardHandler(node.Remote)
+		case "udp":
+			handler = gost.UDPDirectForwardHandler(node.Remote)
+		case "rudp":
+			handler = gost.UDPRemoteForwardHandler(node.Remote)
+		case "forward":
+			handler = gost.SSHForwardHandler()
+		case "redirect":
+			handler = gost.TCPRedirectHandler()
+		case "ssu":
+			handler = gost.ShadowUDPdHandler()
+		case "sni":
+			handler = gost.SNIHandler()
+		default:
+			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
+			if node.Remote != "" {
+				handler = gost.TCPDirectForwardHandler(node.Remote)
+			} else {
+				handler = gost.AutoHandler()
+			}
+		}
+		handler.Init(
 			gost.AddrHandlerOption(node.Addr),
 			gost.ChainHandlerOption(chain),
 			gost.UsersHandlerOption(users...),
@@ -480,44 +512,6 @@ func (r *route) serve() error {
 			gost.BypassHandlerOption(parseBypass(node.Get("bypass"))),
 			gost.StrategyHandlerOption(parseStrategy(node.Get("strategy"))),
 		)
-		var handler gost.Handler
-		switch node.Protocol {
-		case "http2":
-			handler = gost.HTTP2Handler(handlerOptions...)
-		case "socks", "socks5":
-			handler = gost.SOCKS5Handler(handlerOptions...)
-		case "socks4", "socks4a":
-			handler = gost.SOCKS4Handler(handlerOptions...)
-		case "ss":
-			handler = gost.ShadowHandler(handlerOptions...)
-		case "http":
-			handler = gost.HTTPHandler(handlerOptions...)
-		case "tcp":
-			handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
-		case "rtcp":
-			handler = gost.TCPRemoteForwardHandler(node.Remote, handlerOptions...)
-		case "udp":
-			handler = gost.UDPDirectForwardHandler(node.Remote, handlerOptions...)
-		case "rudp":
-			handler = gost.UDPRemoteForwardHandler(node.Remote, handlerOptions...)
-		case "forward":
-			handler = gost.SSHForwardHandler(handlerOptions...)
-		case "redirect":
-			handler = gost.TCPRedirectHandler(handlerOptions...)
-		case "ssu":
-			handler = gost.ShadowUDPdHandler(handlerOptions...)
-		case "sni":
-			handler = gost.SNIHandler(handlerOptions...)
-		default:
-			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
-			if node.Remote != "" {
-				handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
-			} else {
-				handler = gost.AutoHandler(handlerOptions...)
-			}
-		}
-
-		srv := &gost.Server{Listener: ln}
 
 		chain.Resolver = parseResolver(node.Get("dns"))
 		if gost.Debug {
@@ -531,6 +525,7 @@ func (r *route) serve() error {
 			}
 		}
 
+		srv := &gost.Server{Listener: ln}
 		go srv.Serve(handler)
 	}
 

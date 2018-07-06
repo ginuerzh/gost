@@ -37,21 +37,9 @@ type tcpDirectForwardHandler struct {
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &tcpDirectForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
-
-	group := NewNodeGroup()
-	group.SetSelector(&defaultSelector{},
-		WithStrategy(h.options.Strategy),
-		WithFilter(&FailFilter{
-			MaxFails:    1,
-			FailTimeout: 30 * time.Second,
-		}),
-	)
 
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
@@ -59,15 +47,33 @@ func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		}
 		// We treat the remote target server as a node, so we can put them in a group,
 		// and perform the node selection for load balancing.
-		group.AddNode(Node{
+		h.group.AddNode(Node{
 			ID:   i + 1,
 			Addr: addr,
 			Host: addr,
 		})
 	}
-	h.group = group
+	h.Init(opts...)
 
 	return h
+}
+
+func (h *tcpDirectForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+
+	for _, opt := range options {
+		opt(h.options)
+	}
+
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
@@ -106,21 +112,9 @@ type udpDirectForwardHandler struct {
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &udpDirectForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
-
-	group := NewNodeGroup()
-	group.SetSelector(&defaultSelector{},
-		WithStrategy(h.options.Strategy),
-		WithFilter(&FailFilter{
-			MaxFails:    1,
-			FailTimeout: 30 * time.Second,
-		}),
-	)
 
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
@@ -128,15 +122,34 @@ func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		}
 		// We treat the remote target server as a node, so we can put them in a group,
 		// and perform the node selection for load balancing.
-		group.AddNode(Node{
+		h.group.AddNode(Node{
 			ID:   i + 1,
 			Addr: addr,
 			Host: addr,
 		})
 	}
-	h.group = group
+
+	h.Init(opts...)
 
 	return h
+}
+
+func (h *udpDirectForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+
+	for _, opt := range options {
+		opt(h.options)
+	}
+
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
@@ -191,21 +204,9 @@ type tcpRemoteForwardHandler struct {
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func TCPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &tcpRemoteForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
-
-	group := NewNodeGroup()
-	group.SetSelector(&defaultSelector{},
-		WithStrategy(h.options.Strategy),
-		WithFilter(&FailFilter{
-			MaxFails:    1,
-			FailTimeout: 30 * time.Second,
-		}),
-	)
 
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
@@ -213,15 +214,32 @@ func TCPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		}
 		// We treat the remote target server as a node, so we can put them in a group,
 		// and perform the node selection for load balancing.
-		group.AddNode(Node{
+		h.group.AddNode(Node{
 			ID:   i + 1,
 			Addr: addr,
 			Host: addr,
 		})
 	}
-	h.group = group
+	h.Init(opts...)
 
 	return h
+}
+
+func (h *tcpRemoteForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+	for _, opt := range options {
+		opt(h.options)
+	}
+
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
@@ -258,36 +276,43 @@ type udpRemoteForwardHandler struct {
 // NOTE: as of 2.6, remote address can be a comma-separated address list.
 func UDPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &udpRemoteForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
-	}
-	for _, opt := range opts {
-		opt(h.options)
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
 
-	group := NewNodeGroup()
-	group.SetSelector(&defaultSelector{},
-		WithStrategy(h.options.Strategy),
-		WithFilter(&FailFilter{
-			MaxFails:    1,
-			FailTimeout: 30 * time.Second,
-		}),
-	)
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
 			continue
 		}
 		// We treat the remote target server as a node, so we can put them in a group,
 		// and perform the node selection for load balancing.
-		group.AddNode(Node{
+		h.group.AddNode(Node{
 			ID:   i + 1,
 			Addr: addr,
 			Host: addr,
 		})
 	}
-	h.group = group
+
+	h.Init(opts...)
 
 	return h
+}
+
+func (h *udpRemoteForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+
+	for _, opt := range options {
+		opt(h.options)
+	}
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {

@@ -38,13 +38,20 @@ type sniHandler struct {
 
 // SNIHandler creates a server Handler for SNI proxy server.
 func SNIHandler(opts ...HandlerOption) Handler {
-	h := &sniHandler{
-		options: &HandlerOptions{},
+	h := &sniHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *sniHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *sniHandler) Handle(conn net.Conn) {

@@ -408,13 +408,22 @@ type sshForwardHandler struct {
 
 // SSHForwardHandler creates a server Handler for SSH port forwarding server.
 func SSHForwardHandler(opts ...HandlerOption) Handler {
-	h := &sshForwardHandler{
-		options: new(HandlerOptions),
-		config:  new(ssh.ServerConfig),
+	h := &sshForwardHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *sshForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
+	h.config = &ssh.ServerConfig{}
+
 	h.config.PasswordCallback = defaultSSHPasswordCallback(h.options.Users...)
 	if len(h.options.Users) == 0 {
 		h.config.NoClientAuth = true
@@ -430,8 +439,6 @@ func SSHForwardHandler(opts ...HandlerOption) Handler {
 		}
 		h.config.AddHostKey(signer)
 	}
-
-	return h
 }
 
 func (h *sshForwardHandler) Handle(conn net.Conn) {

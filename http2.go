@@ -250,14 +250,19 @@ type http2Handler struct {
 
 // HTTP2Handler creates a server Handler for HTTP2 proxy server.
 func HTTP2Handler(opts ...HandlerOption) Handler {
-	h := &http2Handler{
-		options: new(HandlerOptions),
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
+	h := &http2Handler{}
+	h.Init(opts...)
 
 	return h
+}
+
+func (h *http2Handler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+	for _, opt := range options {
+		opt(h.options)
+	}
 }
 
 func (h *http2Handler) Handle(conn net.Conn) {

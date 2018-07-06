@@ -348,30 +348,36 @@ type socks5Handler struct {
 
 // SOCKS5Handler creates a server Handler for SOCKS5 proxy server.
 func SOCKS5Handler(opts ...HandlerOption) Handler {
-	options := &HandlerOptions{}
-	for _, opt := range opts {
-		opt(options)
+	h := &socks5Handler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *socks5Handler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
 
-	tlsConfig := options.TLSConfig
+	for _, opt := range options {
+		opt(h.options)
+	}
+
+	tlsConfig := h.options.TLSConfig
 	if tlsConfig == nil {
 		tlsConfig = DefaultTLSConfig
 	}
-	selector := &serverSelector{ // socks5 server selector
-		Users:     options.Users,
+	h.selector = &serverSelector{ // socks5 server selector
+		Users:     h.options.Users,
 		TLSConfig: tlsConfig,
 	}
 	// methods that socks5 server supported
-	selector.AddMethod(
+	h.selector.AddMethod(
 		gosocks5.MethodNoAuth,
 		gosocks5.MethodUserPass,
 		MethodTLS,
 		MethodTLSAuth,
 	)
-	return &socks5Handler{
-		options:  options,
-		selector: selector,
-	}
 }
 
 func (h *socks5Handler) Handle(conn net.Conn) {
@@ -1110,12 +1116,19 @@ type socks4Handler struct {
 
 // SOCKS4Handler creates a server Handler for SOCKS4(A) proxy server.
 func SOCKS4Handler(opts ...HandlerOption) Handler {
-	options := &HandlerOptions{}
-	for _, opt := range opts {
-		opt(options)
+	h := &socks4Handler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *socks4Handler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	return &socks4Handler{
-		options: options,
+
+	for _, opt := range options {
+		opt(h.options)
 	}
 }
 

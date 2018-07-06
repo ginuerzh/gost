@@ -97,13 +97,20 @@ type shadowHandler struct {
 
 // ShadowHandler creates a server Handler for shadowsocks proxy server.
 func ShadowHandler(opts ...HandlerOption) Handler {
-	h := &shadowHandler{
-		options: &HandlerOptions{},
+	h := &shadowHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *shadowHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *shadowHandler) Handle(conn net.Conn) {
@@ -326,13 +333,20 @@ type shadowUDPdHandler struct {
 
 // ShadowUDPdHandler creates a server Handler for shadowsocks UDP relay server.
 func ShadowUDPdHandler(opts ...HandlerOption) Handler {
-	h := &shadowUDPdHandler{
-		options: &HandlerOptions{},
+	h := &shadowUDPdHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *shadowUDPdHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *shadowUDPdHandler) Handle(conn net.Conn) {

@@ -90,7 +90,7 @@ func (tr *tcpTransporter) Multiplex() bool {
 	return false
 }
 
-// DialOptions describes the options for dialing.
+// DialOptions describes the options for Transporter.Dial.
 type DialOptions struct {
 	Timeout time.Duration
 	Chain   *Chain

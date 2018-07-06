@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/go-log/log"
 )
@@ -307,4 +308,43 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 		log.Log("[route]", buf.String())
 	}
 	return
+}
+
+// ChainOptions holds options for Chain.
+type ChainOptions struct {
+	Retry    int
+	Timeout  time.Duration
+	Hosts    *Hosts
+	Resolver Resolver
+}
+
+// ChainOption allows a common way to set chain options.
+type ChainOption func(opts *ChainOptions)
+
+// RetryChainOption specifies the times of retry used by Chain.Dial.
+func RetryChainOption(retry int) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Retry = retry
+	}
+}
+
+// TimeoutChainOption specifies the timeout used by Chain.Dial.
+func TimeoutChainOption(timeout time.Duration) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Timeout = timeout
+	}
+}
+
+// HostsChainOption specifies the hosts used by Chain.Dial.
+func HostsChainOption(hosts *Hosts) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Hosts = hosts
+	}
+}
+
+// ResolverChainOption specifies the Resolver used by Chain.Dial.
+func ResolverChainOption(resolver Resolver) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Resolver = resolver
+	}
 }

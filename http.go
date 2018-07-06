@@ -75,13 +75,18 @@ type httpHandler struct {
 
 // HTTPHandler creates a server Handler for HTTP proxy server.
 func HTTPHandler(opts ...HandlerOption) Handler {
-	h := &httpHandler{
-		options: &HandlerOptions{},
+	h := &httpHandler{}
+	h.Init(opts...)
+	return h
+}
+
+func (h *httpHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *httpHandler) Handle(conn net.Conn) {
