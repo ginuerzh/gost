@@ -233,21 +233,15 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 			tr = gost.SSHTunnelTransporter()
 		}
 	case "quic":
-		/*
-			if !chain.IsEmpty() {
-				return nil, errors.New("QUIC must be the first node in the proxy chain")
-			}
-		*/
 		config := &gost.QUICConfig{
-			TLSConfig: tlsCfg,
-			KeepAlive: node.GetBool("keepalive"),
+			TLSConfig:   tlsCfg,
+			KeepAlive:   node.GetBool("keepalive"),
+			Timeout:     time.Duration(node.GetInt("timeout")) * time.Second,
+			IdleTimeout: time.Duration(node.GetInt("idle")) * time.Second,
 		}
 
-		config.Timeout = time.Duration(node.GetInt("timeout")) * time.Second
-		config.IdleTimeout = time.Duration(node.GetInt("idle")) * time.Second
-
-		if key := node.Get("key"); key != "" {
-			sum := sha256.Sum256([]byte(key))
+		if cipher := node.Get("cipher"); cipher != "" {
+			sum := sha256.Sum256([]byte(cipher))
 			config.Key = sum[:]
 		}
 
@@ -396,14 +390,13 @@ func (r *route) serve() error {
 			}
 		case "quic":
 			config := &gost.QUICConfig{
-				TLSConfig: tlsCfg,
-				KeepAlive: node.GetBool("keepalive"),
+				TLSConfig:   tlsCfg,
+				KeepAlive:   node.GetBool("keepalive"),
+				Timeout:     time.Duration(node.GetInt("timeout")) * time.Second,
+				IdleTimeout: time.Duration(node.GetInt("idle")) * time.Second,
 			}
-			config.Timeout = time.Duration(node.GetInt("timeout")) * time.Second
-			config.IdleTimeout = time.Duration(node.GetInt("idle")) * time.Second
-
-			if key := node.Get("key"); key != "" {
-				sum := sha256.Sum256([]byte(key))
+			if cipher := node.Get("cipher"); cipher != "" {
+				sum := sha256.Sum256([]byte(cipher))
 				config.Key = sum[:]
 			}
 

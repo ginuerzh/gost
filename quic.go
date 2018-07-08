@@ -133,7 +133,7 @@ func (tr *quicTransporter) initSession(addr string, conn net.Conn, config *QUICC
 	}
 	session, err := quic.Dial(udpConn, udpAddr, addr, config.TLSConfig, quicConfig)
 	if err != nil {
-		log.Log("quic dial", err)
+		log.Log("quic dial:", err)
 		return nil, err
 	}
 	return &quicSession{conn: conn, session: session}, nil
