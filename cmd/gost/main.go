@@ -216,11 +216,6 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "mwss":
 		tr = gost.MWSSTransporter(wsOpts)
 	case "kcp":
-		/*
-			if !chain.IsEmpty() {
-				return nil, errors.New("KCP must be the first node in the proxy chain")
-			}
-		*/
 		config, err := parseKCPConfig(node.Get("c"))
 		if err != nil {
 			return nil, err
@@ -254,9 +249,6 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.H2CTransporter()
 
 	case "obfs4":
-		if err := gost.Obfs4Init(node, false); err != nil {
-			return nil, err
-		}
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
 		tr = gost.ObfsHTTPTransporter()
@@ -323,6 +315,14 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	if len(ips) == 0 {
 		node.HandshakeOptions = handshakeOptions
 		nodes = []gost.Node{node}
+	}
+
+	if node.Transport == "obfs4" {
+		for i := range nodes {
+			if err := gost.Obfs4Init(nodes[i], false); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return
