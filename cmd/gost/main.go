@@ -6,8 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"net/http"
-	_ "net/http/pprof"
+	// _ "net/http/pprof"
 	"os"
 	"runtime"
 	"time"
@@ -59,9 +58,9 @@ func init() {
 }
 
 func main() {
-	go func() {
-		log.Log(http.ListenAndServe("localhost:6060", nil))
-	}()
+	// go func() {
+	// 	log.Log(http.ListenAndServe("localhost:6060", nil))
+	// }()
 	// NOTE: as of 2.6, you can use custom cert/key files to initialize the default certificate.
 	config, err := tlsConfig(defaultCertFile, defaultKeyFile)
 	if err != nil {
@@ -95,12 +94,7 @@ type route struct {
 
 func (r *route) initChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
-
 	chain.Retries = r.Retries
-	if chain.Retries == 0 {
-		chain.Retries = 1
-	}
-
 	gid := 1 // group ID
 
 	for _, ns := range r.ChainNodes {
@@ -454,18 +448,6 @@ func (r *route) serve() error {
 			return err
 		}
 
-		var whitelist, blacklist *gost.Permissions
-		if node.Values.Get("whitelist") != "" {
-			if whitelist, err = gost.ParsePermissions(node.Get("whitelist")); err != nil {
-				return err
-			}
-		}
-		if node.Values.Get("blacklist") != "" {
-			if blacklist, err = gost.ParsePermissions(node.Get("blacklist")); err != nil {
-				return err
-			}
-		}
-
 		var handler gost.Handler
 		switch node.Protocol {
 		case "http2":
@@ -502,6 +484,27 @@ func (r *route) serve() error {
 				handler = gost.AutoHandler()
 			}
 		}
+
+		var whitelist, blacklist *gost.Permissions
+		if node.Values.Get("whitelist") != "" {
+			if whitelist, err = gost.ParsePermissions(node.Get("whitelist")); err != nil {
+				return err
+			}
+		}
+		if node.Values.Get("blacklist") != "" {
+			if blacklist, err = gost.ParsePermissions(node.Get("blacklist")); err != nil {
+				return err
+			}
+		}
+
+		var hosts *gost.Hosts
+		if f, _ := os.Open(node.Get("hosts")); f != nil {
+			hosts, err = gost.ParseHosts(f)
+			if err != nil {
+				log.Logf("[hosts] %s: %v", f.Name(), err)
+			}
+		}
+
 		handler.Init(
 			gost.AddrHandlerOption(node.Addr),
 			gost.ChainHandlerOption(chain),
@@ -511,19 +514,11 @@ func (r *route) serve() error {
 			gost.BlacklistHandlerOption(blacklist),
 			gost.BypassHandlerOption(parseBypass(node.Get("bypass"))),
 			gost.StrategyHandlerOption(parseStrategy(node.Get("strategy"))),
+			gost.ResolverHandlerOption(parseResolver(node.Get("dns"))),
+			gost.HostsHandlerOption(hosts),
+			gost.RetryHandlerOption(node.GetInt("retry")),
+			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
 		)
-
-		chain.Resolver = parseResolver(node.Get("dns"))
-		if gost.Debug {
-			log.Logf("[resolver]\n%v", chain.Resolver)
-		}
-
-		if f, _ := os.Open(node.Get("hosts")); f != nil {
-			chain.Hosts, err = gost.ParseHosts(f)
-			if err != nil {
-				log.Logf("[hosts] %s: %v", f.Name(), err)
-			}
-		}
 
 		srv := &gost.Server{Listener: ln}
 		go srv.Serve(handler)

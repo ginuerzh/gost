@@ -513,7 +513,17 @@ func (h *sshForwardHandler) directPortForwardChannel(channel ssh.Channel, raddr 
 		return
 	}
 
-	conn, err := h.options.Chain.Dial(raddr)
+	if h.options.Bypass.Contains(raddr) {
+		log.Logf("[ssh-tcp] [bypass] %s", raddr)
+		return
+	}
+
+	conn, err := h.options.Chain.Dial(raddr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[ssh-tcp] %s - %s : %s", h.options.Addr, raddr, err)
 		return

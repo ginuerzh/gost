@@ -77,6 +77,7 @@ func (h *sniHandler) Handle(conn net.Conn) {
 			req.URL.Scheme = "http" // make sure that the URL is absolute
 		}
 		handler := &httpHandler{options: h.options}
+		handler.Init()
 		handler.handleRequest(conn, req)
 		return
 	}
@@ -98,7 +99,12 @@ func (h *sniHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr)
+	cc, err := h.options.Chain.Dial(addr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[sni] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 		return

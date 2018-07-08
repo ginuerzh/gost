@@ -166,24 +166,50 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	req.Header.Del("Proxy-Authorization")
 	// req.Header.Del("Proxy-Connection")
 
-	route, err := h.options.Chain.selectRouteFor(req.Host)
-	if err != nil {
-		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
-		return
-	}
-	// forward http request
-	lastNode := route.LastNode()
-	if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
-		h.forwardRequest(conn, req, route)
-		return
-	}
-
 	host := req.Host
 	if _, port, _ := net.SplitHostPort(host); port == "" {
 		host = net.JoinHostPort(req.Host, "80")
 	}
 
-	cc, err := route.Dial(host)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var err error
+	var cc net.Conn
+	var route *Chain
+	for i := 0; i < retries; i++ {
+		route, err = h.options.Chain.selectRouteFor(req.Host)
+		if err != nil {
+			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+			continue
+		}
+		// forward http request
+		lastNode := route.LastNode()
+		if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
+			err = h.forwardRequest(conn, req, route)
+			if err == nil {
+				return
+			}
+			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+			continue
+		}
+
+		cc, err = route.Dial(host,
+			RetryChainOption(1),
+			TimeoutChainOption(h.options.Timeout),
+			HostsChainOption(h.options.Hosts),
+			ResolverChainOption(h.options.Resolver),
+		)
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), host, err)
 
@@ -218,23 +244,17 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	log.Logf("[http] %s >-< %s", cc.LocalAddr(), host)
 }
 
-func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Chain) {
+func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Chain) error {
 	if route.IsEmpty() {
-		return
+		return nil
 	}
 	lastNode := route.LastNode()
 
-	cc, err := route.Conn()
+	cc, err := route.Conn(
+		RetryChainOption(1), // we control the retry manually.
+	)
 	if err != nil {
-		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), lastNode.Addr, err)
-
-		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		if Debug {
-			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), lastNode.Addr, string(b))
-		}
-		conn.Write(b)
-		return
+		return err
 	}
 	defer cc.Close()
 
@@ -253,14 +273,14 @@ func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Ch
 	}
 	if err = req.WriteProxy(cc); err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
-		return
+		return nil
 	}
 	cc.SetWriteDeadline(time.Time{})
 
 	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
 	transport(conn, cc)
 	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
-	return
+	return nil
 }
 
 func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {

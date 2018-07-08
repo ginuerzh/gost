@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
@@ -25,8 +26,12 @@ type HandlerOptions struct {
 	TLSConfig *tls.Config
 	Whitelist *Permissions
 	Blacklist *Permissions
-	Bypass    *Bypass
 	Strategy  Strategy
+	Bypass    *Bypass
+	Retries   int
+	Timeout   time.Duration
+	Resolver  Resolver
+	Hosts     *Hosts
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -85,6 +90,34 @@ func BypassHandlerOption(bypass *Bypass) HandlerOption {
 func StrategyHandlerOption(strategy Strategy) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Strategy = strategy
+	}
+}
+
+// RetryHandlerOption sets the retry option of HandlerOptions.
+func RetryHandlerOption(retries int) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Retries = retries
+	}
+}
+
+// TimeoutHandlerOption sets the timeout option of HandlerOptions.
+func TimeoutHandlerOption(timeout time.Duration) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Timeout = timeout
+	}
+}
+
+// ResolverHandlerOption sets the resolver option of HandlerOptions.
+func ResolverHandlerOption(resolver Resolver) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Resolver = resolver
+	}
+}
+
+// HostsHandlerOption sets the Hosts option of HandlerOptions.
+func HostsHandlerOption(hosts *Hosts) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Hosts = hosts
 	}
 }
 

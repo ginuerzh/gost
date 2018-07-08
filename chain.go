@@ -19,8 +19,6 @@ var (
 type Chain struct {
 	isRoute    bool
 	Retries    int
-	Hosts      *Hosts
-	Resolver   Resolver
 	nodeGroups []*NodeGroup
 }
 
@@ -102,17 +100,22 @@ func (c *Chain) IsEmpty() bool {
 
 // Dial connects to the target address addr through the chain.
 // If the chain is empty, it will use the net.Dial directly.
-func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
-	var retries int
-	if c != nil {
+func (c *Chain) Dial(addr string, opts ...ChainOption) (conn net.Conn, err error) {
+	options := &ChainOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	retries := 1
+	if c != nil && c.Retries > 0 {
 		retries = c.Retries
 	}
-	if retries == 0 {
-		retries = 1
+	if options.Retries > 0 {
+		retries = options.Retries
 	}
 
 	for i := 0; i < retries; i++ {
-		conn, err = c.dial(addr)
+		conn, err = c.dialWithOptions(addr, options)
 		if err == nil {
 			break
 		}
@@ -120,16 +123,19 @@ func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
 	return
 }
 
-func (c *Chain) dial(addr string) (net.Conn, error) {
+func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, error) {
+	if options == nil {
+		options = &ChainOptions{}
+	}
 	route, err := c.selectRouteFor(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	addr = c.resolve(addr)
+	addr = c.resolve(addr, options.Resolver, options.Hosts)
 
 	if route.IsEmpty() {
-		return net.DialTimeout("tcp", addr, DialTimeout)
+		return net.DialTimeout("tcp", addr, options.Timeout)
 	}
 
 	conn, err := route.getConn()
@@ -145,17 +151,17 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 	return cc, nil
 }
 
-func (c *Chain) resolve(addr string) string {
+func (c *Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr
 	}
 
-	if ip := c.Hosts.Lookup(host); ip != nil {
+	if ip := hosts.Lookup(host); ip != nil {
 		return net.JoinHostPort(ip.String(), port)
 	}
-	if c.Resolver != nil {
-		ips, err := c.Resolver.Resolve(host)
+	if resolver != nil {
+		ips, err := resolver.Resolve(host)
 		if err != nil {
 			log.Logf("[resolver] %s: %v", host, err)
 		}
@@ -168,8 +174,21 @@ func (c *Chain) resolve(addr string) string {
 
 // Conn obtains a handshaked connection to the last node of the chain.
 // If the chain is empty, it returns an ErrEmptyChain error.
-func (c *Chain) Conn() (conn net.Conn, err error) {
-	for i := 0; i < c.Retries; i++ {
+func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
+	options := &ChainOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	retries := 1
+	if c != nil && c.Retries > 0 {
+		retries = c.Retries
+	}
+	if options.Retries > 0 {
+		retries = options.Retries
+	}
+
+	for i := 0; i < retries; i++ {
 		var route *Chain
 		route, err = c.selectRoute()
 		if err != nil {
@@ -177,6 +196,7 @@ func (c *Chain) Conn() (conn net.Conn, err error) {
 		}
 		conn, err = route.getConn()
 		if err != nil {
+			log.Log(err)
 			continue
 		}
 
@@ -185,6 +205,7 @@ func (c *Chain) Conn() (conn net.Conn, err error) {
 	return
 }
 
+// getConn obtains a connection to the last node of the chain.
 func (c *Chain) getConn() (conn net.Conn, err error) {
 	if c.IsEmpty() {
 		err = ErrEmptyChain
@@ -232,7 +253,7 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 }
 
 func (c *Chain) selectRoute() (route *Chain, err error) {
-	if c.isRoute {
+	if c.IsEmpty() || c.isRoute {
 		return c, nil
 	}
 
@@ -256,7 +277,6 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 		route.AddNode(node)
 	}
 	route.Retries = c.Retries
-	route.Resolver = c.Resolver
 
 	if Debug {
 		log.Log("select route:", buf.String())
@@ -299,9 +319,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 
 		route.AddNode(node)
 	}
-
 	route.Retries = c.Retries
-	route.Resolver = c.Resolver
 
 	if Debug {
 		buf.WriteString(addr)
@@ -312,7 +330,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 
 // ChainOptions holds options for Chain.
 type ChainOptions struct {
-	Retry    int
+	Retries  int
 	Timeout  time.Duration
 	Hosts    *Hosts
 	Resolver Resolver
@@ -322,9 +340,9 @@ type ChainOptions struct {
 type ChainOption func(opts *ChainOptions)
 
 // RetryChainOption specifies the times of retry used by Chain.Dial.
-func RetryChainOption(retry int) ChainOption {
+func RetryChainOption(retries int) ChainOption {
 	return func(opts *ChainOptions) {
-		opts.Retry = retry
+		opts.Retries = retries
 	}
 }
 

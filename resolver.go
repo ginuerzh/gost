@@ -48,12 +48,6 @@ func (ns NameServer) String() string {
 	return fmt.Sprintf("%s/%s %s", addr, prot, host)
 }
 
-type nameServers struct {
-	Servers []NameServer
-	Timeout time.Duration
-	TTL     time.Duration
-}
-
 type resolverCacheItem struct {
 	IPs []net.IP
 	ts  int64

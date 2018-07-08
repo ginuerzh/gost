@@ -321,7 +321,12 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("Proxy-Authorization")
 	r.Header.Del("Proxy-Connection")
 
-	cc, err := h.options.Chain.Dial(target)
+	cc, err := h.options.Chain.Dial(target,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[http2] %s -> %s : %s", r.RemoteAddr, target, err)
 		w.WriteHeader(http.StatusServiceUnavailable)

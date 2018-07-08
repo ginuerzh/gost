@@ -86,7 +86,10 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 	}
 
 	log.Logf("[tcp] %s - %s", conn.RemoteAddr(), node.Addr)
-	cc, err := h.options.Chain.Dial(node.Addr)
+	cc, err := h.options.Chain.Dial(node.Addr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+	)
 	if err != nil {
 		log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), node.Addr, err)
 		node.MarkDead()

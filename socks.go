@@ -435,7 +435,12 @@ func (h *socks5Handler) handleConnect(conn net.Conn, req *gosocks5.Request) {
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr)
+	cc, err := h.options.Chain.Dial(addr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[socks5-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		rep := gosocks5.NewReply(gosocks5.HostUnreachable, nil)
@@ -1181,7 +1186,10 @@ func (h *socks4Handler) handleConnect(conn net.Conn, req *gosocks4.Request) {
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr)
+	cc, err := h.options.Chain.Dial(addr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+	)
 	if err != nil {
 		log.Logf("[socks4-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		rep := gosocks4.NewReply(gosocks4.Failed, nil)

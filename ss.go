@@ -152,7 +152,12 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr)
+	cc, err := h.options.Chain.Dial(addr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[ss] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 		return
