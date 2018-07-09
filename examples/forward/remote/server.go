@@ -12,7 +12,6 @@ func main() {
 }
 
 func sshRemoteForwardServer() {
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":11222")
 	if err != nil {
 		log.Fatal(err)
@@ -22,7 +21,8 @@ func sshRemoteForwardServer() {
 		// gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 		gost.TLSConfigHandlerOption(tlsConfig()),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 var (
