@@ -50,7 +50,6 @@ func http2Server() {
 		}
 	}
 
-	s := &gost.Server{}
 	ln, err := gost.HTTP2Listener(laddr, &tls.Config{Certificates: []tls.Certificate{cert}})
 	if err != nil {
 		log.Fatal(err)
@@ -65,7 +64,8 @@ func http2Server() {
 		gost.UsersHandlerOption(users...),
 		gost.AddrHandlerOption(laddr),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 var (

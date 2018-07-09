@@ -31,7 +31,6 @@ func main() {
 }
 
 func udpRemoteForwardServer() {
-	s := &gost.Server{}
 	ln, err := gost.UDPRemoteForwardListener(
 		laddr,
 		/*
@@ -56,5 +55,6 @@ func udpRemoteForwardServer() {
 	h := gost.UDPRemoteForwardHandler(
 		faddr,
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }

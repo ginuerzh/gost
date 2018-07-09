@@ -52,7 +52,6 @@ func main() {
 }
 
 func httpServer() {
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":18080")
 	if err != nil {
 		log.Fatal(err)
@@ -60,11 +59,11 @@ func httpServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func socks5Server() {
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":11080")
 	if err != nil {
 		log.Fatal(err)
@@ -73,11 +72,11 @@ func socks5Server() {
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 		gost.TLSConfigHandlerOption(tlsConfig()),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func shadowServer() {
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":18338")
 	if err != nil {
 		log.Fatal(err)
@@ -85,11 +84,11 @@ func shadowServer() {
 	h := gost.ShadowHandler(
 		gost.UsersHandlerOption(url.UserPassword("chacha20", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func tlsServer() {
-	s := &gost.Server{}
 	ln, err := gost.TLSListener(":11443", tlsConfig())
 	if err != nil {
 		log.Fatal(err)
@@ -97,11 +96,11 @@ func tlsServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func wsServer() {
-	s := &gost.Server{}
 	ln, err := gost.WSListener(":18000", nil)
 	if err != nil {
 		log.Fatal(err)
@@ -109,11 +108,11 @@ func wsServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func wssServer() {
-	s := &gost.Server{}
 	ln, err := gost.WSSListener(":18443", tlsConfig(), nil)
 	if err != nil {
 		log.Fatal(err)
@@ -121,31 +120,31 @@ func wssServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func kcpServer() {
-	s := &gost.Server{}
 	ln, err := gost.KCPListener(":18388", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	h := gost.HTTPHandler()
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func tcpForwardServer() {
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":2222")
 	if err != nil {
 		log.Fatal(err)
 	}
 	h := gost.TCPDirectForwardHandler("localhost:22")
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func tcpRemoteForwardServer() {
-	s := &gost.Server{}
 	ln, err := gost.TCPRemoteForwardListener(
 		":1222",
 		/*
@@ -171,11 +170,11 @@ func tcpRemoteForwardServer() {
 		":22",
 		//gost.AddrHandlerOption("127.0.0.1:22"),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func rudpForwardServer() {
-	s := &gost.Server{}
 	ln, err := gost.UDPRemoteForwardListener(
 		":10053",
 		gost.NewChain(
@@ -196,21 +195,21 @@ func rudpForwardServer() {
 		log.Fatal()
 	}
 	h := gost.UDPRemoteForwardHandler("localhost:53")
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func tcpRedirectServer() {
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":8008")
 	if err != nil {
 		log.Fatal(err)
 	}
 	h := gost.TCPRedirectHandler()
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func sshTunnelServer() {
-	s := &gost.Server{}
 	ln, err := gost.SSHTunnelListener(":12222", &gost.SSHConfig{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
@@ -218,13 +217,13 @@ func sshTunnelServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func http2Server() {
 	// http2.VerboseLogs = true
 
-	s := &gost.Server{}
 	ln, err := gost.HTTP2Listener(":1443", tlsConfig())
 	if err != nil {
 		log.Fatal(err)
@@ -232,11 +231,11 @@ func http2Server() {
 	h := gost.HTTP2Handler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func http2TunnelServer() {
-	s := &gost.Server{}
 	ln, err := gost.H2Listener(":8443", tlsConfig()) // HTTP2 h2 mode
 	// ln, err := gost.H2CListener(":8443") // HTTP2 h2c mode
 	if err != nil {
@@ -249,11 +248,11 @@ func http2TunnelServer() {
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 		gost.TLSConfigHandlerOption(tlsConfig()),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func quicServer() {
-	s := &gost.Server{}
 	ln, err := gost.QUICListener("localhost:6121", &gost.QUICConfig{TLSConfig: tlsConfig()})
 	if err != nil {
 		log.Fatal(err)
@@ -261,11 +260,11 @@ func quicServer() {
 	h := gost.HTTPHandler(
 		gost.UsersHandlerOption(url.UserPassword("admin", "123456")),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 func shadowUDPServer() {
-	s := &gost.Server{}
 	ln, err := gost.ShadowUDPListener(":18338", url.UserPassword("chacha20", "123456"), 30*time.Second)
 	if err != nil {
 		log.Fatal(err)
@@ -286,7 +285,8 @@ func shadowUDPServer() {
 		)),
 	*/
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 var (

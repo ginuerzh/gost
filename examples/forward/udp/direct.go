@@ -31,7 +31,6 @@ func main() {
 }
 
 func udpDirectForwardServer() {
-	s := &gost.Server{}
 	ln, err := gost.UDPDirectForwardListener(laddr, time.Second*30)
 	if err != nil {
 		log.Fatal(err)
@@ -53,5 +52,6 @@ func udpDirectForwardServer() {
 		})),
 	*/
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
