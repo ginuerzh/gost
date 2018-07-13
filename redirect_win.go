@@ -25,6 +25,10 @@ func TCPRedirectHandler(opts ...HandlerOption) Handler {
 	return h
 }
 
+func (h *tcpRedirectHandler) Init(options ...HandlerOption) {
+	log.Log("[red-tcp] TCP redirect is not available on the Windows platform")
+}
+
 func (h *tcpRedirectHandler) Handle(c net.Conn) {
 	log.Log("[red-tcp] TCP redirect is not available on the Windows platform")
 	c.Close()
