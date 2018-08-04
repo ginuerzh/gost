@@ -74,6 +74,10 @@ var bypassTests = []struct {
 	{[]string{"www.example.*"}, false, "www.example.com", true},
 	{[]string{"www.example.*"}, false, "www.example.io", true},
 	{[]string{"www.example.*"}, false, "www.example.com.cn", true},
+
+	{[]string{".example.com"}, false, "www.example.com", true},
+	{[]string{".example.com"}, false, "example.com", true},
+	{[]string{".example.com"}, false, "www.example.com.cn", false},
 }
 
 func TestBypass(t *testing.T) {
