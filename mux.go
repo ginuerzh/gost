@@ -36,6 +36,14 @@ func (session *muxSession) GetConn() (net.Conn, error) {
 	return &muxStreamConn{Conn: session.conn, stream: stream}, nil
 }
 
+func (session *muxSession) Accept() (net.Conn, error) {
+	stream, err := session.session.AcceptStream()
+	if err != nil {
+		return nil, err
+	}
+	return &muxStreamConn{Conn: session.conn, stream: stream}, nil
+}
+
 func (session *muxSession) Close() error {
 	return session.session.Close()
 }

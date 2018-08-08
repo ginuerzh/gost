@@ -9,14 +9,13 @@ import (
 )
 
 var (
-	// ErrNoneAvailable indicates there is no node available
+	// ErrNoneAvailable indicates there is no node available.
 	ErrNoneAvailable = errors.New("none available")
 )
 
 // NodeSelector as a mechanism to pick nodes and mark their status.
 type NodeSelector interface {
 	Select(nodes []Node, opts ...SelectOption) (Node, error)
-	// Mark(node Node)
 }
 
 type defaultSelector struct {
@@ -39,10 +38,10 @@ func (s *defaultSelector) Select(nodes []Node, opts ...SelectOption) (Node, erro
 	return sopts.Strategy.Apply(nodes), nil
 }
 
-// SelectOption used when making a select call
+// SelectOption is the option used when making a select call.
 type SelectOption func(*SelectOptions)
 
-// SelectOptions is the options for node selection
+// SelectOptions is the options for node selection.
 type SelectOptions struct {
 	Filters  []Filter
 	Strategy Strategy
@@ -63,18 +62,19 @@ func WithStrategy(s Strategy) SelectOption {
 	}
 }
 
-// Strategy is a selection strategy e.g random, round robin
+// Strategy is a selection strategy e.g random, round-robin.
 type Strategy interface {
 	Apply([]Node) Node
 	String() string
 }
 
-// RoundStrategy is a strategy for node selector
+// RoundStrategy is a strategy for node selector.
+// The node will be selected by round-robin algorithm.
 type RoundStrategy struct {
 	count uint64
 }
 
-// Apply applies the round robin strategy for the nodes
+// Apply applies the round-robin strategy for the nodes.
 func (s *RoundStrategy) Apply(nodes []Node) Node {
 	if len(nodes) == 0 {
 		return Node{}
@@ -88,14 +88,15 @@ func (s *RoundStrategy) String() string {
 	return "round"
 }
 
-// RandomStrategy is a strategy for node selector
+// RandomStrategy is a strategy for node selector.
+// The node will be selected randomly.
 type RandomStrategy struct {
 	Seed int64
 	rand *rand.Rand
 	once sync.Once
 }
 
-// Apply applies the random strategy for the nodes
+// Apply applies the random strategy for the nodes.
 func (s *RandomStrategy) Apply(nodes []Node) Node {
 	s.once.Do(func() {
 		seed := s.Seed
@@ -115,6 +116,23 @@ func (s *RandomStrategy) String() string {
 	return "random"
 }
 
+// FIFOStrategy is a strategy for node selector.
+// The node will be selected from first to last,
+// and will stick to the selected node until it is failed.
+type FIFOStrategy struct{}
+
+// Apply applies the fifo strategy for the nodes.
+func (s *FIFOStrategy) Apply(nodes []Node) Node {
+	if len(nodes) == 0 {
+		return Node{}
+	}
+	return nodes[0]
+}
+
+func (s *FIFOStrategy) String() string {
+	return "fifo"
+}
+
 // Filter is used to filter a node during the selection process
 type Filter interface {
 	Filter([]Node) []Node
@@ -130,7 +148,7 @@ type FailFilter struct {
 
 // Filter filters nodes.
 func (f *FailFilter) Filter(nodes []Node) []Node {
-	if f.MaxFails <= 0 {
+	if len(nodes) <= 1 || f.MaxFails <= 0 {
 		return nodes
 	}
 	nl := []Node{}

@@ -1,12 +1,10 @@
 package ackhandler
 
-import (
-	"github.com/lucas-clemente/quic-go/frames"
-)
+import "github.com/lucas-clemente/quic-go/internal/wire"
 
 // Returns a new slice with all non-retransmittable frames deleted.
-func stripNonRetransmittableFrames(fs []frames.Frame) []frames.Frame {
-	res := make([]frames.Frame, 0, len(fs))
+func stripNonRetransmittableFrames(fs []wire.Frame) []wire.Frame {
+	res := make([]wire.Frame, 0, len(fs))
 	for _, f := range fs {
 		if IsFrameRetransmittable(f) {
 			res = append(res, f)
@@ -16,11 +14,11 @@ func stripNonRetransmittableFrames(fs []frames.Frame) []frames.Frame {
 }
 
 // IsFrameRetransmittable returns true if the frame should be retransmitted.
-func IsFrameRetransmittable(f frames.Frame) bool {
+func IsFrameRetransmittable(f wire.Frame) bool {
 	switch f.(type) {
-	case *frames.StopWaitingFrame:
+	case *wire.StopWaitingFrame:
 		return false
-	case *frames.AckFrame:
+	case *wire.AckFrame:
 		return false
 	default:
 		return true
@@ -28,7 +26,7 @@ func IsFrameRetransmittable(f frames.Frame) bool {
 }
 
 // HasRetransmittableFrames returns true if at least one frame is retransmittable.
-func HasRetransmittableFrames(fs []frames.Frame) bool {
+func HasRetransmittableFrames(fs []wire.Frame) bool {
 	for _, f := range fs {
 		if IsFrameRetransmittable(f) {
 			return true

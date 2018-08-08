@@ -189,9 +189,9 @@ func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPCon
 	kcpconn.SetACKNoDelay(config.AckNodelay)
 	kcpconn.SetKeepAlive(config.KeepAlive)
 
-	if err := kcpconn.SetDSCP(config.DSCP); err != nil {
-		log.Log("[kcp]", err)
-	}
+	// if err := kcpconn.SetDSCP(config.DSCP); err != nil {
+	// 	log.Log("[kcp]", err)
+	// }
 	if err := kcpconn.SetReadBuffer(config.SockBuf); err != nil {
 		log.Log("[kcp]", err)
 	}
@@ -236,9 +236,9 @@ func KCPListener(addr string, config *KCPConfig) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = ln.SetDSCP(config.DSCP); err != nil {
-		log.Log("[kcp]", err)
-	}
+	// if err = ln.SetDSCP(config.DSCP); err != nil {
+	// 	log.Log("[kcp]", err)
+	// }
 	if err = ln.SetReadBuffer(config.SockBuf); err != nil {
 		log.Log("[kcp]", err)
 	}

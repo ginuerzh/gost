@@ -158,6 +158,11 @@ func (tr *mwsTransporter) Dial(addr string, options ...DialOption) (conn net.Con
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
+	if session != nil && session.session != nil && session.session.IsClosed() {
+		session.Close()
+		delete(tr.sessions, addr)
+		ok = false
+	}
 	if !ok {
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
@@ -193,6 +198,7 @@ func (tr *mwsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 		session = s
 		tr.sessions[opts.Addr] = session
 	}
+
 	cc, err := session.GetConn()
 	if err != nil {
 		session.Close()
@@ -281,6 +287,11 @@ func (tr *mwssTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
+	if session != nil && session.session != nil && session.session.IsClosed() {
+		session.Close()
+		delete(tr.sessions, addr)
+		ok = false
+	}
 	if !ok {
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)

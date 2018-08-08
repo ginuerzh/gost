@@ -1,8 +1,8 @@
 package ackhandler
 
 import (
-	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // This stopWaitingManager is not supposed to satisfy the StopWaitingManager interface, which is a remnant of the legacy AckHandler, and should be remove once we drop support for QUIC 33
@@ -10,10 +10,10 @@ type stopWaitingManager struct {
 	largestLeastUnackedSent protocol.PacketNumber
 	nextLeastUnacked        protocol.PacketNumber
 
-	lastStopWaitingFrame *frames.StopWaitingFrame
+	lastStopWaitingFrame *wire.StopWaitingFrame
 }
 
-func (s *stopWaitingManager) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
+func (s *stopWaitingManager) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
 	if s.nextLeastUnacked <= s.largestLeastUnackedSent {
 		if force {
 			return s.lastStopWaitingFrame
@@ -22,14 +22,14 @@ func (s *stopWaitingManager) GetStopWaitingFrame(force bool) *frames.StopWaiting
 	}
 
 	s.largestLeastUnackedSent = s.nextLeastUnacked
-	swf := &frames.StopWaitingFrame{
+	swf := &wire.StopWaitingFrame{
 		LeastUnacked: s.nextLeastUnacked,
 	}
 	s.lastStopWaitingFrame = swf
 	return swf
 }
 
-func (s *stopWaitingManager) ReceivedAck(ack *frames.AckFrame) {
+func (s *stopWaitingManager) ReceivedAck(ack *wire.AckFrame) {
 	if ack.LargestAcked >= s.nextLeastUnacked {
 		s.nextLeastUnacked = ack.LargestAcked + 1
 	}

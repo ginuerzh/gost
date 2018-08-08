@@ -1,6 +1,6 @@
 package congestion
 
-import "github.com/lucas-clemente/quic-go/protocol"
+import "github.com/lucas-clemente/quic-go/internal/protocol"
 
 type connectionStats struct {
 	slowstartPacketsLost protocol.PacketNumber

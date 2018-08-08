@@ -27,9 +27,34 @@ gost - GO Simple Tunnel
 * [权限控制](https://docs.ginuerzh.xyz/gost/permission/)
 * [负载均衡](https://docs.ginuerzh.xyz/gost/load-balancing/)
 
-Wiki站点: https://docs.ginuerzh.xyz/gost/
+Wiki站点: <https://docs.ginuerzh.xyz/gost/>
 
-Google讨论组: https://groups.google.com/d/forum/go-gost
+Google讨论组: <https://groups.google.com/d/forum/go-gost>
+
+安装
+------
+
+#### 二进制文件
+
+<https://github.com/ginuerzh/gost/releases>
+
+#### 源码编译
+
+```bash
+go get -u github.com/ginuerzh/gost/cmd/gost
+```
+
+#### Docker
+
+```bash
+docker pull ginuerzh/gost
+```
+
+#### Ubuntu商店
+
+```bash
+sudo snap install gost
+```
 
 快速上手
 ------
