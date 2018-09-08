@@ -64,16 +64,6 @@ func init() {
 }
 
 func main() {
-	// generate random self-signed certificate.
-	cert, err := gost.GenCertificate()
-	if err != nil {
-		log.Log(err)
-		os.Exit(1)
-	}
-	gost.DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
-
 	for _, route := range routes {
 		if err := route.serve(); err != nil {
 			log.Log(err)
