@@ -3,6 +3,7 @@ package gost
 import (
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/go-log/log"
@@ -99,20 +100,24 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 }
 
 func transport(rw1, rw2 io.ReadWriter) error {
-	errc := make(chan error, 1)
-	go func() {
-		_, err := io.Copy(rw1, rw2)
-		errc <- err
-	}()
+	var err1 error
+	var err2 error
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	go func() {
-		_, err := io.Copy(rw2, rw1)
-		errc <- err
+		_, err1 = io.Copy(rw1, rw2)
+		wg.Done()
+	}()
+	go func() {
+		_, err2 = io.Copy(rw2, rw1)
+		wg.Done()
 	}()
 
-	err := <-errc
-	if err != nil && err == io.EOF {
-		err = nil
+	// wait for both direction complete
+	wg.Wait()
+	if err1 != nil {
+		return err1
 	}
-	return err
+	return err2
 }
