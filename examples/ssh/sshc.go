@@ -44,7 +44,6 @@ func main() {
 		},
 	)
 
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(laddr)
 	if err != nil {
 		log.Fatal(err)
@@ -53,7 +52,8 @@ func main() {
 		gost.ChainHandlerOption(chain),
 		gost.TLSConfigHandlerOption(tlsConfig()),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
 
 var (

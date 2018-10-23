@@ -23,7 +23,6 @@ func sshRemoteForward() {
 		},
 	)
 
-	s := &gost.Server{}
 	ln, err := gost.TCPRemoteForwardListener(":11800", chain)
 	if err != nil {
 		log.Fatal(err)
@@ -31,5 +30,6 @@ func sshRemoteForward() {
 	h := gost.TCPRemoteForwardHandler(
 		"localhost:10000",
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
