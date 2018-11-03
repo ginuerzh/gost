@@ -114,7 +114,7 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 				if err != nil {
 					return nil, err
 				}
-				return wrapTLSClient(conn, cfg)
+				return wrapTLSClient(conn, cfg, opts.Timeout)
 			},
 		}
 		client = &http.Client{
@@ -182,7 +182,7 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 				if tr.tlsConfig == nil {
 					return conn, nil
 				}
-				return wrapTLSClient(conn, cfg)
+				return wrapTLSClient(conn, cfg, opts.Timeout)
 			},
 		}
 		client = &http.Client{
