@@ -98,6 +98,9 @@ func (h *ClientHelloHandshake) ReadFrom(r io.Reader) (n int64, err error) {
 
 	// extLen := int(binary.BigEndian.Uint16(b[pos : pos+2]))
 	pos += 2
+	if pos >= len(b) {
+		return
+	}
 
 	br := bytes.NewReader(b[pos:])
 	for br.Len() > 0 {
