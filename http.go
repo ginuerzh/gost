@@ -75,13 +75,18 @@ type httpHandler struct {
 
 // HTTPHandler creates a server Handler for HTTP proxy server.
 func HTTPHandler(opts ...HandlerOption) Handler {
-	h := &httpHandler{
-		options: &HandlerOptions{},
+	h := &httpHandler{}
+	h.Init(opts...)
+	return h
+}
+
+func (h *httpHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *httpHandler) Handle(conn net.Conn) {
@@ -116,8 +121,26 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 		return
 	}
 
+	// try to get the actual host.
+	if v := req.Header.Get("Gost-Target"); v != "" {
+		if host, err := decodeServerName(v); err == nil {
+			req.Host = host
+		}
+	}
+
 	if !Can("tcp", req.Host, h.options.Whitelist, h.options.Blacklist) {
 		log.Logf("[http] Unauthorized to tcp connect to %s", req.Host)
+		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
+			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
+		conn.Write(b)
+		if Debug {
+			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), req.Host, string(b))
+		}
+		return
+	}
+
+	if h.options.Bypass.Contains(req.Host) {
+		log.Logf("[http] [bypass] %s", req.Host)
 		b := []byte("HTTP/1.1 403 Forbidden\r\n" +
 			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
 		conn.Write(b)
@@ -143,26 +166,50 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	req.Header.Del("Proxy-Authorization")
 	// req.Header.Del("Proxy-Connection")
 
-	// try to get the actual host.
-	if v := req.Header.Get("Gost-Target"); v != "" {
-		if host, err := decodeServerName(v); err == nil {
-			req.Host = host
+	host := req.Host
+	if _, port, _ := net.SplitHostPort(host); port == "" {
+		host = net.JoinHostPort(req.Host, "80")
+	}
+
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var err error
+	var cc net.Conn
+	var route *Chain
+	for i := 0; i < retries; i++ {
+		route, err = h.options.Chain.selectRouteFor(req.Host)
+		if err != nil {
+			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+			continue
+		}
+		// forward http request
+		lastNode := route.LastNode()
+		if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
+			err = h.forwardRequest(conn, req, route)
+			if err == nil {
+				return
+			}
+			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+			continue
+		}
+
+		cc, err = route.Dial(host,
+			RetryChainOption(1),
+			TimeoutChainOption(h.options.Timeout),
+			HostsChainOption(h.options.Hosts),
+			ResolverChainOption(h.options.Resolver),
+		)
+		if err == nil {
+			break
 		}
 	}
 
-	// forward http request
-	lastNode := h.options.Chain.LastNode()
-	if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
-		h.forwardRequest(conn, req)
-		return
-	}
-
-	host := req.Host
-	if !strings.Contains(host, ":") {
-		host += ":80"
-	}
-
-	cc, err := h.options.Chain.Dial(host)
 	if err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), host, err)
 
@@ -192,28 +239,27 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 		}
 	}
 
-	log.Logf("[http] %s <-> %s", cc.LocalAddr(), host)
+	var su string
+	if u != "" {
+		su = u + "@"
+	}
+
+	log.Logf("[http] %s%s <-> %s", su, cc.LocalAddr(), host)
 	transport(conn, cc)
-	log.Logf("[http] %s >-< %s", cc.LocalAddr(), host)
+	log.Logf("[http] %s%s >-< %s", su, cc.LocalAddr(), host)
 }
 
-func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request) {
-	if h.options.Chain.IsEmpty() {
-		return
+func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Chain) error {
+	if route.IsEmpty() {
+		return nil
 	}
-	lastNode := h.options.Chain.LastNode()
+	lastNode := route.LastNode()
 
-	cc, err := h.options.Chain.Conn()
+	cc, err := route.Conn(
+		RetryChainOption(1), // we control the retry manually.
+	)
 	if err != nil {
-		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), lastNode.Addr, err)
-
-		b := []byte("HTTP/1.1 503 Service unavailable\r\n" +
-			"Proxy-Agent: gost/" + Version + "\r\n\r\n")
-		if Debug {
-			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), lastNode.Addr, string(b))
-		}
-		conn.Write(b)
-		return
+		return err
 	}
 	defer cc.Close()
 
@@ -232,14 +278,14 @@ func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request) {
 	}
 	if err = req.WriteProxy(cc); err != nil {
 		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
-		return
+		return nil
 	}
 	cc.SetWriteDeadline(time.Time{})
 
 	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
 	transport(conn, cc)
 	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
-	return
+	return nil
 }
 
 func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {

@@ -114,7 +114,7 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 				if err != nil {
 					return nil, err
 				}
-				return wrapTLSClient(conn, cfg)
+				return wrapTLSClient(conn, cfg, opts.Timeout)
 			},
 		}
 		client = &http.Client{
@@ -182,7 +182,7 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 				if tr.tlsConfig == nil {
 					return conn, nil
 				}
-				return wrapTLSClient(conn, cfg)
+				return wrapTLSClient(conn, cfg, opts.Timeout)
 			},
 		}
 		client = &http.Client{
@@ -250,14 +250,19 @@ type http2Handler struct {
 
 // HTTP2Handler creates a server Handler for HTTP2 proxy server.
 func HTTP2Handler(opts ...HandlerOption) Handler {
-	h := &http2Handler{
-		options: new(HandlerOptions),
-	}
-	for _, opt := range opts {
-		opt(h.options)
-	}
+	h := &http2Handler{}
+	h.Init(opts...)
 
 	return h
+}
+
+func (h *http2Handler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+	for _, opt := range options {
+		opt(h.options)
+	}
 }
 
 func (h *http2Handler) Handle(conn net.Conn) {
@@ -296,6 +301,12 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.options.Bypass.Contains(target) {
+		log.Logf("[http2] [bypass] %s", target)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
 	if Debug && (u != "" || p != "") {
 		log.Logf("[http] %s - %s : Authorization: '%s' '%s'", r.RemoteAddr, target, u, p)
@@ -310,7 +321,12 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("Proxy-Authorization")
 	r.Header.Del("Proxy-Connection")
 
-	cc, err := h.options.Chain.Dial(target)
+	cc, err := h.options.Chain.Dial(target,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[http2] %s -> %s : %s", r.RemoteAddr, target, err)
 		w.WriteHeader(http.StatusServiceUnavailable)

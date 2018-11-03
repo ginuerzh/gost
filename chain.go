@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/go-log/log"
 )
@@ -99,13 +100,22 @@ func (c *Chain) IsEmpty() bool {
 
 // Dial connects to the target address addr through the chain.
 // If the chain is empty, it will use the net.Dial directly.
-func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
-	if c.IsEmpty() {
-		return net.DialTimeout("tcp", addr, DialTimeout)
+func (c *Chain) Dial(addr string, opts ...ChainOption) (conn net.Conn, err error) {
+	options := &ChainOptions{}
+	for _, opt := range opts {
+		opt(options)
 	}
 
-	for i := 0; i < c.Retries+1; i++ {
-		conn, err = c.dial(addr)
+	retries := 1
+	if c != nil && c.Retries > 0 {
+		retries = c.Retries
+	}
+	if options.Retries > 0 {
+		retries = options.Retries
+	}
+
+	for i := 0; i < retries; i++ {
+		conn, err = c.dialWithOptions(addr, options)
 		if err == nil {
 			break
 		}
@@ -113,10 +123,19 @@ func (c *Chain) Dial(addr string) (conn net.Conn, err error) {
 	return
 }
 
-func (c *Chain) dial(addr string) (net.Conn, error) {
-	route, err := c.selectRoute()
+func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, error) {
+	if options == nil {
+		options = &ChainOptions{}
+	}
+	route, err := c.selectRouteFor(addr)
 	if err != nil {
 		return nil, err
+	}
+
+	addr = c.resolve(addr, options.Resolver, options.Hosts)
+
+	if route.IsEmpty() {
+		return net.DialTimeout("tcp", addr, options.Timeout)
 	}
 
 	conn, err := route.getConn()
@@ -132,10 +151,44 @@ func (c *Chain) dial(addr string) (net.Conn, error) {
 	return cc, nil
 }
 
+func (c *Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+
+	if ip := hosts.Lookup(host); ip != nil {
+		return net.JoinHostPort(ip.String(), port)
+	}
+	if resolver != nil {
+		ips, err := resolver.Resolve(host)
+		if err != nil {
+			log.Logf("[resolver] %s: %v", host, err)
+		}
+		if len(ips) > 0 {
+			return net.JoinHostPort(ips[0].String(), port)
+		}
+	}
+	return addr
+}
+
 // Conn obtains a handshaked connection to the last node of the chain.
 // If the chain is empty, it returns an ErrEmptyChain error.
-func (c *Chain) Conn() (conn net.Conn, err error) {
-	for i := 0; i < c.Retries+1; i++ {
+func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
+	options := &ChainOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	retries := 1
+	if c != nil && c.Retries > 0 {
+		retries = c.Retries
+	}
+	if options.Retries > 0 {
+		retries = options.Retries
+	}
+
+	for i := 0; i < retries; i++ {
 		var route *Chain
 		route, err = c.selectRoute()
 		if err != nil {
@@ -143,6 +196,7 @@ func (c *Chain) Conn() (conn net.Conn, err error) {
 		}
 		conn, err = route.getConn()
 		if err != nil {
+			log.Log(err)
 			continue
 		}
 
@@ -151,6 +205,7 @@ func (c *Chain) Conn() (conn net.Conn, err error) {
 	return
 }
 
+// getConn obtains a connection to the last node of the chain.
 func (c *Chain) getConn() (conn net.Conn, err error) {
 	if c.IsEmpty() {
 		err = ErrEmptyChain
@@ -198,13 +253,12 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 }
 
 func (c *Chain) selectRoute() (route *Chain, err error) {
-	if c.isRoute {
+	if c.IsEmpty() || c.isRoute {
 		return c, nil
 	}
 
 	buf := bytes.Buffer{}
 	route = newRoute()
-	route.Retries = c.Retries
 
 	for _, group := range c.nodeGroups {
 		node, err := group.Next()
@@ -218,13 +272,97 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 				ChainDialOption(route),
 			)
 			route = newRoute() // cutoff the chain for multiplex.
-			route.Retries = c.Retries
 		}
 
 		route.AddNode(node)
 	}
+	route.Retries = c.Retries
+
 	if Debug {
 		log.Log("select route:", buf.String())
 	}
 	return
+}
+
+// selectRouteFor selects route with bypass testing.
+func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
+	if c.IsEmpty() || c.isRoute {
+		return c, nil
+	}
+
+	buf := bytes.Buffer{}
+	route = newRoute()
+
+	for _, group := range c.nodeGroups {
+		var node Node
+		node, err = group.Next()
+		if err != nil {
+			return
+		}
+
+		if node.Bypass.Contains(addr) {
+			if Debug {
+				buf.WriteString(fmt.Sprintf("[bypass]%s -> %s", node.String(), addr))
+				log.Log("[route]", buf.String())
+			}
+			return
+		}
+
+		buf.WriteString(fmt.Sprintf("%s -> ", node.String()))
+
+		if node.Client.Transporter.Multiplex() {
+			node.DialOptions = append(node.DialOptions,
+				ChainDialOption(route),
+			)
+			route = newRoute() // cutoff the chain for multiplex.
+		}
+
+		route.AddNode(node)
+	}
+	route.Retries = c.Retries
+
+	if Debug {
+		buf.WriteString(addr)
+		log.Log("[route]", buf.String())
+	}
+	return
+}
+
+// ChainOptions holds options for Chain.
+type ChainOptions struct {
+	Retries  int
+	Timeout  time.Duration
+	Hosts    *Hosts
+	Resolver Resolver
+}
+
+// ChainOption allows a common way to set chain options.
+type ChainOption func(opts *ChainOptions)
+
+// RetryChainOption specifies the times of retry used by Chain.Dial.
+func RetryChainOption(retries int) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Retries = retries
+	}
+}
+
+// TimeoutChainOption specifies the timeout used by Chain.Dial.
+func TimeoutChainOption(timeout time.Duration) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Timeout = timeout
+	}
+}
+
+// HostsChainOption specifies the hosts used by Chain.Dial.
+func HostsChainOption(hosts *Hosts) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Hosts = hosts
+	}
+}
+
+// ResolverChainOption specifies the Resolver used by Chain.Dial.
+func ResolverChainOption(resolver Resolver) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.Resolver = resolver
+	}
 }

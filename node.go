@@ -25,6 +25,7 @@ type Node struct {
 	group            *NodeGroup
 	failCount        uint32
 	failTime         int64
+	Bypass           *Bypass
 }
 
 // ParseNode parses the node info.
@@ -139,6 +140,7 @@ func (node *Node) Clone() Node {
 		group:            node.group,
 		failCount:        atomic.LoadUint32(&node.failCount),
 		failTime:         atomic.LoadInt64(&node.failTime),
+		Bypass:           node.Bypass,
 	}
 }
 
@@ -184,6 +186,15 @@ func (group *NodeGroup) AddNode(node ...Node) {
 		return
 	}
 	group.nodes = append(group.nodes, node...)
+}
+
+// SetSelector sets node selector with options for the group.
+func (group *NodeGroup) SetSelector(selector NodeSelector, opts ...SelectOption) {
+	if group == nil {
+		return
+	}
+	group.Selector = selector
+	group.Options = opts
 }
 
 // Nodes returns node list in the group

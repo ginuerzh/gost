@@ -97,13 +97,20 @@ type shadowHandler struct {
 
 // ShadowHandler creates a server Handler for shadowsocks proxy server.
 func ShadowHandler(opts ...HandlerOption) Handler {
-	h := &shadowHandler{
-		options: &HandlerOptions{},
+	h := &shadowHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *shadowHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *shadowHandler) Handle(conn net.Conn) {
@@ -140,7 +147,17 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr)
+	if h.options.Bypass.Contains(addr) {
+		log.Logf("[ss] [bypass] %s", addr)
+		return
+	}
+
+	cc, err := h.options.Chain.Dial(addr,
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+		HostsChainOption(h.options.Hosts),
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		log.Logf("[ss] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 		return
@@ -321,13 +338,20 @@ type shadowUDPdHandler struct {
 
 // ShadowUDPdHandler creates a server Handler for shadowsocks UDP relay server.
 func ShadowUDPdHandler(opts ...HandlerOption) Handler {
-	h := &shadowUDPdHandler{
-		options: &HandlerOptions{},
+	h := &shadowUDPdHandler{}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *shadowUDPdHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
 	}
-	for _, opt := range opts {
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
 }
 
 func (h *shadowUDPdHandler) Handle(conn net.Conn) {
@@ -353,11 +377,11 @@ func (h *shadowUDPdHandler) Handle(conn net.Conn) {
 	defer cc.Close()
 
 	log.Logf("[ssu] %s <-> %s", conn.RemoteAddr(), conn.LocalAddr())
-	transportUDP(conn, cc)
+	h.transportUDP(conn, cc)
 	log.Logf("[ssu] %s >-< %s", conn.RemoteAddr(), conn.LocalAddr())
 }
 
-func transportUDP(sc net.Conn, cc net.PacketConn) error {
+func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 	errc := make(chan error, 1)
 	go func() {
 		for {
@@ -374,13 +398,17 @@ func transportUDP(sc net.Conn, cc net.PacketConn) error {
 				errc <- err
 				return
 			}
-			//if Debug {
-			//	log.Logf("[ssu] %s >>> %s length: %d", sc.RemoteAddr(), dgram.Header.Addr.String(), len(dgram.Data))
-			//}
+			if Debug {
+				log.Logf("[ssu] %s >>> %s length: %d", sc.RemoteAddr(), dgram.Header.Addr.String(), len(dgram.Data))
+			}
 			addr, err := net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
 			if err != nil {
 				errc <- err
 				return
+			}
+			if h.options.Bypass.Contains(addr.String()) {
+				log.Log("[ssu] [bypass] write to", addr)
+				continue // bypass
 			}
 			if _, err := cc.WriteTo(dgram.Data, addr); err != nil {
 				errc <- err
@@ -397,9 +425,13 @@ func transportUDP(sc net.Conn, cc net.PacketConn) error {
 				errc <- err
 				return
 			}
-			//if Debug {
-			//	log.Logf("[ssu] %s <<< %s length: %d", sc.RemoteAddr(), addr, n)
-			//}
+			if Debug {
+				log.Logf("[ssu] %s <<< %s length: %d", sc.RemoteAddr(), addr, n)
+			}
+			if h.options.Bypass.Contains(addr.String()) {
+				log.Log("[ssu] [bypass] read from", addr)
+				continue // bypass
+			}
 			dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, toSocksAddr(addr)), b[:n])
 			buf := bytes.Buffer{}
 			dgram.Write(&buf)

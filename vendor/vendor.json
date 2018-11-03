@@ -63,18 +63,6 @@
 			"revisionTime": "2016-04-30T09:49:23Z"
 		},
 		{
-			"checksumSHA1": "vN3qcK0Nkk4AhOfhTEA8ZUMu2RY=",
-			"path": "github.com/aead/chacha20",
-			"revision": "8d6ce0550041f9d97e7f15ec27ed489f8bbbb0fb",
-			"revisionTime": "2017-06-14T05:10:14Z"
-		},
-		{
-			"checksumSHA1": "zmmUB5W1Oz/czit5mixwbVQq31A=",
-			"path": "github.com/aead/chacha20/chacha",
-			"revision": "8d6ce0550041f9d97e7f15ec27ed489f8bbbb0fb",
-			"revisionTime": "2017-06-14T05:10:14Z"
-		},
-		{
 			"checksumSHA1": "30PBqj9BW03KCVqASvLg3bR+xYc=",
 			"path": "github.com/agl/ed25519/edwards25519",
 			"revision": "5312a61534124124185d41f09206b9fef1d88403",
@@ -117,16 +105,10 @@
 			"revisionTime": "2017-09-11T08:28:29Z"
 		},
 		{
-			"checksumSHA1": "9e9tjPDTESeCEdUMElph250lurs=",
-			"path": "github.com/ginuerzh/pht",
-			"revision": "8acf34a91f436364fadb82a630ab3c7e938e1d0f",
-			"revisionTime": "2017-02-05T06:52:49Z"
-		},
-		{
-			"checksumSHA1": "ZefD404me5Nm13S6NTsfJ57UApI=",
+			"checksumSHA1": "oAor5oKUyfFTHUT7ICWfe/aZTrY=",
 			"path": "github.com/ginuerzh/tls-dissector",
-			"revision": "ede94e83b36efefb6d06e5a29d28e2211b8bd6a9",
-			"revisionTime": "2017-10-29T12:10:54Z"
+			"revision": "7037c35ed6947fe9d9c33785fca4ac96eef8e62b",
+			"revisionTime": "2018-11-03T04:46:17Z"
 		},
 		{
 			"checksumSHA1": "fBx0fqiyrl26gkGo14J9pJ8zB2Y=",
@@ -135,10 +117,52 @@
 			"revisionTime": "2017-05-15T17:08:25Z"
 		},
 		{
-			"checksumSHA1": "HmbftipkadrLlCfzzVQ+iFHbl6g=",
-			"path": "github.com/golang/glog",
-			"revision": "23def4e6c14b4da8ac2ed8007337bc5eb5007998",
-			"revisionTime": "2016-01-25T20:49:56Z"
+			"checksumSHA1": "/RE0VzeaXdaBUNeNMUXWqzly7qY=",
+			"path": "github.com/gobwas/glob",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "UIxNdlqa2kcYi5EEe79/WzyPiz4=",
+			"path": "github.com/gobwas/glob/compiler",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "jNdbCxBabqjv9tREXA4Nx45Y4wg=",
+			"path": "github.com/gobwas/glob/match",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "2KhDNUE98XhHnIgg2S9E4gcWoig=",
+			"path": "github.com/gobwas/glob/syntax",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "FPIMdPSazNZGNU+ZmPtIeZpVHFU=",
+			"path": "github.com/gobwas/glob/syntax/ast",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "umyztSrQrQIl9JgwhDDb6wrSLeI=",
+			"path": "github.com/gobwas/glob/syntax/lexer",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "vux29fN5O22F3QPLOnjQ37278vg=",
+			"path": "github.com/gobwas/glob/util/runes",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
+		},
+		{
+			"checksumSHA1": "Sxp2AHWkkLkIq6w9aMcLmzcwD6w=",
+			"path": "github.com/gobwas/glob/util/strings",
+			"revision": "f00a7392b43971b2fdb562418faab1f18da2067a",
+			"revisionTime": "2018-04-02T14:15:43Z"
 		},
 		{
 			"checksumSHA1": "d9PxF1XQGLMJZRct2R8qVM/eYlE=",

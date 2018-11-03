@@ -30,7 +30,7 @@ func (tr *tlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	if opts.TLSConfig == nil {
 		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	return wrapTLSClient(conn, opts.TLSConfig)
+	return wrapTLSClient(conn, opts.TLSConfig, opts.Timeout)
 }
 
 type mtlsTransporter struct {
@@ -113,7 +113,7 @@ func (tr *mtlsTransporter) initSession(addr string, conn net.Conn, opts *Handsha
 	if opts.TLSConfig == nil {
 		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	conn, err := wrapTLSClient(conn, opts.TLSConfig)
+	conn, err := wrapTLSClient(conn, opts.TLSConfig, opts.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ func (l *mtlsListener) Close() error {
 //
 // This code is taken from consul:
 // https://github.com/hashicorp/consul/blob/master/tlsutil/config.go
-func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
+func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config, timeout time.Duration) (net.Conn, error) {
 	var err error
 	var tlsConn *tls.Conn
 
@@ -264,6 +264,12 @@ func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
 		return tlsConn, nil
 	}
 
+	if timeout <= 0 {
+		timeout = 10 * time.Second // default timeout
+	}
+
+	tlsConn.SetDeadline(time.Now().Add(timeout))
+
 	// Otherwise perform handshake, but don't verify the domain
 	//
 	// The following is lightly-modified from the doFullHandshake
@@ -272,6 +278,8 @@ func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
 		tlsConn.Close()
 		return nil, err
 	}
+
+	tlsConn.SetDeadline(time.Time{}) // clear timeout
 
 	opts := x509.VerifyOptions{
 		Roots:         tlsConfig.RootCAs,

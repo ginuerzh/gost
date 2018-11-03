@@ -1,20 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/url"
+	// _ "net/http/pprof"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/ginuerzh/gost"
@@ -64,15 +58,23 @@ func init() {
 }
 
 func main() {
-	// generate random self-signed certificate.
-	cert, err := gost.GenCertificate()
+	// go func() {
+	// 	log.Log(http.ListenAndServe("localhost:6060", nil))
+	// }()
+	// NOTE: as of 2.6, you can use custom cert/key files to initialize the default certificate.
+	config, err := tlsConfig(defaultCertFile, defaultKeyFile)
 	if err != nil {
-		log.Log(err)
-		os.Exit(1)
+		// generate random self-signed certificate.
+		cert, err := gost.GenCertificate()
+		if err != nil {
+			log.Log(err)
+			os.Exit(1)
+		}
+		config = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
 	}
-	gost.DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
+	gost.DefaultTLSConfig = config
 
 	for _, route := range routes {
 		if err := route.serve(); err != nil {
@@ -93,7 +95,6 @@ type route struct {
 func (r *route) initChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
 	chain.Retries = r.Retries
-
 	gid := 1 // group ID
 
 	for _, ns := range r.ChainNodes {
@@ -121,12 +122,18 @@ func (r *route) initChain() (*gost.Chain, error) {
 			log.Log(err)
 		}
 		peerCfg.Validate()
+
+		strategy := peerCfg.Strategy
+		// overwrite the strategry in the peer config if `strategy` param exists.
+		if s := nodes[0].Get("strategy"); s != "" {
+			strategy = s
+		}
 		ngroup.Options = append(ngroup.Options,
 			gost.WithFilter(&gost.FailFilter{
 				MaxFails:    peerCfg.MaxFails,
 				FailTimeout: time.Duration(peerCfg.FailTimeout) * time.Second,
 			}),
-			gost.WithStrategy(parseStrategy(peerCfg.Strategy)),
+			gost.WithStrategy(parseStrategy(strategy)),
 		)
 
 		for _, s := range peerCfg.Nodes {
@@ -141,6 +148,18 @@ func (r *route) initChain() (*gost.Chain, error) {
 			}
 
 			ngroup.AddNode(nodes...)
+		}
+
+		var bypass *gost.Bypass
+		// global bypass
+		if peerCfg.Bypass != nil {
+			bypass = gost.NewBypassPatterns(peerCfg.Bypass.Reverse, peerCfg.Bypass.Patterns...)
+		}
+		nodes = ngroup.Nodes()
+		for i := range nodes {
+			if nodes[i].Bypass == nil {
+				nodes[i].Bypass = bypass // use global bypass if local bypass does not exist.
+			}
 		}
 
 		chain.AddNodeGroup(ngroup)
@@ -197,11 +216,6 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "mwss":
 		tr = gost.MWSSTransporter(wsOpts)
 	case "kcp":
-		/*
-			if !chain.IsEmpty() {
-				return nil, errors.New("KCP must be the first node in the proxy chain")
-			}
-		*/
 		config, err := parseKCPConfig(node.Get("c"))
 		if err != nil {
 			return nil, err
@@ -214,21 +228,15 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 			tr = gost.SSHTunnelTransporter()
 		}
 	case "quic":
-		/*
-			if !chain.IsEmpty() {
-				return nil, errors.New("QUIC must be the first node in the proxy chain")
-			}
-		*/
 		config := &gost.QUICConfig{
-			TLSConfig: tlsCfg,
-			KeepAlive: node.GetBool("keepalive"),
+			TLSConfig:   tlsCfg,
+			KeepAlive:   node.GetBool("keepalive"),
+			Timeout:     time.Duration(node.GetInt("timeout")) * time.Second,
+			IdleTimeout: time.Duration(node.GetInt("idle")) * time.Second,
 		}
 
-		config.Timeout = time.Duration(node.GetInt("timeout")) * time.Second
-		config.IdleTimeout = time.Duration(node.GetInt("idle")) * time.Second
-
-		if key := node.Get("key"); key != "" {
-			sum := sha256.Sum256([]byte(key))
+		if cipher := node.Get("cipher"); cipher != "" {
+			sum := sha256.Sum256([]byte(cipher))
 			config.Key = sum[:]
 		}
 
@@ -241,9 +249,6 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.H2CTransporter()
 
 	case "obfs4":
-		if err := gost.Obfs4Init(node, false); err != nil {
-			return nil, err
-		}
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
 		tr = gost.ObfsHTTPTransporter()
@@ -297,15 +302,27 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		Transporter: tr,
 	}
 
+	node.Bypass = parseBypass(node.Get("bypass"))
+
 	ips := parseIP(node.Get("ip"), sport)
 	for _, ip := range ips {
 		node.Addr = ip
+		// override the default node address
 		node.HandshakeOptions = append(handshakeOptions, gost.AddrHandshakeOption(ip))
+		// One node per IP
 		nodes = append(nodes, node)
 	}
 	if len(ips) == 0 {
 		node.HandshakeOptions = handshakeOptions
 		nodes = []gost.Node{node}
+	}
+
+	if node.Transport == "obfs4" {
+		for i := range nodes {
+			if err := gost.Obfs4Init(nodes[i], false); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return
@@ -373,14 +390,13 @@ func (r *route) serve() error {
 			}
 		case "quic":
 			config := &gost.QUICConfig{
-				TLSConfig: tlsCfg,
-				KeepAlive: node.GetBool("keepalive"),
+				TLSConfig:   tlsCfg,
+				KeepAlive:   node.GetBool("keepalive"),
+				Timeout:     time.Duration(node.GetInt("timeout")) * time.Second,
+				IdleTimeout: time.Duration(node.GetInt("idle")) * time.Second,
 			}
-			config.Timeout = time.Duration(node.GetInt("timeout")) * time.Second
-			config.IdleTimeout = time.Duration(node.GetInt("idle")) * time.Second
-
-			if key := node.Get("key"); key != "" {
-				sum := sha256.Sum256([]byte(key))
+			if cipher := node.Get("cipher"); cipher != "" {
+				sum := sha256.Sum256([]byte(cipher))
 				config.Key = sum[:]
 			}
 
@@ -425,263 +441,80 @@ func (r *route) serve() error {
 			return err
 		}
 
+		var handler gost.Handler
+		switch node.Protocol {
+		case "http2":
+			handler = gost.HTTP2Handler()
+		case "socks", "socks5":
+			handler = gost.SOCKS5Handler()
+		case "socks4", "socks4a":
+			handler = gost.SOCKS4Handler()
+		case "ss":
+			handler = gost.ShadowHandler()
+		case "http":
+			handler = gost.HTTPHandler()
+		case "tcp":
+			handler = gost.TCPDirectForwardHandler(node.Remote)
+		case "rtcp":
+			handler = gost.TCPRemoteForwardHandler(node.Remote)
+		case "udp":
+			handler = gost.UDPDirectForwardHandler(node.Remote)
+		case "rudp":
+			handler = gost.UDPRemoteForwardHandler(node.Remote)
+		case "forward":
+			handler = gost.SSHForwardHandler()
+		case "redirect":
+			handler = gost.TCPRedirectHandler()
+		case "ssu":
+			handler = gost.ShadowUDPdHandler()
+		case "sni":
+			handler = gost.SNIHandler()
+		default:
+			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
+			if node.Remote != "" {
+				handler = gost.TCPDirectForwardHandler(node.Remote)
+			} else {
+				handler = gost.AutoHandler()
+			}
+		}
+
 		var whitelist, blacklist *gost.Permissions
 		if node.Values.Get("whitelist") != "" {
-			if whitelist, err = gost.ParsePermissions(node.Values.Get("whitelist")); err != nil {
+			if whitelist, err = gost.ParsePermissions(node.Get("whitelist")); err != nil {
 				return err
 			}
 		}
 		if node.Values.Get("blacklist") != "" {
-			if blacklist, err = gost.ParsePermissions(node.Values.Get("blacklist")); err != nil {
+			if blacklist, err = gost.ParsePermissions(node.Get("blacklist")); err != nil {
 				return err
 			}
 		}
 
-		var handlerOptions []gost.HandlerOption
+		var hosts *gost.Hosts
+		if f, _ := os.Open(node.Get("hosts")); f != nil {
+			f.Close()
+			hosts = gost.NewHosts()
+			go gost.PeriodReload(hosts, node.Get("hosts"))
+		}
 
-		handlerOptions = append(handlerOptions,
+		handler.Init(
 			gost.AddrHandlerOption(node.Addr),
 			gost.ChainHandlerOption(chain),
 			gost.UsersHandlerOption(users...),
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
+			gost.BypassHandlerOption(parseBypass(node.Get("bypass"))),
+			gost.StrategyHandlerOption(parseStrategy(node.Get("strategy"))),
+			gost.ResolverHandlerOption(parseResolver(node.Get("dns"))),
+			gost.HostsHandlerOption(hosts),
+			gost.RetryHandlerOption(node.GetInt("retry")),
+			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
 		)
-		var handler gost.Handler
-		switch node.Protocol {
-		case "http2":
-			handler = gost.HTTP2Handler(handlerOptions...)
-		case "socks", "socks5":
-			handler = gost.SOCKS5Handler(handlerOptions...)
-		case "socks4", "socks4a":
-			handler = gost.SOCKS4Handler(handlerOptions...)
-		case "ss":
-			handler = gost.ShadowHandler(handlerOptions...)
-		case "http":
-			handler = gost.HTTPHandler(handlerOptions...)
-		case "tcp":
-			handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
-		case "rtcp":
-			handler = gost.TCPRemoteForwardHandler(node.Remote, handlerOptions...)
-		case "udp":
-			handler = gost.UDPDirectForwardHandler(node.Remote, handlerOptions...)
-		case "rudp":
-			handler = gost.UDPRemoteForwardHandler(node.Remote, handlerOptions...)
-		case "forward":
-			handler = gost.SSHForwardHandler(handlerOptions...)
-		case "redirect":
-			handler = gost.TCPRedirectHandler(handlerOptions...)
-		case "ssu":
-			handler = gost.ShadowUDPdHandler(handlerOptions...)
-		case "sni":
-			handler = gost.SNIHandler(handlerOptions...)
-		default:
-			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
-			if node.Remote != "" {
-				handler = gost.TCPDirectForwardHandler(node.Remote, handlerOptions...)
-			} else {
-				handler = gost.AutoHandler(handlerOptions...)
-			}
-		}
 
 		srv := &gost.Server{Listener: ln}
 		go srv.Serve(handler)
 	}
 
 	return nil
-}
-
-// Load the certificate from cert and key files, will use the default certificate if the provided info are invalid.
-func tlsConfig(certFile, keyFile string) (*tls.Config, error) {
-	if certFile == "" {
-		certFile = "cert.pem"
-	}
-	if keyFile == "" {
-		keyFile = "key.pem"
-	}
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
-}
-
-func loadCA(caFile string) (cp *x509.CertPool, err error) {
-	if caFile == "" {
-		return
-	}
-	cp = x509.NewCertPool()
-	data, err := ioutil.ReadFile(caFile)
-	if err != nil {
-		return nil, err
-	}
-	if !cp.AppendCertsFromPEM(data) {
-		return nil, errors.New("AppendCertsFromPEM failed")
-	}
-	return
-}
-
-func loadConfigureFile(configureFile string) error {
-	if configureFile == "" {
-		return nil
-	}
-	content, err := ioutil.ReadFile(configureFile)
-	if err != nil {
-		return err
-	}
-	var cfg struct {
-		route
-		Routes []route
-	}
-	if err := json.Unmarshal(content, &cfg); err != nil {
-		return err
-	}
-
-	if len(cfg.route.ServeNodes) > 0 {
-		routes = append(routes, cfg.route)
-	}
-	for _, route := range cfg.Routes {
-		if len(route.ServeNodes) > 0 {
-			routes = append(routes, route)
-		}
-	}
-	gost.Debug = cfg.Debug
-
-	return nil
-}
-
-type stringList []string
-
-func (l *stringList) String() string {
-	return fmt.Sprintf("%s", *l)
-}
-func (l *stringList) Set(value string) error {
-	*l = append(*l, value)
-	return nil
-}
-
-func parseKCPConfig(configFile string) (*gost.KCPConfig, error) {
-	if configFile == "" {
-		return nil, nil
-	}
-	file, err := os.Open(configFile)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	config := &gost.KCPConfig{}
-	if err = json.NewDecoder(file).Decode(config); err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
-func parseUsers(authFile string) (users []*url.Userinfo, err error) {
-	if authFile == "" {
-		return
-	}
-
-	file, err := os.Open(authFile)
-	if err != nil {
-		return
-	}
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		s := strings.SplitN(line, " ", 2)
-		if len(s) == 1 {
-			users = append(users, url.User(strings.TrimSpace(s[0])))
-		} else if len(s) == 2 {
-			users = append(users, url.UserPassword(strings.TrimSpace(s[0]), strings.TrimSpace(s[1])))
-		}
-	}
-
-	err = scanner.Err()
-	return
-}
-
-func parseIP(s string, port string) (ips []string) {
-	if s == "" {
-		return
-	}
-	if port == "" {
-		port = "8080" // default port
-	}
-
-	file, err := os.Open(s)
-	if err != nil {
-		ss := strings.Split(s, ",")
-		for _, s := range ss {
-			s = strings.TrimSpace(s)
-			if s != "" {
-				if !strings.Contains(s, ":") {
-					s = s + ":" + port
-				}
-				ips = append(ips, s)
-			}
-
-		}
-		return
-	}
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if !strings.Contains(line, ":") {
-			line = line + ":" + port
-		}
-		ips = append(ips, line)
-	}
-	return
-}
-
-type peerConfig struct {
-	Strategy    string   `json:"strategy"`
-	Filters     []string `json:"filters"`
-	MaxFails    int      `json:"max_fails"`
-	FailTimeout int      `json:"fail_timeout"`
-	Nodes       []string `json:"nodes"`
-}
-
-func loadPeerConfig(peer string) (config peerConfig, err error) {
-	if peer == "" {
-		return
-	}
-	content, err := ioutil.ReadFile(peer)
-	if err != nil {
-		return
-	}
-	err = json.Unmarshal(content, &config)
-	return
-}
-
-func (cfg *peerConfig) Validate() {
-	if cfg.MaxFails <= 0 {
-		cfg.MaxFails = 1
-	}
-	if cfg.FailTimeout <= 0 {
-		cfg.FailTimeout = 30 // seconds
-	}
-}
-
-func parseStrategy(s string) gost.Strategy {
-	switch s {
-	case "random":
-		return &gost.RandomStrategy{}
-	case "fifo":
-		return &gost.FIFOStrategy{}
-	case "round":
-		fallthrough
-	default:
-		return &gost.RoundStrategy{}
-
-	}
 }

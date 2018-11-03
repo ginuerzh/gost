@@ -3,6 +3,7 @@ package gost
 import (
 	"errors"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,159 +28,357 @@ func (c *forwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error)
 
 type tcpDirectForwardHandler struct {
 	raddr   string
+	group   *NodeGroup
 	options *HandlerOptions
 }
 
 // TCPDirectForwardHandler creates a server Handler for TCP port forwarding server.
 // The raddr is the remote address that the server will forward to.
+// NOTE: as of 2.6, remote address can be a comma-separated address list.
 func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
-	if raddr == "" {
-		raddr = "0.0.0.0:0"
-	}
 	h := &tcpDirectForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
+
+	for i, addr := range strings.Split(raddr, ",") {
+		if addr == "" {
+			continue
+		}
+		// We treat the remote target server as a node, so we can put them in a group,
+		// and perform the node selection for load balancing.
+		h.group.AddNode(Node{
+			ID:   i + 1,
+			Addr: addr,
+			Host: addr,
+		})
+	}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *tcpDirectForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
+
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	log.Logf("[tcp] %s - %s", conn.RemoteAddr(), h.raddr)
-	cc, err := h.options.Chain.Dial(h.raddr)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var cc net.Conn
+	var node Node
+	var err error
+	for i := 0; i < retries; i++ {
+		node, err = h.group.Next()
+		if err != nil {
+			log.Logf("[tcp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
+			return
+		}
+
+		log.Logf("[tcp] %s - %s", conn.RemoteAddr(), node.Addr)
+		cc, err = h.options.Chain.Dial(node.Addr,
+			RetryChainOption(h.options.Retries),
+			TimeoutChainOption(h.options.Timeout),
+		)
+		if err != nil {
+			log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), node.Addr, err)
+			node.MarkDead()
+		} else {
+			break
+		}
+	}
 	if err != nil {
-		log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), h.raddr, err)
 		return
 	}
+
+	node.ResetDead()
 	defer cc.Close()
 
-	log.Logf("[tcp] %s <-> %s", conn.RemoteAddr(), h.raddr)
+	log.Logf("[tcp] %s <-> %s", conn.RemoteAddr(), node.Addr)
 	transport(conn, cc)
-	log.Logf("[tcp] %s >-< %s", conn.RemoteAddr(), h.raddr)
+	log.Logf("[tcp] %s >-< %s", conn.RemoteAddr(), node.Addr)
 }
 
 type udpDirectForwardHandler struct {
 	raddr   string
+	group   *NodeGroup
 	options *HandlerOptions
 }
 
 // UDPDirectForwardHandler creates a server Handler for UDP port forwarding server.
 // The raddr is the remote address that the server will forward to.
+// NOTE: as of 2.6, remote address can be a comma-separated address list.
 func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &udpDirectForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
+
+	for i, addr := range strings.Split(raddr, ",") {
+		if addr == "" {
+			continue
+		}
+		// We treat the remote target server as a node, so we can put them in a group,
+		// and perform the node selection for load balancing.
+		h.group.AddNode(Node{
+			ID:   i + 1,
+			Addr: addr,
+			Host: addr,
+		})
+	}
+
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *udpDirectForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
+
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
+	node, err := h.group.Next()
+	if err != nil {
+		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
+		return
+	}
+
 	var cc net.Conn
 	if h.options.Chain.IsEmpty() {
-		raddr, err := net.ResolveUDPAddr("udp", h.raddr)
+		raddr, err := net.ResolveUDPAddr("udp", node.Addr)
 		if err != nil {
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
+			node.MarkDead()
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
 		cc, err = net.DialUDP("udp", nil, raddr)
 		if err != nil {
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
+			node.MarkDead()
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
 	} else {
 		var err error
 		cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
 		if err != nil {
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
-		cc = &udpTunnelConn{Conn: cc, raddr: h.raddr}
+		cc = &udpTunnelConn{Conn: cc, raddr: node.Addr}
 	}
 
 	defer cc.Close()
+	node.ResetDead()
 
-	log.Logf("[udp] %s <-> %s", conn.RemoteAddr(), h.raddr)
+	log.Logf("[udp] %s <-> %s", conn.RemoteAddr(), node.Addr)
 	transport(conn, cc)
-	log.Logf("[udp] %s >-< %s", conn.RemoteAddr(), h.raddr)
+	log.Logf("[udp] %s >-< %s", conn.RemoteAddr(), node.Addr)
 }
 
 type tcpRemoteForwardHandler struct {
 	raddr   string
+	group   *NodeGroup
 	options *HandlerOptions
 }
 
 // TCPRemoteForwardHandler creates a server Handler for TCP remote port forwarding server.
 // The raddr is the remote address that the server will forward to.
+// NOTE: as of 2.6, remote address can be a comma-separated address list.
 func TCPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &tcpRemoteForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
+
+	for i, addr := range strings.Split(raddr, ",") {
+		if addr == "" {
+			continue
+		}
+		// We treat the remote target server as a node, so we can put them in a group,
+		// and perform the node selection for load balancing.
+		h.group.AddNode(Node{
+			ID:   i + 1,
+			Addr: addr,
+			Host: addr,
+		})
+	}
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *tcpRemoteForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
+
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	cc, err := net.DialTimeout("tcp", h.raddr, DialTimeout)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var cc net.Conn
+	var node Node
+	var err error
+	for i := 0; i < retries; i++ {
+		node, err = h.group.Next()
+		if err != nil {
+			log.Logf("[rtcp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
+			return
+		}
+		cc, err = net.DialTimeout("tcp", node.Addr, h.options.Timeout)
+		if err != nil {
+			log.Logf("[rtcp] %s -> %s : %s", conn.LocalAddr(), node.Addr, err)
+			node.MarkDead()
+		} else {
+			break
+		}
+	}
 	if err != nil {
-		log.Logf("[rtcp] %s -> %s : %s", conn.LocalAddr(), h.raddr, err)
 		return
 	}
-	defer cc.Close()
 
-	log.Logf("[rtcp] %s <-> %s", conn.LocalAddr(), h.raddr)
+	defer cc.Close()
+	node.ResetDead()
+
+	log.Logf("[rtcp] %s <-> %s", conn.LocalAddr(), node.Addr)
 	transport(cc, conn)
-	log.Logf("[rtcp] %s >-< %s", conn.LocalAddr(), h.raddr)
+	log.Logf("[rtcp] %s >-< %s", conn.LocalAddr(), node.Addr)
 }
 
 type udpRemoteForwardHandler struct {
 	raddr   string
+	group   *NodeGroup
 	options *HandlerOptions
 }
 
 // UDPRemoteForwardHandler creates a server Handler for UDP remote port forwarding server.
 // The raddr is the remote address that the server will forward to.
+// NOTE: as of 2.6, remote address can be a comma-separated address list.
 func UDPRemoteForwardHandler(raddr string, opts ...HandlerOption) Handler {
 	h := &udpRemoteForwardHandler{
-		raddr:   raddr,
-		options: &HandlerOptions{},
+		raddr: raddr,
+		group: NewNodeGroup(),
 	}
-	for _, opt := range opts {
+
+	for i, addr := range strings.Split(raddr, ",") {
+		if addr == "" {
+			continue
+		}
+		// We treat the remote target server as a node, so we can put them in a group,
+		// and perform the node selection for load balancing.
+		h.group.AddNode(Node{
+			ID:   i + 1,
+			Addr: addr,
+			Host: addr,
+		})
+	}
+
+	h.Init(opts...)
+
+	return h
+}
+
+func (h *udpRemoteForwardHandler) Init(options ...HandlerOption) {
+	if h.options == nil {
+		h.options = &HandlerOptions{}
+	}
+
+	for _, opt := range options {
 		opt(h.options)
 	}
-	return h
+	h.group.SetSelector(&defaultSelector{},
+		WithStrategy(h.options.Strategy),
+		WithFilter(&FailFilter{
+			MaxFails:    1,
+			FailTimeout: 30 * time.Second,
+		}),
+	)
 }
 
 func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	raddr, err := net.ResolveUDPAddr("udp", h.raddr)
-	if err != nil {
-		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
-		return
-	}
-	cc, err := net.DialUDP("udp", nil, raddr)
+	node, err := h.group.Next()
 	if err != nil {
 		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
 		return
 	}
 
-	log.Logf("[rudp] %s <-> %s", conn.RemoteAddr(), h.raddr)
+	raddr, err := net.ResolveUDPAddr("udp", node.Addr)
+	if err != nil {
+		node.MarkDead()
+		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
+		return
+	}
+	cc, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		node.MarkDead()
+		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
+		return
+	}
+	defer cc.Close()
+	node.ResetDead()
+
+	log.Logf("[rudp] %s <-> %s", conn.RemoteAddr(), node.Addr)
 	transport(conn, cc)
-	log.Logf("[rudp] %s >-< %s", conn.RemoteAddr(), h.raddr)
+	log.Logf("[rudp] %s >-< %s", conn.RemoteAddr(), node.Addr)
 }
 
 type udpDirectForwardListener struct {

@@ -26,6 +26,8 @@ gost - GO Simple Tunnel
 * [支持SNI代理](https://docs.ginuerzh.xyz/gost/sni/)
 * [权限控制](https://docs.ginuerzh.xyz/gost/permission/)
 * [负载均衡](https://docs.ginuerzh.xyz/gost/load-balancing/)
+* [路由控制](https://docs.ginuerzh.xyz/gost/bypass/)
+* [DNS控制](https://docs.ginuerzh.xyz/gost/dns/)
 
 Wiki站点: <https://docs.ginuerzh.xyz/gost/>
 
