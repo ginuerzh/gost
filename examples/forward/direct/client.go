@@ -21,7 +21,6 @@ func tcpForward() {
 		},
 	)
 
-	s := &gost.Server{}
 	ln, err := gost.TCPListener(":11800")
 	if err != nil {
 		log.Fatal(err)
@@ -30,5 +29,6 @@ func tcpForward() {
 		"localhost:22",
 		gost.ChainHandlerOption(chain),
 	)
-	log.Fatal(s.Serve(ln, h))
+	s := &gost.Server{ln}
+	log.Fatal(s.Serve(h))
 }
