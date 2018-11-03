@@ -239,9 +239,14 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 		}
 	}
 
-	log.Logf("[http] %s <-> %s", cc.LocalAddr(), host)
+	var su string
+	if u != "" {
+		su = u + "@"
+	}
+
+	log.Logf("[http] %s%s <-> %s", su, cc.LocalAddr(), host)
 	transport(conn, cc)
-	log.Logf("[http] %s >-< %s", cc.LocalAddr(), host)
+	log.Logf("[http] %s%s >-< %s", su, cc.LocalAddr(), host)
 }
 
 func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Chain) error {
