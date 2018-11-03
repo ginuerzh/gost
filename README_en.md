@@ -23,6 +23,8 @@ Features
 * [SNI proxy](https://docs.ginuerzh.xyz/gost/en/sni/)
 * [Permission control](https://docs.ginuerzh.xyz/gost/en/permission/)
 * [Load balancing](https://docs.ginuerzh.xyz/gost/en/load-balancing/)
+* [Routing control](https://docs.ginuerzh.xyz/gost/en/bypass/)
+* [DNS control](https://docs.ginuerzh.xyz/gost/en/dns/)
 
 Wiki: <https://docs.ginuerzh.xyz/gost/en/>
 
