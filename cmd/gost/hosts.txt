@@ -1,3 +1,6 @@
+# period for live reloading
+reload      10s
+
 # The following lines are desirable for IPv4 capable hosts
 127.0.0.1       localhost
 

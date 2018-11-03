@@ -1,11 +1,15 @@
 package gost
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	glob "github.com/gobwas/glob"
 )
@@ -118,28 +122,30 @@ func (m *domainMatcher) String() string {
 // It contains a list of matchers.
 type Bypass struct {
 	matchers []Matcher
-	reverse  bool
+	reversed bool
+	period   time.Duration // the period for live reloading
+	mux      sync.Mutex
 }
 
 // NewBypass creates and initializes a new Bypass using matchers as its match rules.
 // The rules will be reversed if the reversed is true.
-func NewBypass(matchers []Matcher, reverse bool) *Bypass {
+func NewBypass(reversed bool, matchers ...Matcher) *Bypass {
 	return &Bypass{
 		matchers: matchers,
-		reverse:  reverse,
+		reversed: reversed,
 	}
 }
 
 // NewBypassPatterns creates and initializes a new Bypass using matcher patterns as its match rules.
 // The rules will be reversed if the reverse is true.
-func NewBypassPatterns(patterns []string, reverse bool) *Bypass {
+func NewBypassPatterns(reversed bool, patterns ...string) *Bypass {
 	var matchers []Matcher
 	for _, pattern := range patterns {
 		if pattern != "" {
 			matchers = append(matchers, NewMatcher(pattern))
 		}
 	}
-	return NewBypass(matchers, reverse)
+	return NewBypass(reversed, matchers...)
 }
 
 // Contains reports whether the bypass includes addr.
@@ -153,6 +159,10 @@ func (bp *Bypass) Contains(addr string) bool {
 			addr = host
 		}
 	}
+
+	bp.mux.Lock()
+	defer bp.mux.Unlock()
+
 	var matched bool
 	for _, matcher := range bp.matchers {
 		if matcher == nil {
@@ -163,8 +173,8 @@ func (bp *Bypass) Contains(addr string) bool {
 			break
 		}
 	}
-	return !bp.reverse && matched ||
-		bp.reverse && !matched
+	return !bp.reversed && matched ||
+		bp.reversed && !matched
 }
 
 // AddMatchers appends matchers to the bypass matcher list.
@@ -179,7 +189,71 @@ func (bp *Bypass) Matchers() []Matcher {
 
 // Reversed reports whether the rules of the bypass are reversed.
 func (bp *Bypass) Reversed() bool {
-	return bp.reverse
+	return bp.reversed
+}
+
+// Reload parses config from r, then live reloads the bypass.
+func (bp *Bypass) Reload(r io.Reader) error {
+	var matchers []Matcher
+
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if n := strings.IndexByte(line, '#'); n >= 0 {
+			line = line[:n]
+		}
+		line = strings.Replace(line, "\t", " ", -1)
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// reload option
+		if strings.HasPrefix(line, "reload ") {
+			var ss []string
+			for _, s := range strings.Split(line, " ") {
+				if s = strings.TrimSpace(s); s != "" {
+					ss = append(ss, s)
+				}
+			}
+			if len(ss) == 2 {
+				bp.period, _ = time.ParseDuration(ss[1])
+				continue
+			}
+		}
+
+		// reverse option
+		if strings.HasPrefix(line, "reverse ") {
+			var ss []string
+			for _, s := range strings.Split(line, " ") {
+				if s = strings.TrimSpace(s); s != "" {
+					ss = append(ss, s)
+				}
+			}
+			if len(ss) == 2 {
+				bp.reversed, _ = strconv.ParseBool(ss[1])
+				continue
+			}
+		}
+
+		matchers = append(matchers, NewMatcher(line))
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	bp.mux.Lock()
+	defer bp.mux.Unlock()
+
+	bp.matchers = matchers
+
+	return nil
+}
+
+// Period returns the reload period
+func (bp *Bypass) Period() time.Duration {
+	return bp.period
 }
 
 func (bp *Bypass) String() string {

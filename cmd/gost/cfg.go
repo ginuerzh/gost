@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -243,22 +242,14 @@ func parseBypass(s string) *gost.Bypass {
 			}
 			matchers = append(matchers, gost.NewMatcher(s))
 		}
-		return gost.NewBypass(matchers, reversed)
+		return gost.NewBypass(reversed, matchers...)
 	}
+	f.Close()
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if n := strings.IndexByte(line, '#'); n >= 0 {
-			line = line[:n]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		matchers = append(matchers, gost.NewMatcher(line))
-	}
-	return gost.NewBypass(matchers, reversed)
+	bp := gost.NewBypass(reversed)
+	go gost.PeriodReload(bp, s)
+
+	return bp
 }
 
 func parseResolver(cfg string) gost.Resolver {
@@ -289,59 +280,12 @@ func parseResolver(cfg string) gost.Resolver {
 				})
 			}
 		}
-		return gost.NewResolver(nss, timeout, ttl)
+		return gost.NewResolver(timeout, ttl, nss...)
 	}
+	f.Close()
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if n := strings.IndexByte(line, '#'); n >= 0 {
-			line = line[:n]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var ss []string
-		for _, s := range strings.Split(line, " ") {
-			if s = strings.TrimSpace(s); s != "" {
-				ss = append(ss, s)
-			}
-		}
+	resolver := gost.NewResolver(timeout, ttl)
+	go gost.PeriodReload(resolver, cfg)
 
-		if len(ss) == 0 {
-			continue
-		}
-
-		if strings.ToLower(ss[0]) == "timeout" {
-			if len(ss) >= 2 {
-				if n, _ := strconv.Atoi(ss[1]); n > 0 {
-					timeout = time.Second * time.Duration(n)
-				}
-			}
-			continue
-		}
-		if strings.ToLower(ss[0]) == "ttl" {
-			if len(ss) >= 2 {
-				n, _ := strconv.Atoi(ss[1])
-				ttl = time.Second * time.Duration(n)
-			}
-			continue
-		}
-
-		var ns gost.NameServer
-		switch len(ss) {
-		case 1:
-			ns.Addr = ss[0]
-		case 2:
-			ns.Addr = ss[0]
-			ns.Protocol = ss[1]
-		default:
-			ns.Addr = ss[0]
-			ns.Protocol = ss[1]
-			ns.Hostname = ss[2]
-		}
-		nss = append(nss, ns)
-	}
-	return gost.NewResolver(nss, timeout, ttl)
+	return resolver
 }

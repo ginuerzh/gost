@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/go-log/log"
 )
@@ -17,8 +18,13 @@ type Host struct {
 }
 
 // Hosts is a static table lookup for hostnames.
+// For each host a single line should be present with the following information:
+// IP_address canonical_hostname [aliases...]
+// Fields of the entry are separated by any number of blanks and/or tab characters.
+// Text from a "#" character until the end of the line is a comment, and is ignored.
 type Hosts struct {
-	hosts []Host
+	hosts  []Host
+	period time.Duration
 }
 
 // NewHosts creates a Hosts with optional list of host
@@ -26,53 +32,6 @@ func NewHosts(hosts ...Host) *Hosts {
 	return &Hosts{
 		hosts: hosts,
 	}
-}
-
-// ParseHosts parses host table from r.
-// For each host a single line should be present with the following information:
-// IP_address canonical_hostname [aliases...]
-// Fields of the entry are separated by any number of blanks and/or tab characters.
-// Text from a "#" character until the end of the line is a comment, and is ignored.
-func ParseHosts(r io.Reader) (*Hosts, error) {
-	hosts := NewHosts()
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if n := strings.IndexByte(line, '#'); n >= 0 {
-			line = line[:n]
-		}
-		line = strings.Replace(line, "\t", " ", -1)
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var ss []string
-		for _, s := range strings.Split(line, " ") {
-			if s = strings.TrimSpace(s); s != "" {
-				ss = append(ss, s)
-			}
-		}
-		if len(ss) < 2 {
-			continue // invalid lines are ignored
-		}
-		ip := net.ParseIP(ss[0])
-		if ip == nil {
-			continue // invalid IP addresses are ignored
-		}
-		host := Host{
-			IP:       ip,
-			Hostname: ss[1],
-		}
-		if len(ss) > 2 {
-			host.Aliases = ss[2:]
-		}
-		hosts.AddHost(host)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return hosts, nil
 }
 
 // AddHost adds host(s) to the host table.
@@ -101,4 +60,61 @@ func (h *Hosts) Lookup(host string) (ip net.IP) {
 		log.Logf("[hosts] hit: %s %s", host, ip.String())
 	}
 	return
+}
+
+// Reload parses config from r, then live reloads the hosts.
+func (h *Hosts) Reload(r io.Reader) error {
+	var hosts []Host
+
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if n := strings.IndexByte(line, '#'); n >= 0 {
+			line = line[:n]
+		}
+		line = strings.Replace(line, "\t", " ", -1)
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var ss []string
+		for _, s := range strings.Split(line, " ") {
+			if s = strings.TrimSpace(s); s != "" {
+				ss = append(ss, s)
+			}
+		}
+		if len(ss) < 2 {
+			continue // invalid lines are ignored
+		}
+
+		// reload option
+		if strings.ToLower(ss[0]) == "reload" {
+			h.period, _ = time.ParseDuration(ss[1])
+			continue
+		}
+
+		ip := net.ParseIP(ss[0])
+		if ip == nil {
+			continue // invalid IP addresses are ignored
+		}
+		host := Host{
+			IP:       ip,
+			Hostname: ss[1],
+		}
+		if len(ss) > 2 {
+			host.Aliases = ss[2:]
+		}
+		hosts = append(hosts, host)
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	h.hosts = hosts
+	return nil
+}
+
+// Period returns the reload period
+func (h *Hosts) Period() time.Duration {
+	return h.period
 }

@@ -153,7 +153,7 @@ func (r *route) initChain() (*gost.Chain, error) {
 		var bypass *gost.Bypass
 		// global bypass
 		if peerCfg.Bypass != nil {
-			bypass = gost.NewBypassPatterns(peerCfg.Bypass.Patterns, peerCfg.Bypass.Reverse)
+			bypass = gost.NewBypassPatterns(peerCfg.Bypass.Reverse, peerCfg.Bypass.Patterns...)
 		}
 		nodes = ngroup.Nodes()
 		for i := range nodes {
@@ -492,10 +492,9 @@ func (r *route) serve() error {
 
 		var hosts *gost.Hosts
 		if f, _ := os.Open(node.Get("hosts")); f != nil {
-			hosts, err = gost.ParseHosts(f)
-			if err != nil {
-				log.Logf("[hosts] %s: %v", f.Name(), err)
-			}
+			f.Close()
+			hosts = gost.NewHosts()
+			go gost.PeriodReload(hosts, node.Get("hosts"))
 		}
 
 		handler.Init(

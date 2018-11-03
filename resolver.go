@@ -1,10 +1,12 @@
 package gost
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -25,6 +27,12 @@ var (
 type Resolver interface {
 	// Resolve returns a slice of that host's IPv4 and IPv6 addresses.
 	Resolve(host string) ([]net.IP, error)
+}
+
+// ReloadResolver is resolover that support live reloading
+type ReloadResolver interface {
+	Resolver
+	Reloader
 }
 
 // NameServer is a name server.
@@ -56,13 +64,14 @@ type resolverCacheItem struct {
 type resolver struct {
 	Resolver *net.Resolver
 	Servers  []NameServer
+	mCache   *sync.Map
 	Timeout  time.Duration
 	TTL      time.Duration
-	mCache   *sync.Map
+	period   time.Duration
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
-func NewResolver(servers []NameServer, timeout, ttl time.Duration) Resolver {
+func NewResolver(timeout, ttl time.Duration, servers ...NameServer) ReloadResolver {
 	r := &resolver{
 		Servers: servers,
 		Timeout: timeout,
@@ -184,6 +193,77 @@ func (r *resolver) storeCache(name string, ips []net.IP) {
 	})
 }
 
+func (r *resolver) Reload(rd io.Reader) error {
+	var nss []NameServer
+
+	scanner := bufio.NewScanner(rd)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if n := strings.IndexByte(line, '#'); n >= 0 {
+			line = line[:n]
+		}
+		line = strings.Replace(line, "\t", " ", -1)
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var ss []string
+		for _, s := range strings.Split(line, " ") {
+			if s = strings.TrimSpace(s); s != "" {
+				ss = append(ss, s)
+			}
+		}
+
+		if len(ss) == 0 {
+			continue
+		}
+
+		if len(ss) >= 2 {
+			// timeout option
+			if strings.ToLower(ss[0]) == "timeout" {
+				r.Timeout, _ = time.ParseDuration(ss[1])
+				continue
+			}
+
+			// ttl option
+			if strings.ToLower(ss[0]) == "ttl" {
+				r.TTL, _ = time.ParseDuration(ss[1])
+				continue
+			}
+
+			// reload option
+			if strings.ToLower(ss[0]) == "reload" {
+				r.period, _ = time.ParseDuration(ss[1])
+				continue
+			}
+		}
+
+		var ns NameServer
+		switch len(ss) {
+		case 1:
+			ns.Addr = ss[0]
+		case 2:
+			ns.Addr = ss[0]
+			ns.Protocol = ss[1]
+		default:
+			ns.Addr = ss[0]
+			ns.Protocol = ss[1]
+			ns.Hostname = ss[2]
+		}
+		nss = append(nss, ns)
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	r.Servers = nss
+	return nil
+}
+
+func (r *resolver) Period() time.Duration {
+	return r.period
+}
+
 func (r *resolver) String() string {
 	if r == nil {
 		return ""
@@ -192,6 +272,7 @@ func (r *resolver) String() string {
 	b := &bytes.Buffer{}
 	fmt.Fprintf(b, "Timeout %v\n", r.Timeout)
 	fmt.Fprintf(b, "TTL %v\n", r.TTL)
+	fmt.Fprintf(b, "Reload %v\n", r.period)
 	for i := range r.Servers {
 		fmt.Fprintln(b, r.Servers[i])
 	}
