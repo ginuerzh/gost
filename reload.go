@@ -30,9 +30,7 @@ func PeriodReload(r Reloader, configFile string) error {
 		}
 		mt := finfo.ModTime()
 		if !mt.Equal(lastMod) {
-			if Debug {
-				log.Log("[reload]", configFile)
-			}
+			log.Log("[reload]", configFile)
 			r.Reload(f)
 			lastMod = mt
 		}

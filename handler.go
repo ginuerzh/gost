@@ -145,7 +145,7 @@ func (h *autoHandler) Handle(conn net.Conn) {
 	br := bufio.NewReader(conn)
 	b, err := br.Peek(1)
 	if err != nil {
-		log.Log(err)
+		log.Logf("[auto] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		conn.Close()
 		return
 	}

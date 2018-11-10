@@ -132,10 +132,10 @@ func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, e
 		return nil, err
 	}
 
-	addr = c.resolve(addr, options.Resolver, options.Hosts)
+	ipAddr := c.resolve(addr, options.Resolver, options.Hosts)
 
 	if route.IsEmpty() {
-		return net.DialTimeout("tcp", addr, options.Timeout)
+		return net.DialTimeout("tcp", ipAddr, options.Timeout)
 	}
 
 	conn, err := route.getConn()
@@ -143,7 +143,7 @@ func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, e
 		return nil, err
 	}
 
-	cc, err := route.LastNode().Client.Connect(conn, addr)
+	cc, err := route.LastNode().Client.Connect(conn, addr, IPAddrConnectOption(ipAddr))
 	if err != nil {
 		conn.Close()
 		return nil, err

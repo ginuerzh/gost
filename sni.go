@@ -28,7 +28,7 @@ func SNIConnector(host string) Connector {
 	return &sniConnector{host: host}
 }
 
-func (c *sniConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *sniConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	return &sniClientConn{addr: addr, host: c.host, Conn: conn}, nil
 }
 

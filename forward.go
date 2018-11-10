@@ -22,7 +22,7 @@ func ForwardConnector() Connector {
 	return &forwardConnector{}
 }
 
-func (c *forwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *forwardConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	return conn, nil
 }
 

@@ -24,7 +24,7 @@ func HTTPConnector(user *url.Userinfo) Connector {
 	return &httpConnector{User: user}
 }
 
-func (c *httpConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *httpConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	req := &http.Request{
 		Method:     http.MethodConnect,
 		URL:        &url.URL{Host: addr},

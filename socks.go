@@ -148,11 +148,11 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 
 		req, err := gosocks5.ReadUserPassRequest(conn)
 		if err != nil {
-			log.Log("[socks5]", err)
+			log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 			return nil, err
 		}
 		if Debug {
-			log.Log("[socks5]", req.String())
+			log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), req.String())
 		}
 		valid := false
 		for _, user := range selector.Users {
@@ -168,23 +168,23 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		if len(selector.Users) > 0 && !valid {
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
-				log.Log("[socks5]", err)
+				log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 				return nil, err
 			}
 			if Debug {
-				log.Log("[socks5]", resp)
+				log.Log("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), resp)
 			}
-			log.Log("[socks5] proxy authentication required")
+			log.Logf("[socks5] %s - %s: proxy authentication required", conn.RemoteAddr(), conn.LocalAddr())
 			return nil, gosocks5.ErrAuthFailure
 		}
 
 		resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Succeeded)
 		if err := resp.Write(conn); err != nil {
-			log.Log("[socks5]", err)
+			log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 			return nil, err
 		}
 		if Debug {
-			log.Log("[socks5]", resp)
+			log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), resp)
 		}
 	case gosocks5.MethodNoAcceptable:
 		return nil, gosocks5.ErrBadMethod
@@ -203,7 +203,7 @@ func SOCKS5Connector(user *url.Userinfo) Connector {
 	return &socks5Connector{User: user}
 }
 
-func (c *socks5Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	selector := &clientSelector{
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
 		User:      c.User,
@@ -261,7 +261,15 @@ func SOCKS4Connector() Connector {
 	return &socks4Connector{}
 }
 
-func (c *socks4Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *socks4Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	var cOpts ConnectOptions
+	for _, opt := range options {
+		opt(&cOpts)
+	}
+	if cOpts.IPAddr != "" {
+		addr = cOpts.IPAddr
+	}
+
 	taddr, err := net.ResolveTCPAddr("tcp4", addr)
 	if err != nil {
 		return nil, err
@@ -308,7 +316,7 @@ func SOCKS4AConnector() Connector {
 	return &socks4aConnector{}
 }
 
-func (c *socks4aConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *socks4aConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
@@ -322,7 +330,7 @@ func (c *socks4aConnector) Connect(conn net.Conn, addr string) (net.Conn, error)
 	}
 
 	if Debug {
-		log.Logf("[socks4] %s", req)
+		log.Logf("[socks4a] %s", req)
 	}
 
 	reply, err := gosocks4.ReadReply(conn)
@@ -331,11 +339,11 @@ func (c *socks4aConnector) Connect(conn net.Conn, addr string) (net.Conn, error)
 	}
 
 	if Debug {
-		log.Logf("[socks4] %s", reply)
+		log.Logf("[socks4a] %s", reply)
 	}
 
 	if reply.Code != gosocks4.Granted {
-		return nil, fmt.Errorf("[socks4] %d", reply.Code)
+		return nil, fmt.Errorf("[socks4a] %d", reply.Code)
 	}
 
 	return conn, nil

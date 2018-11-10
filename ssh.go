@@ -39,7 +39,7 @@ func SSHDirectForwardConnector() Connector {
 	return &sshDirectForwardConnector{}
 }
 
-func (c *sshDirectForwardConnector) Connect(conn net.Conn, raddr string) (net.Conn, error) {
+func (c *sshDirectForwardConnector) Connect(conn net.Conn, raddr string, options ...ConnectOption) (net.Conn, error) {
 	cc, ok := conn.(*sshNopConn) // TODO: this is an ugly type assertion, need to find a better solution.
 	if !ok {
 		return nil, errors.New("ssh: wrong connection type")
@@ -60,7 +60,7 @@ func SSHRemoteForwardConnector() Connector {
 	return &sshRemoteForwardConnector{}
 }
 
-func (c *sshRemoteForwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *sshRemoteForwardConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	cc, ok := conn.(*sshNopConn) // TODO: this is an ugly type assertion, need to find a better solution.
 	if !ok {
 		return nil, errors.New("ssh: wrong connection type")

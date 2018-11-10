@@ -27,8 +27,8 @@ func (c *Client) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn,
 }
 
 // Connect connects to the address addr via the proxy over connection conn.
-func (c *Client) Connect(conn net.Conn, addr string) (net.Conn, error) {
-	return c.Connector.Connect(conn, addr)
+func (c *Client) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	return c.Connector.Connect(conn, addr, options...)
 }
 
 // DefaultClient is a standard HTTP proxy client.
@@ -51,7 +51,7 @@ func Connect(conn net.Conn, addr string) (net.Conn, error) {
 
 // Connector is responsible for connecting to the destination address.
 type Connector interface {
-	Connect(conn net.Conn, addr string) (net.Conn, error)
+	Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error)
 }
 
 // Transporter is responsible for handshaking with the proxy server.
@@ -96,7 +96,7 @@ type DialOptions struct {
 	Chain   *Chain
 }
 
-// DialOption allows a common way to set dial options.
+// DialOption allows a common way to set DialOptions.
 type DialOption func(opts *DialOptions)
 
 // TimeoutDialOption specifies the timeout used by Transporter.Dial
@@ -127,7 +127,7 @@ type HandshakeOptions struct {
 	QUICConfig *QUICConfig
 }
 
-// HandshakeOption allows a common way to set handshake options.
+// HandshakeOption allows a common way to set HandshakeOptions.
 type HandshakeOption func(opts *HandshakeOptions)
 
 // AddrHandshakeOption specifies the server address
@@ -197,5 +197,20 @@ func KCPConfigHandshakeOption(config *KCPConfig) HandshakeOption {
 func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.QUICConfig = config
+	}
+}
+
+// ConnectOptions describes the options for Connector.Connect.
+type ConnectOptions struct {
+	IPAddr string
+}
+
+// ConnectOption allows a common way to set ConnectOptions.
+type ConnectOption func(opts *ConnectOptions)
+
+// IPAddrConnectOption specifies the corresponding IP:PORT of the connected target address.
+func IPAddrConnectOption(ipAddr string) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.IPAddr = ipAddr
 	}
 }

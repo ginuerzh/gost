@@ -28,7 +28,12 @@ func HTTP2Connector(user *url.Userinfo) Connector {
 	return &http2Connector{User: user}
 }
 
-func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	var cOpts ConnectOptions
+	for _, opt := range options {
+		opt(&cOpts)
+	}
+
 	cc, ok := conn.(*http2ClientConn)
 	if !ok {
 		return nil, errors.New("wrong connection type")
@@ -74,6 +79,10 @@ func (c *http2Connector) Connect(conn net.Conn, addr string) (net.Conn, error) {
 		r:      resp.Body,
 		w:      pw,
 		closed: make(chan struct{}),
+	}
+
+	if cOpts.IPAddr != "" {
+		addr = cOpts.IPAddr
 	}
 	hc.remoteAddr, _ = net.ResolveTCPAddr("tcp", addr)
 	hc.localAddr, _ = net.ResolveTCPAddr("tcp", cc.addr)
@@ -526,7 +535,7 @@ func H2CListener(addr string) (Listener, error) {
 	l := &h2Listener{
 		Listener: tcpKeepAliveListener{ln.(*net.TCPListener)},
 		server:   &http2.Server{
-		// MaxConcurrentStreams:         1000,
+			// MaxConcurrentStreams:         1000,
 		},
 		connChan: make(chan net.Conn, 1024),
 		errChan:  make(chan error, 1),

@@ -67,7 +67,7 @@ func ShadowConnector(cipher *url.Userinfo) Connector {
 	return &shadowConnector{Cipher: cipher}
 }
 
-func (c *shadowConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	rawaddr, err := ss.RawAddr(addr)
 	if err != nil {
 		return nil, err
