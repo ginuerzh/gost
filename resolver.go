@@ -67,6 +67,7 @@ type resolver struct {
 	Timeout  time.Duration
 	TTL      time.Duration
 	period   time.Duration
+	domain   string
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
@@ -99,6 +100,9 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 		return []net.IP{ip}, nil
 	}
 
+	if !strings.Contains(host, ".") && r.domain != "" {
+		host = host + "." + r.domain
+	}
 	ips = r.loadCache(host)
 	if len(ips) > 0 {
 		if Debug {
@@ -198,62 +202,76 @@ func (r *resolver) storeCache(name string, ips []net.IP) {
 func (r *resolver) Reload(rd io.Reader) error {
 	var nss []NameServer
 
-	scanner := bufio.NewScanner(rd)
-	for scanner.Scan() {
-		line := scanner.Text()
+	split := func(line string) []string {
+		if line == "" {
+			return nil
+		}
 		if n := strings.IndexByte(line, '#'); n >= 0 {
 			line = line[:n]
 		}
 		line = strings.Replace(line, "\t", " ", -1)
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+
 		var ss []string
 		for _, s := range strings.Split(line, " ") {
 			if s = strings.TrimSpace(s); s != "" {
 				ss = append(ss, s)
 			}
 		}
+		return ss
+	}
 
+	scanner := bufio.NewScanner(rd)
+	for scanner.Scan() {
+		line := scanner.Text()
+		ss := split(line)
 		if len(ss) == 0 {
 			continue
 		}
 
-		if len(ss) >= 2 {
-			// timeout option
-			if strings.ToLower(ss[0]) == "timeout" {
+		switch ss[0] {
+		case "timeout": // timeout option
+			if len(ss) > 1 {
 				r.Timeout, _ = time.ParseDuration(ss[1])
-				continue
 			}
-
-			// ttl option
-			if strings.ToLower(ss[0]) == "ttl" {
+		case "ttl": // ttl option
+			if len(ss) > 1 {
 				r.TTL, _ = time.ParseDuration(ss[1])
-				continue
 			}
-
-			// reload option
-			if strings.ToLower(ss[0]) == "reload" {
+		case "reload": // reload option
+			if len(ss) > 1 {
 				r.period, _ = time.ParseDuration(ss[1])
-				continue
 			}
-		}
-
-		var ns NameServer
-		switch len(ss) {
-		case 1:
-			ns.Addr = ss[0]
-		case 2:
-			ns.Addr = ss[0]
-			ns.Protocol = ss[1]
+		case "domain":
+			if len(ss) > 1 {
+				r.domain = ss[1]
+			}
+		case "search", "sortlist", "options": // we don't support these features in /etc/resolv.conf
+		case "nameserver": // nameserver option, compatible with /etc/resolv.conf
+			if len(ss) <= 1 {
+				break
+			}
+			ss = ss[1:]
+			fallthrough
 		default:
-			ns.Addr = ss[0]
-			ns.Protocol = ss[1]
-			ns.Hostname = ss[2]
+			var ns NameServer
+			switch len(ss) {
+			case 0:
+				break
+			case 1:
+				ns.Addr = ss[0]
+			case 2:
+				ns.Addr = ss[0]
+				ns.Protocol = ss[1]
+			default:
+				ns.Addr = ss[0]
+				ns.Protocol = ss[1]
+				ns.Hostname = ss[2]
+			}
+			nss = append(nss, ns)
 		}
-		nss = append(nss, ns)
 	}
+
 	if err := scanner.Err(); err != nil {
 		return err
 	}
