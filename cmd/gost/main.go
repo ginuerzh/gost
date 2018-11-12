@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+
 	// _ "net/http/pprof"
 	"os"
 	"runtime"
@@ -102,65 +103,23 @@ func (r *route) initChain() (*gost.Chain, error) {
 		ngroup.ID = gid
 		gid++
 
-		// parse the base node
+		// parse the base nodes
 		nodes, err := parseChainNode(ns)
 		if err != nil {
 			return nil, err
 		}
 
 		nid := 1 // node ID
-
 		for i := range nodes {
 			nodes[i].ID = nid
 			nid++
 		}
 		ngroup.AddNode(nodes...)
 
-		// parse peer nodes if exists
-		peerCfg, err := loadPeerConfig(nodes[0].Get("peer"))
-		if err != nil {
-			log.Log(err)
-		}
-		peerCfg.Validate()
-
-		strategy := peerCfg.Strategy
-		// overwrite the strategry in the peer config if `strategy` param exists.
-		if s := nodes[0].Get("strategy"); s != "" {
-			strategy = s
-		}
-		ngroup.Options = append(ngroup.Options,
-			gost.WithFilter(&gost.FailFilter{
-				MaxFails:    peerCfg.MaxFails,
-				FailTimeout: time.Duration(peerCfg.FailTimeout) * time.Second,
-			}),
-			gost.WithStrategy(parseStrategy(strategy)),
-		)
-
-		for _, s := range peerCfg.Nodes {
-			nodes, err = parseChainNode(s)
-			if err != nil {
-				return nil, err
-			}
-
-			for i := range nodes {
-				nodes[i].ID = nid
-				nid++
-			}
-
-			ngroup.AddNode(nodes...)
-		}
-
-		var bypass *gost.Bypass
-		// global bypass
-		if peerCfg.Bypass != nil {
-			bypass = gost.NewBypassPatterns(peerCfg.Bypass.Reverse, peerCfg.Bypass.Patterns...)
-		}
-		nodes = ngroup.Nodes()
-		for i := range nodes {
-			if nodes[i].Bypass == nil {
-				nodes[i].Bypass = bypass // use global bypass if local bypass does not exist.
-			}
-		}
+		go gost.PeriodReload(&peerConfig{
+			group:     ngroup,
+			baseNodes: nodes,
+		}, nodes[0].Get("peer"))
 
 		chain.AddNodeGroup(ngroup)
 	}

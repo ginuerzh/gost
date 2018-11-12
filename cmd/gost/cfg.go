@@ -173,55 +173,6 @@ func parseIP(s string, port string) (ips []string) {
 	return
 }
 
-type peerConfig struct {
-	Strategy    string   `json:"strategy"`
-	Filters     []string `json:"filters"`
-	MaxFails    int      `json:"max_fails"`
-	FailTimeout int      `json:"fail_timeout"`
-	Nodes       []string `json:"nodes"`
-	Bypass      *bypass  `json:"bypass"` // global bypass
-}
-
-type bypass struct {
-	Reverse  bool     `json:"reverse"`
-	Patterns []string `json:"patterns"`
-}
-
-func loadPeerConfig(peer string) (config peerConfig, err error) {
-	if peer == "" {
-		return
-	}
-	content, err := ioutil.ReadFile(peer)
-	if err != nil {
-		return
-	}
-	err = json.Unmarshal(content, &config)
-	return
-}
-
-func (cfg *peerConfig) Validate() {
-	if cfg.MaxFails <= 0 {
-		cfg.MaxFails = 1
-	}
-	if cfg.FailTimeout <= 0 {
-		cfg.FailTimeout = 30 // seconds
-	}
-}
-
-func parseStrategy(s string) gost.Strategy {
-	switch s {
-	case "random":
-		return &gost.RandomStrategy{}
-	case "fifo":
-		return &gost.FIFOStrategy{}
-	case "round":
-		fallthrough
-	default:
-		return &gost.RoundStrategy{}
-
-	}
-}
-
 func parseBypass(s string) *gost.Bypass {
 	if s == "" {
 		return nil

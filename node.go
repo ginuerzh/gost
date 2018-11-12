@@ -180,12 +180,17 @@ func NewNodeGroup(nodes ...Node) *NodeGroup {
 	}
 }
 
-// AddNode adds node or node list into group
+// AddNode appends node or node list into group node.
 func (group *NodeGroup) AddNode(node ...Node) {
 	if group == nil {
 		return
 	}
 	group.nodes = append(group.nodes, node...)
+}
+
+// SetNodes replaces the group nodes to the specified nodes.
+func (group *NodeGroup) SetNodes(nodes ...Node) {
+	group.nodes = nodes
 }
 
 // SetSelector sets node selector with options for the group.
