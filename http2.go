@@ -29,11 +29,6 @@ func HTTP2Connector(user *url.Userinfo) Connector {
 }
 
 func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
-	var cOpts ConnectOptions
-	for _, opt := range options {
-		opt(&cOpts)
-	}
-
 	cc, ok := conn.(*http2ClientConn)
 	if !ok {
 		return nil, errors.New("wrong connection type")
@@ -81,9 +76,6 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 		closed: make(chan struct{}),
 	}
 
-	if cOpts.IPAddr != "" {
-		addr = cOpts.IPAddr
-	}
 	hc.remoteAddr, _ = net.ResolveTCPAddr("tcp", addr)
 	hc.localAddr, _ = net.ResolveTCPAddr("tcp", cc.addr)
 

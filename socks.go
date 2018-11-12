@@ -262,14 +262,6 @@ func SOCKS4Connector() Connector {
 }
 
 func (c *socks4Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
-	var cOpts ConnectOptions
-	for _, opt := range options {
-		opt(&cOpts)
-	}
-	if cOpts.IPAddr != "" {
-		addr = cOpts.IPAddr
-	}
-
 	taddr, err := net.ResolveTCPAddr("tcp4", addr)
 	if err != nil {
 		return nil, err

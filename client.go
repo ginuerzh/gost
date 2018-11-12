@@ -202,15 +202,15 @@ func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 
 // ConnectOptions describes the options for Connector.Connect.
 type ConnectOptions struct {
-	IPAddr string
+	Addr string
 }
 
 // ConnectOption allows a common way to set ConnectOptions.
 type ConnectOption func(opts *ConnectOptions)
 
-// IPAddrConnectOption specifies the corresponding IP:PORT of the connected target address.
-func IPAddrConnectOption(ipAddr string) ConnectOption {
+// AddrConnectOption specifies the corresponding address of the target.
+func AddrConnectOption(addr string) ConnectOption {
 	return func(opts *ConnectOptions) {
-		opts.IPAddr = ipAddr
+		opts.Addr = addr
 	}
 }
