@@ -276,6 +276,12 @@
 			"revisionTime": "2017-11-13T03:10:14Z"
 		},
 		{
+			"checksumSHA1": "vyMhzqTgA2cWDFlBt4UFPPR0JQo=",
+			"path": "github.com/miekg/dns",
+			"revision": "e875a31a5cfbcd646131e625f24818cbae228913",
+			"revisionTime": "2018-09-10T10:42:54Z"
+		},
+		{
 			"checksumSHA1": "ynJSWoF6v+3zMnh9R0QmmG6iGV8=",
 			"path": "github.com/pkg/errors",
 			"revision": "248dadf4e9068a0b3e79f02ed0a610d935de5302",
@@ -420,16 +426,36 @@
 			"revisionTime": "2017-05-12T21:27:43Z"
 		},
 		{
+			"checksumSHA1": "YsXlbexuTtUXHyhSv927ILOkf6A=",
+			"origin": "github.com/miekg/dns/vendor/golang.org/x/net/internal/socket",
+			"path": "golang.org/x/net/internal/socket",
+			"revision": "e875a31a5cfbcd646131e625f24818cbae228913",
+			"revisionTime": "2018-09-10T10:42:54Z"
+		},
+		{
 			"checksumSHA1": "DVuL0YTpk4E8bRxkr2KXgzoCxw8=",
 			"path": "golang.org/x/net/ipv4",
 			"revision": "84f0e6f92b10139f986b1756e149a7d9de270cdc",
 			"revisionTime": "2017-05-12T21:27:43Z"
 		},
 		{
+			"checksumSHA1": "xqt5auCDSuvg5dm07p60loM67/A=",
+			"origin": "github.com/miekg/dns/vendor/golang.org/x/net/ipv6",
+			"path": "golang.org/x/net/ipv6",
+			"revision": "e875a31a5cfbcd646131e625f24818cbae228913",
+			"revisionTime": "2018-09-10T10:42:54Z"
+		},
+		{
 			"checksumSHA1": "3xyuaSNmClqG4YWC7g0isQIbUTc=",
 			"path": "golang.org/x/net/lex/httplex",
 			"revision": "84f0e6f92b10139f986b1756e149a7d9de270cdc",
 			"revisionTime": "2017-05-12T21:27:43Z"
+		},
+		{
+			"checksumSHA1": "HyvwgEh7Ja47KY376Mah02WDLEc=",
+			"path": "golang.org/x/sys/unix",
+			"revision": "151529c776cdc58ddbe7963ba9af779f3577b419",
+			"revisionTime": "2018-04-04T02:59:38Z"
 		},
 		{
 			"checksumSHA1": "faFDXp++cLjLBlvsr+izZ+go1WU=",
