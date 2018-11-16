@@ -215,9 +215,13 @@ func (c *socks5Connector) Connect(conn net.Conn, addr string) (net.Conn, error) 
 	)
 
 	cc := gosocks5.ClientConn(conn, selector)
+
+	conn.SetDeadline(time.Now().Add(time.Second * 5))
 	if err := cc.Handleshake(); err != nil {
+		conn.SetDeadline(time.Time{})
 		return nil, err
 	}
+	conn.SetDeadline(time.Time{})
 	conn = cc
 
 	host, port, err := net.SplitHostPort(addr)
