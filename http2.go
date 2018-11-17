@@ -327,7 +327,7 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		// probing resistance is enabled
 		if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
 			switch ss[0] {
-			case "error":
+			case "code":
 				resp.StatusCode, _ = strconv.Atoi(ss[1])
 			case "web":
 				url := ss[1]
