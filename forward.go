@@ -41,6 +41,9 @@ func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		group: NewNodeGroup(),
 	}
 
+	if raddr == "" {
+		raddr = ":0" // dummy address
+	}
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
 			continue
@@ -136,6 +139,9 @@ func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		group: NewNodeGroup(),
 	}
 
+	if raddr == "" {
+		raddr = ":0" // dummy address
+	}
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
 			continue

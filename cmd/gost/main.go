@@ -469,6 +469,7 @@ func (r *route) serve() error {
 			gost.HostsHandlerOption(hosts),
 			gost.RetryHandlerOption(node.GetInt("retry")),
 			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
+			gost.ProbeResistHandlerOption(node.Get("probe_resist")),
 		)
 
 		srv := &gost.Server{Listener: ln}

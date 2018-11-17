@@ -112,12 +112,12 @@ func (h *sniHandler) Handle(conn net.Conn) {
 	defer cc.Close()
 
 	if _, err := cc.Write(b); err != nil {
-		log.Logf("[sni] %s -> %s : %s", conn.RemoteAddr(), host, err)
+		log.Logf("[sni] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 	}
 
-	log.Logf("[sni] %s <-> %s", cc.LocalAddr(), host)
+	log.Logf("[sni] %s <-> %s", cc.LocalAddr(), addr)
 	transport(conn, cc)
-	log.Logf("[sni] %s >-< %s", cc.LocalAddr(), host)
+	log.Logf("[sni] %s >-< %s", cc.LocalAddr(), addr)
 }
 
 // sniSniffConn is a net.Conn that reads from r, fails on Writes,

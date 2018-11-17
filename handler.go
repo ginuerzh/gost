@@ -20,18 +20,19 @@ type Handler interface {
 
 // HandlerOptions describes the options for Handler.
 type HandlerOptions struct {
-	Addr      string
-	Chain     *Chain
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
-	Whitelist *Permissions
-	Blacklist *Permissions
-	Strategy  Strategy
-	Bypass    *Bypass
-	Retries   int
-	Timeout   time.Duration
-	Resolver  Resolver
-	Hosts     *Hosts
+	Addr        string
+	Chain       *Chain
+	Users       []*url.Userinfo
+	TLSConfig   *tls.Config
+	Whitelist   *Permissions
+	Blacklist   *Permissions
+	Strategy    Strategy
+	Bypass      *Bypass
+	Retries     int
+	Timeout     time.Duration
+	Resolver    Resolver
+	Hosts       *Hosts
+	ProbeResist string
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -118,6 +119,13 @@ func ResolverHandlerOption(resolver Resolver) HandlerOption {
 func HostsHandlerOption(hosts *Hosts) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Hosts = hosts
+	}
+}
+
+// ProbeResistHandlerOption adds the probe resistance for HTTP proxy.
+func ProbeResistHandlerOption(pr string) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.ProbeResist = pr
 	}
 }
 
