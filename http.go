@@ -175,10 +175,12 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 			case "host":
 				cc, err := net.Dial("tcp", ss[1])
 				if err == nil {
+					defer cc.Close()
+
 					req.Write(cc)
-					log.Logf("[http] %s <-> %s", conn.LocalAddr(), ss[1])
+					log.Logf("[http] %s <-> %s : forward to %s", conn.LocalAddr(), req.Host, ss[1])
 					transport(conn, cc)
-					log.Logf("[http] %s >-< %s", conn.LocalAddr(), ss[1])
+					log.Logf("[http] %s >-< %s : forward to %s", conn.LocalAddr(), req.Host, ss[1])
 					return
 				}
 			case "file":
