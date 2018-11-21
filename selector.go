@@ -94,6 +94,7 @@ type RandomStrategy struct {
 	Seed int64
 	rand *rand.Rand
 	once sync.Once
+	mux  sync.Mutex
 }
 
 // Apply applies the random strategy for the nodes.
@@ -109,7 +110,11 @@ func (s *RandomStrategy) Apply(nodes []Node) Node {
 		return Node{}
 	}
 
-	return nodes[s.rand.Int()%len(nodes)]
+	s.mux.Lock()
+	r := s.rand.Int()
+	s.mux.Unlock()
+
+	return nodes[r%len(nodes)]
 }
 
 func (s *RandomStrategy) String() string {

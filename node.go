@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -88,41 +89,6 @@ func ParseNode(s string) (node Node, err error) {
 	return
 }
 
-// MarkDead marks the node fail status.
-func (node *Node) MarkDead() {
-	atomic.AddUint32(&node.failCount, 1)
-	atomic.StoreInt64(&node.failTime, time.Now().Unix())
-
-	if node.group == nil {
-		return
-	}
-	for i := range node.group.nodes {
-		if node.group.nodes[i].ID == node.ID {
-			atomic.AddUint32(&node.group.nodes[i].failCount, 1)
-			atomic.StoreInt64(&node.group.nodes[i].failTime, time.Now().Unix())
-			break
-		}
-	}
-}
-
-// ResetDead resets the node fail status.
-func (node *Node) ResetDead() {
-	atomic.StoreUint32(&node.failCount, 0)
-	atomic.StoreInt64(&node.failTime, 0)
-
-	if node.group == nil {
-		return
-	}
-
-	for i := range node.group.nodes {
-		if node.group.nodes[i].ID == node.ID {
-			atomic.StoreUint32(&node.group.nodes[i].failCount, 0)
-			atomic.StoreInt64(&node.group.nodes[i].failTime, 0)
-			break
-		}
-	}
-}
-
 // Clone clones the node, it will prevent data race.
 func (node *Node) Clone() Node {
 	return Node{
@@ -167,10 +133,11 @@ func (node *Node) String() string {
 
 // NodeGroup is a group of nodes.
 type NodeGroup struct {
-	ID       int
-	nodes    []Node
-	Options  []SelectOption
-	Selector NodeSelector
+	ID              int
+	nodes           []Node
+	selectorOptions []SelectOption
+	selector        NodeSelector
+	mux             sync.RWMutex
 }
 
 // NewNodeGroup creates a node group
@@ -185,11 +152,21 @@ func (group *NodeGroup) AddNode(node ...Node) {
 	if group == nil {
 		return
 	}
+	group.mux.Lock()
+	defer group.mux.Unlock()
+
 	group.nodes = append(group.nodes, node...)
 }
 
 // SetNodes replaces the group nodes to the specified nodes.
 func (group *NodeGroup) SetNodes(nodes ...Node) {
+	if group == nil {
+		return
+	}
+
+	group.mux.Lock()
+	defer group.mux.Unlock()
+
 	group.nodes = nodes
 }
 
@@ -198,27 +175,100 @@ func (group *NodeGroup) SetSelector(selector NodeSelector, opts ...SelectOption)
 	if group == nil {
 		return
 	}
-	group.Selector = selector
-	group.Options = opts
+	group.mux.Lock()
+	defer group.mux.Unlock()
+
+	group.selector = selector
+	group.selectorOptions = opts
 }
 
-// Nodes returns node list in the group
+// Nodes returns the node list in the group
 func (group *NodeGroup) Nodes() []Node {
 	if group == nil {
 		return nil
 	}
+
+	group.mux.RLock()
+	defer group.mux.RUnlock()
+
 	return group.nodes
 }
 
-// Next selects the next node from group.
+func (group *NodeGroup) copyNodes() []Node {
+	group.mux.RLock()
+	defer group.mux.RUnlock()
+
+	var nodes []Node
+	for i := range group.nodes {
+		nodes = append(nodes, group.nodes[i])
+	}
+	return nodes
+}
+
+// GetNode returns a copy of the node specified by index in the group.
+func (group *NodeGroup) GetNode(i int) Node {
+	group.mux.RLock()
+	defer group.mux.RUnlock()
+
+	if i < 0 || group == nil || len(group.nodes) <= i {
+		return Node{}
+	}
+	return group.nodes[i].Clone()
+}
+
+// MarkDeadNode marks the node with ID nid status to dead.
+func (group *NodeGroup) MarkDeadNode(nid int) {
+	group.mux.RLock()
+	defer group.mux.RUnlock()
+
+	if group == nil || nid <= 0 {
+		return
+	}
+
+	for i := range group.nodes {
+		if group.nodes[i].ID == nid {
+			atomic.AddUint32(&group.nodes[i].failCount, 1)
+			atomic.StoreInt64(&group.nodes[i].failTime, time.Now().Unix())
+			break
+		}
+	}
+}
+
+// ResetDeadNode resets the node with ID nid status.
+func (group *NodeGroup) ResetDeadNode(nid int) {
+	group.mux.RLock()
+	defer group.mux.RUnlock()
+
+	if group == nil || nid <= 0 {
+		return
+	}
+
+	for i := range group.nodes {
+		if group.nodes[i].ID == nid {
+			atomic.StoreUint32(&group.nodes[i].failCount, 0)
+			atomic.StoreInt64(&group.nodes[i].failTime, 0)
+			break
+		}
+	}
+}
+
+// Next selects a node from group.
 // It also selects IP if the IP list exists.
 func (group *NodeGroup) Next() (node Node, err error) {
-	selector := group.Selector
+	if group == nil {
+		return
+	}
+
+	group.mux.RLock()
+	defer group.mux.RUnlock()
+
+	selector := group.selector
 	if selector == nil {
 		selector = &defaultSelector{}
 	}
+
 	// select node from node group
-	node, err = selector.Select(group.Nodes(), group.Options...)
+	node, err = selector.Select(group.nodes, group.selectorOptions...)
 	if err != nil {
 		return
 	}

@@ -68,6 +68,7 @@ type resolver struct {
 	TTL      time.Duration
 	period   time.Duration
 	domain   string
+	mux      sync.RWMutex
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
@@ -78,17 +79,23 @@ func NewResolver(timeout, ttl time.Duration, servers ...NameServer) ReloadResolv
 		TTL:     ttl,
 		mCache:  &sync.Map{},
 	}
-	r.init()
-	return r
-}
 
-func (r *resolver) init() {
 	if r.Timeout <= 0 {
 		r.Timeout = DefaultResolverTimeout
 	}
 	if r.TTL == 0 {
 		r.TTL = DefaultResolverTTL
 	}
+	return r
+}
+
+func (r *resolver) copyServers() []NameServer {
+	var servers []NameServer
+	for i := range r.Servers {
+		servers = append(servers, r.Servers[i])
+	}
+
+	return servers
 }
 
 func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
@@ -96,14 +103,24 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 		return
 	}
 
+	var domain string
+	var timeout, ttl time.Duration
+	var servers []NameServer
+
+	r.mux.RLock()
+	domain = r.domain
+	timeout = r.Timeout
+	servers = r.copyServers()
+	r.mux.RUnlock()
+
 	if ip := net.ParseIP(host); ip != nil {
 		return []net.IP{ip}, nil
 	}
 
-	if !strings.Contains(host, ".") && r.domain != "" {
-		host = host + "." + r.domain
+	if !strings.Contains(host, ".") && domain != "" {
+		host = host + "." + domain
 	}
-	ips = r.loadCache(host)
+	ips = r.loadCache(host, ttl)
 	if len(ips) > 0 {
 		if Debug {
 			log.Logf("[resolver] cache hit %s: %v", host, ips)
@@ -111,8 +128,8 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 		return
 	}
 
-	for _, ns := range r.Servers {
-		ips, err = r.resolve(ns, host)
+	for _, ns := range servers {
+		ips, err = r.resolve(ns, host, timeout)
 		if err != nil {
 			log.Logf("[resolver] %s via %s : %s", host, ns, err)
 			continue
@@ -130,14 +147,14 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 	return
 }
 
-func (r *resolver) resolve(ns NameServer, host string) (ips []net.IP, err error) {
+func (*resolver) resolve(ns NameServer, host string, timeout time.Duration) (ips []net.IP, err error) {
 	addr := ns.Addr
 	if _, port, _ := net.SplitHostPort(addr); port == "" {
 		addr = net.JoinHostPort(addr, "53")
 	}
 
 	client := dns.Client{
-		Timeout: r.Timeout,
+		Timeout: timeout,
 	}
 	switch strings.ToLower(ns.Protocol) {
 	case "tcp":
@@ -171,8 +188,7 @@ func (r *resolver) resolve(ns NameServer, host string) (ips []net.IP, err error)
 	return
 }
 
-func (r *resolver) loadCache(name string) []net.IP {
-	ttl := r.TTL
+func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
 	if ttl < 0 {
 		return nil
 	}
@@ -189,8 +205,7 @@ func (r *resolver) loadCache(name string) []net.IP {
 }
 
 func (r *resolver) storeCache(name string, ips []net.IP) {
-	ttl := r.TTL
-	if ttl < 0 || name == "" || len(ips) == 0 {
+	if name == "" || len(ips) == 0 {
 		return
 	}
 	r.mCache.Store(name, &resolverCacheItem{
@@ -200,6 +215,8 @@ func (r *resolver) storeCache(name string, ips []net.IP) {
 }
 
 func (r *resolver) Reload(rd io.Reader) error {
+	var ttl, timeout, period time.Duration
+	var domain string
 	var nss []NameServer
 
 	split := func(line string) []string {
@@ -232,19 +249,19 @@ func (r *resolver) Reload(rd io.Reader) error {
 		switch ss[0] {
 		case "timeout": // timeout option
 			if len(ss) > 1 {
-				r.Timeout, _ = time.ParseDuration(ss[1])
+				timeout, _ = time.ParseDuration(ss[1])
 			}
 		case "ttl": // ttl option
 			if len(ss) > 1 {
-				r.TTL, _ = time.ParseDuration(ss[1])
+				ttl, _ = time.ParseDuration(ss[1])
 			}
 		case "reload": // reload option
 			if len(ss) > 1 {
-				r.period, _ = time.ParseDuration(ss[1])
+				period, _ = time.ParseDuration(ss[1])
 			}
 		case "domain":
 			if len(ss) > 1 {
-				r.domain = ss[1]
+				domain = ss[1]
 			}
 		case "search", "sortlist", "options": // we don't support these features in /etc/resolv.conf
 		case "nameserver": // nameserver option, compatible with /etc/resolv.conf
@@ -276,11 +293,21 @@ func (r *resolver) Reload(rd io.Reader) error {
 		return err
 	}
 
+	r.mux.Lock()
+	r.Timeout = timeout
+	r.TTL = ttl
+	r.domain = domain
+	r.period = period
 	r.Servers = nss
+	r.mux.Unlock()
+
 	return nil
 }
 
 func (r *resolver) Period() time.Duration {
+	r.mux.RLock()
+	defer r.mux.RUnlock()
+
 	return r.period
 }
 
@@ -288,6 +315,9 @@ func (r *resolver) String() string {
 	if r == nil {
 		return ""
 	}
+
+	r.mux.RLock()
+	defer r.mux.RUnlock()
 
 	b := &bytes.Buffer{}
 	fmt.Fprintf(b, "Timeout %v\n", r.Timeout)

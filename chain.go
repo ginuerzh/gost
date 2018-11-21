@@ -38,7 +38,7 @@ func newRoute(nodes ...Node) *Chain {
 }
 
 // Nodes returns the proxy nodes that the chain holds.
-// If a node is a node group, the first node in the group will be returned.
+// The first node in each group will be returned.
 func (c *Chain) Nodes() (nodes []Node) {
 	for _, group := range c.nodeGroups {
 		if ns := group.Nodes(); len(ns) > 0 {
@@ -61,7 +61,7 @@ func (c *Chain) LastNode() Node {
 		return Node{}
 	}
 	group := c.nodeGroups[len(c.nodeGroups)-1]
-	return group.nodes[0].Clone()
+	return group.GetNode(0)
 }
 
 // LastNodeGroup returns the last group of the group list.
@@ -173,7 +173,6 @@ func (c *Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
 }
 
 // Conn obtains a handshaked connection to the last node of the chain.
-// If the chain is empty, it returns an ErrEmptyChain error.
 func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
 	options := &ChainOptions{}
 	for _, opt := range opts {
@@ -206,6 +205,7 @@ func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
 }
 
 // getConn obtains a connection to the last node of the chain.
+// It does not handshake with the last node.
 func (c *Chain) getConn() (conn net.Conn, err error) {
 	if c.IsEmpty() {
 		err = ErrEmptyChain
@@ -216,16 +216,16 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 
 	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
-		node.MarkDead()
+		node.group.MarkDeadNode(node.ID)
 		return
 	}
 
 	cn, err = node.Client.Handshake(cn, node.HandshakeOptions...)
 	if err != nil {
-		node.MarkDead()
+		node.group.MarkDeadNode(node.ID)
 		return
 	}
-	node.ResetDead()
+	node.group.ResetDeadNode(node.ID)
 
 	preNode := node
 	for _, node := range nodes[1:] {
@@ -233,16 +233,16 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 		cc, err = preNode.Client.Connect(cn, node.Addr)
 		if err != nil {
 			cn.Close()
-			node.MarkDead()
+			node.group.MarkDeadNode(node.ID)
 			return
 		}
 		cc, err = node.Client.Handshake(cc, node.HandshakeOptions...)
 		if err != nil {
 			cn.Close()
-			node.MarkDead()
+			node.group.MarkDeadNode(node.ID)
 			return
 		}
-		node.ResetDead()
+		node.group.ResetDeadNode(node.ID)
 
 		cn = cc
 		preNode = node

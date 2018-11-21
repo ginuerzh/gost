@@ -60,7 +60,8 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 			strategy = s
 		}
 	}
-	group.Options = append([]gost.SelectOption{},
+	group.SetSelector(
+		nil,
 		gost.WithFilter(&gost.FailFilter{
 			MaxFails:    cfg.MaxFails,
 			FailTimeout: time.Duration(cfg.FailTimeout) * time.Second,

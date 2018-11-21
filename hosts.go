@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-log/log"
@@ -25,6 +26,7 @@ type Host struct {
 type Hosts struct {
 	hosts  []Host
 	period time.Duration
+	mux    sync.RWMutex
 }
 
 // NewHosts creates a Hosts with optional list of host
@@ -36,6 +38,9 @@ func NewHosts(hosts ...Host) *Hosts {
 
 // AddHost adds host(s) to the host table.
 func (h *Hosts) AddHost(host ...Host) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
 	h.hosts = append(h.hosts, host...)
 }
 
@@ -44,6 +49,10 @@ func (h *Hosts) Lookup(host string) (ip net.IP) {
 	if h == nil {
 		return
 	}
+
+	h.mux.RLock()
+	defer h.mux.RUnlock()
+
 	for _, h := range h.hosts {
 		if h.Hostname == host {
 			ip = h.IP
@@ -64,6 +73,7 @@ func (h *Hosts) Lookup(host string) (ip net.IP) {
 
 // Reload parses config from r, then live reloads the hosts.
 func (h *Hosts) Reload(r io.Reader) error {
+	var period time.Duration
 	var hosts []Host
 
 	scanner := bufio.NewScanner(r)
@@ -89,7 +99,7 @@ func (h *Hosts) Reload(r io.Reader) error {
 
 		// reload option
 		if strings.ToLower(ss[0]) == "reload" {
-			h.period, _ = time.ParseDuration(ss[1])
+			period, _ = time.ParseDuration(ss[1])
 			continue
 		}
 
@@ -110,11 +120,18 @@ func (h *Hosts) Reload(r io.Reader) error {
 		return err
 	}
 
+	h.mux.Lock()
+	h.period = period
 	h.hosts = hosts
+	h.mux.Unlock()
+
 	return nil
 }
 
 // Period returns the reload period
 func (h *Hosts) Period() time.Duration {
+	h.mux.RLock()
+	defer h.mux.RUnlock()
+
 	return h.period
 }

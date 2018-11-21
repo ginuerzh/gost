@@ -321,7 +321,7 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 
 	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
 	if Debug && (u != "" || p != "") {
-		log.Logf("[http] %s - %s : Authorization: '%s' '%s'", r.RemoteAddr, target, u, p)
+		log.Logf("[http2] %s - %s : Authorization: '%s' '%s'", r.RemoteAddr, target, u, p)
 	}
 	if !authenticate(u, p, h.options.Users...) {
 		// probing resistance is enabled
