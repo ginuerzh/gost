@@ -4,41 +4,50 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type baseFlowController struct {
-	mutex sync.RWMutex
+	// for sending data
+	bytesSent     protocol.ByteCount
+	sendWindow    protocol.ByteCount
+	lastBlockedAt protocol.ByteCount
 
-	rttStats *congestion.RTTStats
+	// for receiving data
+	mutex                sync.RWMutex
+	bytesRead            protocol.ByteCount
+	highestReceived      protocol.ByteCount
+	receiveWindow        protocol.ByteCount
+	receiveWindowSize    protocol.ByteCount
+	maxReceiveWindowSize protocol.ByteCount
 
-	bytesSent  protocol.ByteCount
-	sendWindow protocol.ByteCount
+	epochStartTime   time.Time
+	epochStartOffset protocol.ByteCount
+	rttStats         *congestion.RTTStats
 
-	lastWindowUpdateTime time.Time
+	logger utils.Logger
+}
 
-	bytesRead                 protocol.ByteCount
-	highestReceived           protocol.ByteCount
-	receiveWindow             protocol.ByteCount
-	receiveWindowIncrement    protocol.ByteCount
-	maxReceiveWindowIncrement protocol.ByteCount
+// IsNewlyBlocked says if it is newly blocked by flow control.
+// For every offset, it only returns true once.
+// If it is blocked, the offset is returned.
+func (c *baseFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
+	if c.sendWindowSize() != 0 || c.sendWindow == c.lastBlockedAt {
+		return false, 0
+	}
+	c.lastBlockedAt = c.sendWindow
+	return true, c.sendWindow
 }
 
 func (c *baseFlowController) AddBytesSent(n protocol.ByteCount) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	c.bytesSent += n
 }
 
 // UpdateSendWindow should be called after receiving a WindowUpdateFrame
 // it returns true if the window was actually updated
 func (c *baseFlowController) UpdateSendWindow(offset protocol.ByteCount) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	if offset > c.sendWindow {
 		c.sendWindow = offset
 	}
@@ -57,52 +66,55 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 	defer c.mutex.Unlock()
 
 	// pretend we sent a WindowUpdate when reading the first byte
-	// this way auto-tuning of the window increment already works for the first WindowUpdate
+	// this way auto-tuning of the window size already works for the first WindowUpdate
 	if c.bytesRead == 0 {
-		c.lastWindowUpdateTime = time.Now()
+		c.startNewAutoTuningEpoch()
 	}
 	c.bytesRead += n
+}
+
+func (c *baseFlowController) hasWindowUpdate() bool {
+	bytesRemaining := c.receiveWindow - c.bytesRead
+	// update the window when more than the threshold was consumed
+	return bytesRemaining <= protocol.ByteCount((float64(c.receiveWindowSize) * float64((1 - protocol.WindowUpdateThreshold))))
 }
 
 // getWindowUpdate updates the receive window, if necessary
 // it returns the new offset
 func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
-	diff := c.receiveWindow - c.bytesRead
-	// update the window when more than half of it was already consumed
-	if diff >= (c.receiveWindowIncrement / 2) {
+	if !c.hasWindowUpdate() {
 		return 0
 	}
 
-	c.maybeAdjustWindowIncrement()
-	c.receiveWindow = c.bytesRead + c.receiveWindowIncrement
-	c.lastWindowUpdateTime = time.Now()
+	c.maybeAdjustWindowSize()
+	c.receiveWindow = c.bytesRead + c.receiveWindowSize
 	return c.receiveWindow
 }
 
-func (c *baseFlowController) IsBlocked() bool {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	return c.sendWindowSize() == 0
-}
-
-// maybeAdjustWindowIncrement increases the receiveWindowIncrement if we're sending WindowUpdates too often
-func (c *baseFlowController) maybeAdjustWindowIncrement() {
-	if c.lastWindowUpdateTime.IsZero() {
+// maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.
+// For details about auto-tuning, see https://docs.google.com/document/d/1SExkMmGiz8VYzV3s9E35JQlJ73vhzCekKkDi85F1qCE/edit?usp=sharing.
+func (c *baseFlowController) maybeAdjustWindowSize() {
+	bytesReadInEpoch := c.bytesRead - c.epochStartOffset
+	// don't do anything if less than half the window has been consumed
+	if bytesReadInEpoch <= c.receiveWindowSize/2 {
 		return
 	}
-
 	rtt := c.rttStats.SmoothedRTT()
 	if rtt == 0 {
 		return
 	}
 
-	timeSinceLastWindowUpdate := time.Since(c.lastWindowUpdateTime)
-	// interval between the window updates is sufficiently large, no need to increase the increment
-	if timeSinceLastWindowUpdate >= 2*rtt {
-		return
+	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
+	if time.Since(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
+		// window is consumed too fast, try to increase the window size
+		c.receiveWindowSize = utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
 	}
-	c.receiveWindowIncrement = utils.MinByteCount(2*c.receiveWindowIncrement, c.maxReceiveWindowIncrement)
+	c.startNewAutoTuningEpoch()
+}
+
+func (c *baseFlowController) startNewAutoTuningEpoch() {
+	c.epochStartTime = time.Now()
+	c.epochStartOffset = c.bytesRead
 }
 
 func (c *baseFlowController) checkFlowControlViolation() bool {

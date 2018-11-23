@@ -33,7 +33,7 @@ func (session *quicSession) GetConn() (*quicConn, error) {
 }
 
 func (session *quicSession) Close() error {
-	return session.session.Close(nil)
+	return session.session.Close()
 }
 
 type quicTransporter struct {
@@ -226,7 +226,7 @@ func (l *quicListener) sessionLoop(session quic.Session) {
 		stream, err := session.AcceptStream()
 		if err != nil {
 			log.Log("[quic] accept stream:", err)
-			session.Close(err)
+			session.Close()
 			return
 		}
 

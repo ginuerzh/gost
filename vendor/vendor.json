@@ -87,6 +87,13 @@
 			"revisionTime": "2017-10-31T22:03:52Z"
 		},
 		{
+			"checksumSHA1": "PYXuf7wvcj492uWhjvmXlyyQUYc=",
+			"origin": "github.com/lucas-clemente/quic-go/vendor/github.com/cheekybits/genny/generic",
+			"path": "github.com/cheekybits/genny/generic",
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
+		},
+		{
 			"checksumSHA1": "xqVDKHGnakGlcRhmWd1j9JYmfLc=",
 			"path": "github.com/dchest/siphash",
 			"revision": "4ebf1de738443ea7f45f02dc394c4df1942a126d",
@@ -195,85 +202,71 @@
 			"revisionTime": "2016-09-12T19:31:07Z"
 		},
 		{
-			"checksumSHA1": "2RFzGcdTeQrFkkhT70WhQcMWF6c=",
-			"origin": "github.com/lucas-clemente/quic-go/vendor/github.com/lucas-clemente/aes12",
-			"path": "github.com/lucas-clemente/aes12",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
-		},
-		{
-			"checksumSHA1": "ne1X+frkx5fJcpz9FaZPuUZ7amM=",
-			"origin": "github.com/lucas-clemente/quic-go/vendor/github.com/lucas-clemente/fnv128a",
-			"path": "github.com/lucas-clemente/fnv128a",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
-		},
-		{
-			"checksumSHA1": "8wGsJmhHz2l6XAcpoJ4NiF2zXjY=",
+			"checksumSHA1": "4yUrl/ZAVV/BCoKep8VAH+CP4WY=",
 			"path": "github.com/lucas-clemente/quic-go",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "OA9E+y7g05x/mWJJHmA7oPxWKQo=",
-			"origin": "github.com/lucas-clemente/quic-go/vendor/github.com/lucas-clemente/quic-go-certificates",
-			"path": "github.com/lucas-clemente/quic-go-certificates",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"checksumSHA1": "u2h6/8Kzm6swu0ordg0FQSmVbrc=",
+			"path": "github.com/lucas-clemente/quic-go/internal/ackhandler",
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "w1JPHEDB2mQW4qpKZbWj5zsavuM=",
-			"path": "github.com/lucas-clemente/quic-go/ackhandler",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"checksumSHA1": "y6iH4e+f/o//eL6f8xwxSe9Q3FI=",
+			"path": "github.com/lucas-clemente/quic-go/internal/congestion",
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "X4/8oG5h9ffPOXFCYl39QUNuN9U=",
-			"path": "github.com/lucas-clemente/quic-go/congestion",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
-		},
-		{
-			"checksumSHA1": "lWOh0Q0bY/dd3G/MZDCkzk1dVTo=",
+			"checksumSHA1": "ZfL1Sgteqx83KzgT0xcB96VgTk4=",
 			"path": "github.com/lucas-clemente/quic-go/internal/crypto",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "cab7WtoBeOlbQGMEoTaKAjEbqZg=",
+			"checksumSHA1": "CLccNsoh7RnWWUWQ3yrugEgFsCo=",
 			"path": "github.com/lucas-clemente/quic-go/internal/flowcontrol",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "gWAXju/s95yWXKYLgCnxx+Ed22M=",
+			"checksumSHA1": "MmRtW5xbyvuwhkOZhIlzkBdps0o=",
 			"path": "github.com/lucas-clemente/quic-go/internal/handshake",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "VjW23wuTXH3REwjcwhfdQrJTUDI=",
+			"checksumSHA1": "2oZ1MAg1sKG3guxgcIiy+J36zcs=",
 			"path": "github.com/lucas-clemente/quic-go/internal/protocol",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "V9xXEL18b0TrZoe+dqHAmK0beCY=",
+			"checksumSHA1": "MxpXGfgyRslAnHz1WM5u8Pf1Hdc=",
+			"path": "github.com/lucas-clemente/quic-go/internal/qerr",
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
+		},
+		{
+			"checksumSHA1": "+wWS0Y0MtojUYvl7G+3R6smjpcg=",
 			"path": "github.com/lucas-clemente/quic-go/internal/utils",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "Zs24W5nNpq5Adhl7069+094yW3A=",
+			"checksumSHA1": "n5DkWsAeFOXziSlHPhJo3khUVJY=",
 			"path": "github.com/lucas-clemente/quic-go/internal/wire",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
-			"checksumSHA1": "RaG0jfP+lFzgedW98Bfp0Uri7EY=",
-			"path": "github.com/lucas-clemente/quic-go/qerr",
-			"revision": "214e95c655a1832cc64a182544708a0c4f70eea3",
-			"revisionTime": "2017-11-13T03:10:14Z"
+			"checksumSHA1": "tMUbiAxGypX/0kCJpIFg31Q6vOU=",
+			"origin": "github.com/lucas-clemente/quic-go/vendor/github.com/marten-seemann/qtls",
+			"path": "github.com/marten-seemann/qtls",
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
 			"checksumSHA1": "qc3yxi6NwHM6ix9abwFSS6uRx7Y=",
@@ -308,6 +301,12 @@
 		{
 			"checksumSHA1": "TT1rac6kpQp2vz24m5yDGUNQ/QQ=",
 			"path": "golang.org/x/crypto/cast5",
+			"revision": "a49355c7e3f8fe157a85be2f77e6e269a0f89602",
+			"revisionTime": "2018-06-20T09:14:27Z"
+		},
+		{
+			"checksumSHA1": "XeVtoYW/XdZj+VJpmHmPKcqJO+o=",
+			"path": "golang.org/x/crypto/chacha20poly1305",
 			"revision": "a49355c7e3f8fe157a85be2f77e6e269a0f89602",
 			"revisionTime": "2018-06-20T09:14:27Z"
 		},
@@ -454,6 +453,13 @@
 			"path": "golang.org/x/net/ipv6",
 			"revision": "26e67e76b6c3f6ce91f7c52def5af501b4e0f3a2",
 			"revisionTime": "2018-09-11T21:37:47Z"
+		},
+		{
+			"checksumSHA1": "REkmyB368pIiip76LiqMLspgCRk=",
+			"origin": "github.com/lucas-clemente/quic-go/vendor/golang.org/x/sys/cpu",
+			"path": "golang.org/x/sys/cpu",
+			"revision": "34dd046cb6ceb362917d2124bd7e9ebef6ed7ed0",
+			"revisionTime": "2018-11-20T09:01:09Z"
 		},
 		{
 			"checksumSHA1": "HyvwgEh7Ja47KY376Mah02WDLEc=",

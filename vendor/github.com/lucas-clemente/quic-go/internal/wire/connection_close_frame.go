@@ -2,43 +2,44 @@ package wire
 
 import (
 	"bytes"
-	"errors"
 	"io"
-	"math"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-// A ConnectionCloseFrame in QUIC
+// A ConnectionCloseFrame is a CONNECTION_CLOSE frame
 type ConnectionCloseFrame struct {
-	ErrorCode    qerr.ErrorCode
-	ReasonPhrase string
+	IsApplicationError bool
+	ErrorCode          qerr.ErrorCode
+	ReasonPhrase       string
 }
 
-// ParseConnectionCloseFrame reads a CONNECTION_CLOSE frame
-func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
-	frame := &ConnectionCloseFrame{}
-
-	// read the TypeByte
-	_, err := r.ReadByte()
+func parseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
+	typeByte, err := r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
-	errorCode, err := utils.GetByteOrder(version).ReadUint32(r)
+	f := &ConnectionCloseFrame{IsApplicationError: typeByte == 0x1d}
+	ec, err := utils.BigEndian.ReadUint16(r)
 	if err != nil {
 		return nil, err
 	}
-	frame.ErrorCode = qerr.ErrorCode(errorCode)
-
-	reasonPhraseLen, err := utils.GetByteOrder(version).ReadUint16(r)
+	f.ErrorCode = qerr.ErrorCode(ec)
+	// read the Frame Type, if this is not an application error
+	if !f.IsApplicationError {
+		if _, err := utils.ReadVarInt(r); err != nil {
+			return nil, err
+		}
+	}
+	var reasonPhraseLen uint64
+	reasonPhraseLen, err = utils.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
-
-	// shortcut to prevent the unneccessary allocation of dataLen bytes
+	// shortcut to prevent the unnecessary allocation of dataLen bytes
 	// if the dataLen is larger than the remaining length of the packet
 	// reading the whole reason phrase would result in EOF when attempting to READ
 	if int(reasonPhraseLen) > r.Len() {
@@ -50,28 +51,31 @@ func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 		// this should never happen, since we already checked the reasonPhraseLen earlier
 		return nil, err
 	}
-	frame.ReasonPhrase = string(reasonPhrase)
-
-	return frame, nil
+	f.ReasonPhrase = string(reasonPhrase)
+	return f, nil
 }
 
-// MinLength of a written frame
-func (f *ConnectionCloseFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return 1 + 4 + 2 + protocol.ByteCount(len(f.ReasonPhrase)), nil
+// Length of a written frame
+func (f *ConnectionCloseFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+	length := 1 + 2 + utils.VarIntLen(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
+	if !f.IsApplicationError {
+		length++ // for the frame type
+	}
+	return length
 }
 
-// Write writes an CONNECTION_CLOSE frame.
 func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	b.WriteByte(0x02)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
-
-	if len(f.ReasonPhrase) > math.MaxUint16 {
-		return errors.New("ConnectionFrame: ReasonPhrase too long")
+	if f.IsApplicationError {
+		b.WriteByte(0x1d)
+	} else {
+		b.WriteByte(0x1c)
 	}
 
-	reasonPhraseLen := uint16(len(f.ReasonPhrase))
-	utils.GetByteOrder(version).WriteUint16(b, reasonPhraseLen)
+	utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
+	if !f.IsApplicationError {
+		utils.WriteVarInt(b, 0)
+	}
+	utils.WriteVarInt(b, uint64(len(f.ReasonPhrase)))
 	b.WriteString(f.ReasonPhrase)
-
 	return nil
 }
