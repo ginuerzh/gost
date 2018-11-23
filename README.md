@@ -34,6 +34,8 @@ Wiki站点: <https://docs.ginuerzh.xyz/gost/>
 
 Google讨论组: <https://groups.google.com/d/forum/go-gost>
 
+Telegram讨论群: <https://t.me/gogost>
+
 安装
 ------
 
