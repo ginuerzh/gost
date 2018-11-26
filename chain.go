@@ -151,7 +151,7 @@ func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, e
 	return cc, nil
 }
 
-func (c *Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
+func (*Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr
@@ -216,16 +216,16 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 
 	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
-		node.group.MarkDeadNode(node.ID)
+		node.MarkDead()
 		return
 	}
 
 	cn, err = node.Client.Handshake(cn, node.HandshakeOptions...)
 	if err != nil {
-		node.group.MarkDeadNode(node.ID)
+		node.MarkDead()
 		return
 	}
-	node.group.ResetDeadNode(node.ID)
+	node.ResetDead()
 
 	preNode := node
 	for _, node := range nodes[1:] {
@@ -233,16 +233,16 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 		cc, err = preNode.Client.Connect(cn, node.Addr)
 		if err != nil {
 			cn.Close()
-			node.group.MarkDeadNode(node.ID)
+			node.MarkDead()
 			return
 		}
 		cc, err = node.Client.Handshake(cc, node.HandshakeOptions...)
 		if err != nil {
 			cn.Close()
-			node.group.MarkDeadNode(node.ID)
+			node.MarkDead()
 			return
 		}
-		node.group.ResetDeadNode(node.ID)
+		node.ResetDead()
 
 		cn = cc
 		preNode = node
@@ -321,10 +321,9 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 	}
 	route.Retries = c.Retries
 
-	if Debug {
-		buf.WriteString(addr)
-		log.Log("[route]", buf.String())
-	}
+	buf.WriteString(addr)
+	log.Log("[route]", buf.String())
+
 	return
 }
 
