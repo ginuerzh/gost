@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -51,33 +52,58 @@ func loadCA(caFile string) (cp *x509.CertPool, err error) {
 	return
 }
 
-func loadConfigureFile(configureFile string) error {
-	if configureFile == "" {
-		return nil
-	}
-	content, err := ioutil.ReadFile(configureFile)
+type baseConfig struct {
+	route
+	Routes       []route
+	ReloadPeriod string
+	Debug        bool
+}
+
+func parseBaseConfig(s string) (*baseConfig, error) {
+	file, err := os.Open(s)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var cfg struct {
-		route
-		Routes []route
+	defer file.Close()
+
+	if err := json.NewDecoder(file).Decode(baseCfg); err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(content, &cfg); err != nil {
+
+	return baseCfg, nil
+}
+
+func (cfg *baseConfig) IsValid() bool {
+	return len(cfg.route.ServeNodes) > 0
+}
+
+func (cfg *baseConfig) Reload(r io.Reader) error {
+	c := baseConfig{}
+	if err := json.NewDecoder(r).Decode(&c); err != nil {
 		return err
 	}
 
-	if len(cfg.route.ServeNodes) > 0 {
-		routes = append(routes, cfg.route)
+	cfg.route.Close()
+	for _, r := range cfg.Routes {
+		r.Close()
 	}
-	for _, route := range cfg.Routes {
-		if len(route.ServeNodes) > 0 {
-			routes = append(routes, route)
-		}
-	}
+	*cfg = c
 	gost.Debug = cfg.Debug
 
+	if err := cfg.route.serve(); err != nil {
+		return err
+	}
+	for _, route := range cfg.Routes {
+		if err := route.serve(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (cfg *baseConfig) Period() time.Duration {
+	d, _ := time.ParseDuration(cfg.ReloadPeriod)
+	return d
 }
 
 type stringList []string
@@ -239,4 +265,11 @@ func parseResolver(cfg string) gost.Resolver {
 	go gost.PeriodReload(resolver, cfg)
 
 	return resolver
+}
+
+func parseHosts(s string) *gost.Hosts {
+	hosts := gost.NewHosts()
+	go gost.PeriodReload(hosts, s)
+
+	return hosts
 }

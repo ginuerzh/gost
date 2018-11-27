@@ -16,8 +16,11 @@ type Reloader interface {
 
 // PeriodReload reloads the config periodically according to the period of the reloader.
 func PeriodReload(r Reloader, configFile string) error {
-	var lastMod time.Time
+	if configFile == "" {
+		return nil
+	}
 
+	var lastMod time.Time
 	for {
 		f, err := os.Open(configFile)
 		if err != nil {
@@ -32,7 +35,9 @@ func PeriodReload(r Reloader, configFile string) error {
 		mt := finfo.ModTime()
 		if !mt.Equal(lastMod) {
 			log.Log("[reload]", configFile)
-			r.Reload(f)
+			if err := r.Reload(f); err != nil {
+				log.Logf("[reload] %s: %s", configFile, err)
+			}
 			lastMod = mt
 		}
 		f.Close()

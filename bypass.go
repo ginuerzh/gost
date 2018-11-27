@@ -122,8 +122,8 @@ func (m *domainMatcher) String() string {
 // It contains a list of matchers.
 type Bypass struct {
 	matchers []Matcher
-	reversed bool
 	period   time.Duration // the period for live reloading
+	reversed bool
 	mux      sync.RWMutex
 }
 

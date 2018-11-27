@@ -13,6 +13,11 @@ import (
 	"github.com/ginuerzh/gost"
 )
 
+const (
+	defaultMaxFails    = 1
+	defaultFailTimeout = 30 * time.Second
+)
+
 type peerConfig struct {
 	Strategy    string        `json:"strategy"`
 	MaxFails    int           `json:"max_fails"`
@@ -39,10 +44,10 @@ func parsePeerConfig(cfg string, group *gost.NodeGroup, baseNodes []gost.Node) *
 
 func (cfg *peerConfig) Validate() {
 	if cfg.MaxFails <= 0 {
-		cfg.MaxFails = 1
+		cfg.MaxFails = defaultMaxFails
 	}
 	if cfg.FailTimeout <= 0 {
-		cfg.FailTimeout = 30 // seconds
+		cfg.FailTimeout = defaultFailTimeout // seconds
 	}
 }
 
@@ -53,20 +58,22 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 	cfg.Validate()
 
 	group := cfg.group
-	strategy := cfg.Strategy
-	if len(cfg.baseNodes) > 0 {
-		// overwrite the strategry in the peer config if `strategy` param exists.
-		if s := cfg.baseNodes[0].Get("strategy"); s != "" {
-			strategy = s
+	/*
+		strategy := cfg.Strategy
+		if len(cfg.baseNodes) > 0 {
+			// overwrite the strategry in the peer config if `strategy` param exists.
+			if s := cfg.baseNodes[0].Get("strategy"); s != "" {
+				strategy = s
+			}
 		}
-	}
+	*/
 	group.SetSelector(
 		nil,
 		gost.WithFilter(&gost.FailFilter{
 			MaxFails:    cfg.MaxFails,
-			FailTimeout: time.Duration(cfg.FailTimeout) * time.Second,
+			FailTimeout: cfg.FailTimeout,
 		}),
-		gost.WithStrategy(parseStrategy(strategy)),
+		gost.WithStrategy(parseStrategy(cfg.Strategy)),
 	)
 
 	gNodes := cfg.baseNodes
