@@ -6,8 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -16,6 +14,34 @@ import (
 
 	"github.com/ginuerzh/gost"
 )
+
+var (
+	routers []router
+)
+
+type baseConfig struct {
+	route
+	Routes []route
+	Debug  bool
+}
+
+func parseBaseConfig(s string) (*baseConfig, error) {
+	file, err := os.Open(s)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	if err := json.NewDecoder(file).Decode(baseCfg); err != nil {
+		return nil, err
+	}
+
+	return baseCfg, nil
+}
+
+func (cfg *baseConfig) IsValid() bool {
+	return len(cfg.route.ServeNodes) > 0
+}
 
 var (
 	defaultCertFile = "cert.pem"
@@ -50,70 +76,6 @@ func loadCA(caFile string) (cp *x509.CertPool, err error) {
 		return nil, errors.New("AppendCertsFromPEM failed")
 	}
 	return
-}
-
-type baseConfig struct {
-	route
-	Routes       []route
-	ReloadPeriod string
-	Debug        bool
-}
-
-func parseBaseConfig(s string) (*baseConfig, error) {
-	file, err := os.Open(s)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	if err := json.NewDecoder(file).Decode(baseCfg); err != nil {
-		return nil, err
-	}
-
-	return baseCfg, nil
-}
-
-func (cfg *baseConfig) IsValid() bool {
-	return len(cfg.route.ServeNodes) > 0
-}
-
-func (cfg *baseConfig) Reload(r io.Reader) error {
-	c := baseConfig{}
-	if err := json.NewDecoder(r).Decode(&c); err != nil {
-		return err
-	}
-
-	cfg.route.Close()
-	for _, r := range cfg.Routes {
-		r.Close()
-	}
-	*cfg = c
-	gost.Debug = cfg.Debug
-
-	if err := cfg.route.serve(); err != nil {
-		return err
-	}
-	for _, route := range cfg.Routes {
-		if err := route.serve(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (cfg *baseConfig) Period() time.Duration {
-	d, _ := time.ParseDuration(cfg.ReloadPeriod)
-	return d
-}
-
-type stringList []string
-
-func (l *stringList) String() string {
-	return fmt.Sprintf("%s", *l)
-}
-func (l *stringList) Set(value string) error {
-	*l = append(*l, value)
-	return nil
 }
 
 func parseKCPConfig(configFile string) (*gost.KCPConfig, error) {
@@ -221,9 +183,10 @@ func parseBypass(s string) *gost.Bypass {
 		}
 		return gost.NewBypass(reversed, matchers...)
 	}
-	f.Close()
+	defer f.Close()
 
 	bp := gost.NewBypass(reversed)
+	bp.Reload(f)
 	go gost.PeriodReload(bp, s)
 
 	return bp
@@ -259,16 +222,26 @@ func parseResolver(cfg string) gost.Resolver {
 		}
 		return gost.NewResolver(timeout, ttl, nss...)
 	}
-	f.Close()
+	defer f.Close()
 
 	resolver := gost.NewResolver(timeout, ttl)
+	resolver.Reload(f)
+
 	go gost.PeriodReload(resolver, cfg)
 
 	return resolver
 }
 
 func parseHosts(s string) *gost.Hosts {
+	f, err := os.Open(s)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
 	hosts := gost.NewHosts()
+	hosts.Reload(f)
+
 	go gost.PeriodReload(hosts, s)
 
 	return hosts

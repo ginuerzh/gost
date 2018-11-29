@@ -86,20 +86,10 @@ func (s *Server) Serve(h Handler, opts ...ServerOption) error {
 
 // ServerOptions holds the options for Server.
 type ServerOptions struct {
-	Bypass *Bypass
 }
 
 // ServerOption allows a common way to set server options.
 type ServerOption func(opts *ServerOptions)
-
-/*
-// BypassServerOption sets the bypass option of ServerOptions.
-func BypassServerOption(bypass *Bypass) ServerOption {
-	return func(opts *ServerOptions) {
-		opts.Bypass = bypass
-	}
-}
-*/
 
 // Listener is a proxy server listener, just like a net.Listener.
 type Listener interface {

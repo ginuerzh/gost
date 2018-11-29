@@ -24,15 +24,17 @@ type Host struct {
 // Fields of the entry are separated by any number of blanks and/or tab characters.
 // Text from a "#" character until the end of the line is a comment, and is ignored.
 type Hosts struct {
-	hosts  []Host
-	period time.Duration
-	mux    sync.RWMutex
+	hosts   []Host
+	period  time.Duration
+	stopped chan struct{}
+	mux     sync.RWMutex
 }
 
 // NewHosts creates a Hosts with optional list of host
 func NewHosts(hosts ...Host) *Hosts {
 	return &Hosts{
-		hosts: hosts,
+		hosts:   hosts,
+		stopped: make(chan struct{}),
 	}
 }
 
@@ -75,6 +77,10 @@ func (h *Hosts) Lookup(host string) (ip net.IP) {
 func (h *Hosts) Reload(r io.Reader) error {
 	var period time.Duration
 	var hosts []Host
+
+	if h.Stopped() {
+		return nil
+	}
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -130,8 +136,31 @@ func (h *Hosts) Reload(r io.Reader) error {
 
 // Period returns the reload period
 func (h *Hosts) Period() time.Duration {
+	if h.Stopped() {
+		return -1
+	}
+
 	h.mux.RLock()
 	defer h.mux.RUnlock()
 
 	return h.period
+}
+
+// Stop stops reloading.
+func (h *Hosts) Stop() {
+	select {
+	case <-h.stopped:
+	default:
+		close(h.stopped)
+	}
+}
+
+// Stopped checks whether the reloader is stopped.
+func (h *Hosts) Stopped() bool {
+	select {
+	case <-h.stopped:
+		return true
+	default:
+		return false
+	}
 }

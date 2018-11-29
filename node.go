@@ -2,7 +2,6 @@ package gost
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ type Node struct {
 	Protocol         string
 	Transport        string
 	Remote           string // remote address, used by tcp/udp port forwarding
+	url              string // raw url
 	User             *url.Userinfo
 	Values           url.Values
 	DialOptions      []DialOption
@@ -56,6 +56,9 @@ func ParseNode(s string) (node Node, err error) {
 		User:   u.User,
 		marker: &failMarker{},
 	}
+
+	u.RawQuery = ""
+	node.url = u.String()
 
 	schemes := strings.Split(u.Scheme, "+")
 	if len(schemes) == 1 {
@@ -136,8 +139,7 @@ func (node *Node) GetInt(key string) int {
 }
 
 func (node Node) String() string {
-	return fmt.Sprintf("%d@%s+%s://%s",
-		node.ID, node.Protocol, node.Transport, node.Addr)
+	return node.url
 }
 
 // NodeGroup is a group of nodes.
@@ -167,16 +169,19 @@ func (group *NodeGroup) AddNode(node ...Node) {
 	group.nodes = append(group.nodes, node...)
 }
 
-// SetNodes replaces the group nodes to the specified nodes.
-func (group *NodeGroup) SetNodes(nodes ...Node) {
+// SetNodes replaces the group nodes to the specified nodes,
+// and returns the previous nodes.
+func (group *NodeGroup) SetNodes(nodes ...Node) []Node {
 	if group == nil {
-		return
+		return nil
 	}
 
 	group.mux.Lock()
 	defer group.mux.Unlock()
 
+	old := group.nodes
 	group.nodes = nodes
+	return old
 }
 
 // SetSelector sets node selector with options for the group.

@@ -8,7 +8,7 @@ var nodeTests = []struct {
 	out      Node
 	hasError bool
 }{
-	{"", Node{}, false},
+	{"", Node{}, true},
 	{"://", Node{}, true},
 	{"localhost", Node{Addr: "localhost", Transport: "tcp"}, false},
 	{":", Node{Addr: ":", Transport: "tcp"}, false},

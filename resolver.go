@@ -29,10 +29,11 @@ type Resolver interface {
 	Resolve(host string) ([]net.IP, error)
 }
 
-// ReloadResolver is resolover that support live reloading
+// ReloadResolver is resolover that support live reloading.
 type ReloadResolver interface {
 	Resolver
 	Reloader
+	Stoppable
 }
 
 // NameServer is a name server.
@@ -68,6 +69,7 @@ type resolver struct {
 	TTL      time.Duration
 	period   time.Duration
 	domain   string
+	stopped  chan struct{}
 	mux      sync.RWMutex
 }
 
@@ -78,6 +80,7 @@ func NewResolver(timeout, ttl time.Duration, servers ...NameServer) ReloadResolv
 		Timeout: timeout,
 		TTL:     ttl,
 		mCache:  &sync.Map{},
+		stopped: make(chan struct{}),
 	}
 
 	if r.Timeout <= 0 {
@@ -110,6 +113,7 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 	r.mux.RLock()
 	domain = r.domain
 	timeout = r.Timeout
+	ttl = r.TTL
 	servers = r.copyServers()
 	r.mux.RUnlock()
 
@@ -219,6 +223,10 @@ func (r *resolver) Reload(rd io.Reader) error {
 	var domain string
 	var nss []NameServer
 
+	if r.Stopped() {
+		return nil
+	}
+
 	split := func(line string) []string {
 		if line == "" {
 			return nil
@@ -305,10 +313,33 @@ func (r *resolver) Reload(rd io.Reader) error {
 }
 
 func (r *resolver) Period() time.Duration {
+	if r.Stopped() {
+		return -1
+	}
+
 	r.mux.RLock()
 	defer r.mux.RUnlock()
 
 	return r.period
+}
+
+// Stop stops reloading.
+func (r *resolver) Stop() {
+	select {
+	case <-r.stopped:
+	default:
+		close(r.stopped)
+	}
+}
+
+// Stopped checks whether the reloader is stopped.
+func (r *resolver) Stopped() bool {
+	select {
+	case <-r.stopped:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *resolver) String() string {

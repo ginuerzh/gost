@@ -84,8 +84,9 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 		return nil, err
 	}
 
-	sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
-	if err != nil {
+	sc := ss.NewConn(conn, cipher)
+	// sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
+	if _, err := sc.Write(rawaddr); err != nil {
 		return nil, err
 	}
 	return &shadowConn{conn: sc}, nil

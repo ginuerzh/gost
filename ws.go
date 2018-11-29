@@ -384,7 +384,6 @@ func WSListener(addr string, options *WSOptions) (Listener, error) {
 		options = &WSOptions{}
 	}
 	l := &wsListener{
-		addr: tcpAddr,
 		upgrader: &websocket.Upgrader{
 			ReadBufferSize:    options.ReadBufferSize,
 			WriteBufferSize:   options.WriteBufferSize,
@@ -403,6 +402,7 @@ func WSListener(addr string, options *WSOptions) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	l.addr = ln.Addr()
 
 	go func() {
 		err := l.srv.Serve(tcpKeepAliveListener{ln})
@@ -473,7 +473,6 @@ func MWSListener(addr string, options *WSOptions) (Listener, error) {
 		options = &WSOptions{}
 	}
 	l := &mwsListener{
-		addr: tcpAddr,
 		upgrader: &websocket.Upgrader{
 			ReadBufferSize:    options.ReadBufferSize,
 			WriteBufferSize:   options.WriteBufferSize,
@@ -492,6 +491,7 @@ func MWSListener(addr string, options *WSOptions) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	l.addr = ln.Addr()
 
 	go func() {
 		err := l.srv.Serve(tcpKeepAliveListener{ln})
@@ -584,7 +584,6 @@ func WSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Listen
 	}
 	l := &wssListener{
 		wsListener: &wsListener{
-			addr: tcpAddr,
 			upgrader: &websocket.Upgrader{
 				ReadBufferSize:    options.ReadBufferSize,
 				WriteBufferSize:   options.WriteBufferSize,
@@ -612,6 +611,7 @@ func WSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Listen
 	if err != nil {
 		return nil, err
 	}
+	l.addr = ln.Addr()
 
 	go func() {
 		err := l.srv.Serve(tls.NewListener(tcpKeepAliveListener{ln}, tlsConfig))
@@ -644,7 +644,6 @@ func MWSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Liste
 	}
 	l := &mwssListener{
 		mwsListener: &mwsListener{
-			addr: tcpAddr,
 			upgrader: &websocket.Upgrader{
 				ReadBufferSize:    options.ReadBufferSize,
 				WriteBufferSize:   options.WriteBufferSize,
@@ -672,6 +671,7 @@ func MWSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Liste
 	if err != nil {
 		return nil, err
 	}
+	l.addr = ln.Addr()
 
 	go func() {
 		err := l.srv.Serve(tls.NewListener(tcpKeepAliveListener{ln}, tlsConfig))

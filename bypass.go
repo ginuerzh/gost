@@ -124,6 +124,7 @@ type Bypass struct {
 	matchers []Matcher
 	period   time.Duration // the period for live reloading
 	reversed bool
+	stopped  chan struct{}
 	mux      sync.RWMutex
 }
 
@@ -133,6 +134,7 @@ func NewBypass(reversed bool, matchers ...Matcher) *Bypass {
 	return &Bypass{
 		matchers: matchers,
 		reversed: reversed,
+		stopped:  make(chan struct{}),
 	}
 }
 
@@ -207,6 +209,10 @@ func (bp *Bypass) Reload(r io.Reader) error {
 	var period time.Duration
 	var reversed bool
 
+	if bp.Stopped() {
+		return nil
+	}
+
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -264,12 +270,35 @@ func (bp *Bypass) Reload(r io.Reader) error {
 	return nil
 }
 
-// Period returns the reload period
+// Period returns the reload period.
 func (bp *Bypass) Period() time.Duration {
+	if bp.Stopped() {
+		return -1
+	}
+
 	bp.mux.RLock()
 	defer bp.mux.RUnlock()
 
 	return bp.period
+}
+
+// Stop stops reloading.
+func (bp *Bypass) Stop() {
+	select {
+	case <-bp.stopped:
+	default:
+		close(bp.stopped)
+	}
+}
+
+// Stopped checks whether the reloader is stopped.
+func (bp *Bypass) Stopped() bool {
+	select {
+	case <-bp.stopped:
+		return true
+	default:
+		return false
+	}
 }
 
 func (bp *Bypass) String() string {

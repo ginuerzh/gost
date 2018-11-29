@@ -15,7 +15,7 @@ var (
 	ErrEmptyChain = errors.New("empty chain")
 )
 
-// Chain is a proxy chain that holds a list of proxy nodes.
+// Chain is a proxy chain that holds a list of proxy node groups.
 type Chain struct {
 	isRoute    bool
 	Retries    int
@@ -23,6 +23,7 @@ type Chain struct {
 }
 
 // NewChain creates a proxy chain with a list of proxy nodes.
+// It creates the node groups automatically, one group per node.
 func NewChain(nodes ...Node) *Chain {
 	chain := &Chain{}
 	for _, node := range nodes {
@@ -31,6 +32,8 @@ func NewChain(nodes ...Node) *Chain {
 	return chain
 }
 
+// newRoute creates a chain route.
+// a chain route is the final route after node selection.
 func newRoute(nodes ...Node) *Chain {
 	chain := NewChain(nodes...)
 	chain.isRoute = true

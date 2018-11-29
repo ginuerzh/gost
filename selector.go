@@ -68,6 +68,20 @@ type Strategy interface {
 	String() string
 }
 
+// NewStrategy creates a Strategy by the name s.
+func NewStrategy(s string) Strategy {
+	switch s {
+	case "random":
+		return &RandomStrategy{}
+	case "fifo":
+		return &FIFOStrategy{}
+	case "round":
+		fallthrough
+	default:
+		return &RoundStrategy{}
+	}
+}
+
 // RoundStrategy is a strategy for node selector.
 // The node will be selected by round-robin algorithm.
 type RoundStrategy struct {

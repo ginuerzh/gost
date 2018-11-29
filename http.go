@@ -263,7 +263,7 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 			if err == nil {
 				return
 			}
-			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
+			// log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), req.Host, err)
 			continue
 		}
 

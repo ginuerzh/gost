@@ -71,7 +71,10 @@ func main() {
 	}
 	gost.DefaultTLSConfig = tlsConfig
 
-	start()
+	if err := start(); err != nil {
+		log.Log(err)
+		os.Exit(1)
+	}
 
 	select {}
 }
@@ -79,16 +82,24 @@ func main() {
 func start() error {
 	gost.Debug = baseCfg.Debug
 
-	if err := baseCfg.route.serve(); err != nil {
+	var routers []router
+	rts, err := baseCfg.route.GenRouters()
+	if err != nil {
 		return err
 	}
+	routers = append(routers, rts...)
+
 	for _, route := range baseCfg.Routes {
-		if err := route.serve(); err != nil {
+		rts, err := route.GenRouters()
+		if err != nil {
 			return err
 		}
+		routers = append(routers, rts...)
 	}
 
-	go gost.PeriodReload(baseCfg, configureFile)
+	for i := range routers {
+		go routers[i].Serve()
+	}
 
 	return nil
 }

@@ -3,20 +3,32 @@ package main
 import (
 	"crypto/sha256"
 	"crypto/tls"
+	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/ginuerzh/gost"
+	"github.com/go-log/log"
 )
+
+type stringList []string
+
+func (l *stringList) String() string {
+	return fmt.Sprintf("%s", *l)
+}
+func (l *stringList) Set(value string) error {
+	*l = append(*l, value)
+	return nil
+}
 
 type route struct {
 	ServeNodes stringList
 	ChainNodes stringList
 	Retries    int
-	server     *gost.Server
 }
 
-func (r *route) initChain() (*gost.Chain, error) {
+func (r *route) parseChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
 	chain.Retries = r.Retries
 	gid := 1 // group ID
@@ -44,13 +56,20 @@ func (r *route) initChain() (*gost.Chain, error) {
 				MaxFails:    defaultMaxFails,
 				FailTimeout: defaultFailTimeout,
 			}),
-			gost.WithStrategy(parseStrategy(nodes[0].Get("strategy"))),
+			gost.WithStrategy(gost.NewStrategy(nodes[0].Get("strategy"))),
 		)
 
-		go gost.PeriodReload(&peerConfig{
-			group:     ngroup,
-			baseNodes: nodes,
-		}, nodes[0].Get("peer"))
+		cfg := nodes[0].Get("peer")
+		f, err := os.Open(cfg)
+		if err == nil {
+			peerCfg := newPeerConfig()
+			peerCfg.group = ngroup
+			peerCfg.baseNodes = nodes
+			peerCfg.Reload(f)
+			f.Close()
+
+			go gost.PeriodReload(peerCfg, cfg)
+		}
 
 		chain.AddNodeGroup(ngroup)
 	}
@@ -219,20 +238,22 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	return
 }
 
-func (r *route) serve() error {
-	chain, err := r.initChain()
+func (r *route) GenRouters() ([]router, error) {
+	chain, err := r.parseChain()
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	var rts []router
 
 	for _, ns := range r.ServeNodes {
 		node, err := gost.ParseNode(ns)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		users, err := parseUsers(node.Get("secrets"))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if node.User != nil {
 			users = append(users, node.User)
@@ -240,7 +261,7 @@ func (r *route) serve() error {
 		certFile, keyFile := node.Get("cert"), node.Get("key")
 		tlsCfg, err := tlsConfig(certFile, keyFile)
 		if err != nil && certFile != "" && keyFile != "" {
-			return err
+			return nil, err
 		}
 
 		wsOpts := &gost.WSOptions{}
@@ -266,7 +287,7 @@ func (r *route) serve() error {
 		case "kcp":
 			config, er := parseKCPConfig(node.Get("c"))
 			if er != nil {
-				return er
+				return nil, er
 			}
 			ln, err = gost.KCPListener(node.Addr, config)
 		case "ssh":
@@ -320,7 +341,7 @@ func (r *route) serve() error {
 			ln, err = gost.ShadowUDPListener(node.Addr, node.User, time.Duration(node.GetInt("ttl"))*time.Second)
 		case "obfs4":
 			if err = gost.Obfs4Init(node, true); err != nil {
-				return err
+				return nil, err
 			}
 			ln, err = gost.Obfs4Listener(node.Addr)
 		case "ohttp":
@@ -329,7 +350,7 @@ func (r *route) serve() error {
 			ln, err = gost.TCPListener(node.Addr)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		var handler gost.Handler
@@ -372,14 +393,18 @@ func (r *route) serve() error {
 		var whitelist, blacklist *gost.Permissions
 		if node.Values.Get("whitelist") != "" {
 			if whitelist, err = gost.ParsePermissions(node.Get("whitelist")); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		if node.Values.Get("blacklist") != "" {
 			if blacklist, err = gost.ParsePermissions(node.Get("blacklist")); err != nil {
-				return err
+				return nil, err
 			}
 		}
+
+		node.Bypass = parseBypass(node.Get("bypass"))
+		resolver := parseResolver(node.Get("dns"))
+		hosts := parseHosts(node.Get("hosts"))
 
 		handler.Init(
 			gost.AddrHandlerOption(node.Addr),
@@ -388,23 +413,44 @@ func (r *route) serve() error {
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
-			gost.StrategyHandlerOption(parseStrategy(node.Get("strategy"))),
-			gost.BypassHandlerOption(parseBypass(node.Get("bypass"))),
-			gost.ResolverHandlerOption(parseResolver(node.Get("dns"))),
-			gost.HostsHandlerOption(parseHosts(node.Get("hosts"))),
+			gost.StrategyHandlerOption(gost.NewStrategy(node.Get("strategy"))),
+			gost.BypassHandlerOption(node.Bypass),
+			gost.ResolverHandlerOption(resolver),
+			gost.HostsHandlerOption(hosts),
 			gost.RetryHandlerOption(node.GetInt("retry")),
 			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
 			gost.ProbeResistHandlerOption(node.Get("probe_resist")),
 		)
 
-		r.server = &gost.Server{Listener: ln}
-		go r.server.Serve(handler)
+		rt := router{
+			node:     node,
+			server:   &gost.Server{Listener: ln},
+			handler:  handler,
+			chain:    chain,
+			resolver: resolver,
+			hosts:    hosts,
+		}
+		rts = append(rts, rt)
 	}
 
-	return nil
+	return rts, nil
 }
 
-func (r *route) Close() error {
+type router struct {
+	node     gost.Node
+	server   *gost.Server
+	handler  gost.Handler
+	chain    *gost.Chain
+	resolver gost.Resolver
+	hosts    *gost.Hosts
+}
+
+func (r *router) Serve() error {
+	log.Logf("[route] start %s on %s", r.node.String(), r.server.Addr())
+	return r.server.Serve(r.handler)
+}
+
+func (r *router) Close() error {
 	if r == nil || r.server == nil {
 		return nil
 	}

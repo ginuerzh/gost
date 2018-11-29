@@ -26,20 +26,13 @@ type peerConfig struct {
 	Nodes       []string      `json:"nodes"`
 	group       *gost.NodeGroup
 	baseNodes   []gost.Node
+	stopped     chan struct{}
 }
 
-type bypass struct {
-	Reverse  bool     `json:"reverse"`
-	Patterns []string `json:"patterns"`
-}
-
-func parsePeerConfig(cfg string, group *gost.NodeGroup, baseNodes []gost.Node) *peerConfig {
-	pc := &peerConfig{
-		group:     group,
-		baseNodes: baseNodes,
+func newPeerConfig() *peerConfig {
+	return &peerConfig{
+		stopped: make(chan struct{}),
 	}
-	go gost.PeriodReload(pc, cfg)
-	return pc
 }
 
 func (cfg *peerConfig) Validate() {
@@ -52,28 +45,23 @@ func (cfg *peerConfig) Validate() {
 }
 
 func (cfg *peerConfig) Reload(r io.Reader) error {
+	if cfg.Stopped() {
+		return nil
+	}
+
 	if err := cfg.parse(r); err != nil {
 		return err
 	}
 	cfg.Validate()
 
 	group := cfg.group
-	/*
-		strategy := cfg.Strategy
-		if len(cfg.baseNodes) > 0 {
-			// overwrite the strategry in the peer config if `strategy` param exists.
-			if s := cfg.baseNodes[0].Get("strategy"); s != "" {
-				strategy = s
-			}
-		}
-	*/
 	group.SetSelector(
 		nil,
 		gost.WithFilter(&gost.FailFilter{
 			MaxFails:    cfg.MaxFails,
 			FailTimeout: cfg.FailTimeout,
 		}),
-		gost.WithStrategy(parseStrategy(cfg.Strategy)),
+		gost.WithStrategy(gost.NewStrategy(cfg.Strategy)),
 	)
 
 	gNodes := cfg.baseNodes
@@ -92,7 +80,12 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 		gNodes = append(gNodes, nodes...)
 	}
 
-	group.SetNodes(gNodes...)
+	nodes := group.SetNodes(gNodes...)
+	for _, node := range nodes[len(cfg.baseNodes):] {
+		if node.Bypass != nil {
+			node.Bypass.Stop() // clear the old nodes
+		}
+	}
 
 	return nil
 }
@@ -154,18 +147,27 @@ func (cfg *peerConfig) parse(r io.Reader) error {
 }
 
 func (cfg *peerConfig) Period() time.Duration {
+	if cfg.Stopped() {
+		return -1
+	}
 	return cfg.period
 }
 
-func parseStrategy(s string) gost.Strategy {
-	switch s {
-	case "random":
-		return &gost.RandomStrategy{}
-	case "fifo":
-		return &gost.FIFOStrategy{}
-	case "round":
-		fallthrough
+// Stop stops reloading.
+func (cfg *peerConfig) Stop() {
+	select {
+	case <-cfg.stopped:
 	default:
-		return &gost.RoundStrategy{}
+		close(cfg.stopped)
+	}
+}
+
+// Stopped checks whether the reloader is stopped.
+func (cfg *peerConfig) Stopped() bool {
+	select {
+	case <-cfg.stopped:
+		return true
+	default:
+		return false
 	}
 }

@@ -468,6 +468,7 @@ func (h *http2Handler) writeResponse(w http.ResponseWriter, resp *http.Response)
 type http2Listener struct {
 	server   *http.Server
 	connChan chan *http2ServerConn
+	addr     net.Addr
 	errChan  chan error
 }
 
@@ -494,6 +495,8 @@ func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	l.addr = ln.Addr()
+
 	go func() {
 		err := server.Serve(ln)
 		if err != nil {
@@ -532,8 +535,7 @@ func (l *http2Listener) Accept() (conn net.Conn, err error) {
 }
 
 func (l *http2Listener) Addr() net.Addr {
-	addr, _ := net.ResolveTCPAddr("tcp", l.server.Addr)
-	return addr
+	return l.addr
 }
 
 func (l *http2Listener) Close() (err error) {
