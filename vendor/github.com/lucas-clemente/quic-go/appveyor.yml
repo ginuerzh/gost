@@ -10,16 +10,18 @@ environment:
     - GOARCH: 386
     - GOARCH: amd64
 
+hosts:
+  quic.clemente.io: 127.0.0.1
+
 clone_folder: c:\gopath\src\github.com\lucas-clemente\quic-go
 
 install:
   - rmdir c:\go /s /q
-  - appveyor DownloadFile https://storage.googleapis.com/golang/go1.9.2.windows-amd64.zip
-  - 7z x go1.9.2.windows-amd64.zip -y -oC:\ > NUL
+  - appveyor DownloadFile https://storage.googleapis.com/golang/go1.11.windows-amd64.zip
+  - 7z x go1.11.windows-amd64.zip -y -oC:\ > NUL
   - set PATH=%PATH%;%GOPATH%\bin\windows_%GOARCH%;%GOPATH%\bin
   - echo %PATH%
   - echo %GOPATH%
-  - git submodule update --init --recursive
   - go get github.com/onsi/ginkgo/ginkgo
   - go get github.com/onsi/gomega
   - go version

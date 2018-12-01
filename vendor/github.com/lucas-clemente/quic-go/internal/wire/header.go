@@ -2,110 +2,159 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // Header is the header of a QUIC packet.
-// It contains fields that are only needed for the gQUIC Public Header and the IETF draft Header.
 type Header struct {
-	Raw               []byte
-	ConnectionID      protocol.ConnectionID
-	OmitConnectionID  bool
-	PacketNumberLen   protocol.PacketNumberLen
-	PacketNumber      protocol.PacketNumber
-	Version           protocol.VersionNumber   // VersionNumber sent by the client
-	SupportedVersions []protocol.VersionNumber // Version Number sent in a Version Negotiation Packet by the server
+	Raw []byte
 
-	// only needed for the gQUIC Public Header
-	VersionFlag          bool
-	ResetFlag            bool
-	DiversificationNonce []byte
+	Version protocol.VersionNumber
 
-	// only needed for the IETF Header
+	DestConnectionID     protocol.ConnectionID
+	SrcConnectionID      protocol.ConnectionID
+	OrigDestConnectionID protocol.ConnectionID // only needed in the Retry packet
+
+	PacketNumberLen protocol.PacketNumberLen
+	PacketNumber    protocol.PacketNumber
+
+	IsVersionNegotiation bool
+	SupportedVersions    []protocol.VersionNumber // Version Number sent in a Version Negotiation Packet by the server
+
 	Type         protocol.PacketType
 	IsLongHeader bool
 	KeyPhase     int
-
-	// only needed for logging
-	isPublicHeader bool
-}
-
-// ParseHeaderSentByServer parses the header for a packet that was sent by the server.
-func ParseHeaderSentByServer(b *bytes.Reader, version protocol.VersionNumber) (*Header, error) {
-	typeByte, err := b.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	_ = b.UnreadByte() // unread the type byte
-
-	var isPublicHeader bool
-	// As a client, we know the version of the packet that the server sent, except for Version Negotiation Packets.
-	if typeByte == 0x81 { // IETF draft Version Negotiation Packet
-		isPublicHeader = false
-	} else if typeByte&0xcf == 0x9 { // gQUIC Version Negotiation Packet
-		// IETF QUIC Version Negotiation Packets are sent with the Long Header (indicated by the 0x80 bit)
-		// gQUIC always has 0x80 unset
-		isPublicHeader = true
-	} else { // not a Version Negotiation Packet
-		// the client knows the version that this packet was sent with
-		isPublicHeader = !version.UsesTLS()
-	}
-	return parsePacketHeader(b, protocol.PerspectiveServer, isPublicHeader)
-}
-
-// ParseHeaderSentByClient parses the header for a packet that was sent by the client.
-func ParseHeaderSentByClient(b *bytes.Reader) (*Header, error) {
-	typeByte, err := b.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	_ = b.UnreadByte() // unread the type byte
-
-	// If this is a gQUIC header 0x80 and 0x40 will be set to 0.
-	// If this is an IETF QUIC header there are two options:
-	// * either 0x80 will be 1 (for the Long Header)
-	// * or 0x40 (the Connection ID Flag) will be 0 (for the Short Header), since we don't the client to omit it
-	isPublicHeader := typeByte&0xc0 == 0
-
-	return parsePacketHeader(b, protocol.PerspectiveClient, isPublicHeader)
-}
-
-func parsePacketHeader(b *bytes.Reader, sentBy protocol.Perspective, isPublicHeader bool) (*Header, error) {
-	// This is a gQUIC Public Header.
-	if isPublicHeader {
-		hdr, err := parsePublicHeader(b, sentBy)
-		if err != nil {
-			return nil, err
-		}
-		hdr.isPublicHeader = true // save that this is a Public Header, so we can log it correctly later
-		return hdr, nil
-	}
-	return parseHeader(b, sentBy)
+	PayloadLen   protocol.ByteCount
+	Token        []byte
 }
 
 // Write writes the Header.
-func (h *Header) Write(b *bytes.Buffer, pers protocol.Perspective, version protocol.VersionNumber) error {
-	if !version.UsesTLS() {
-		h.isPublicHeader = true // save that this is a Public Header, so we can log it correctly later
-		return h.writePublicHeader(b, pers, version)
+func (h *Header) Write(b *bytes.Buffer, pers protocol.Perspective, ver protocol.VersionNumber) error {
+	if h.IsLongHeader {
+		return h.writeLongHeader(b, ver)
 	}
-	return h.writeHeader(b)
+	return h.writeShortHeader(b, ver)
+}
+
+// TODO: add support for the key phase
+func (h *Header) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
+	b.WriteByte(byte(0x80 | h.Type))
+	utils.BigEndian.WriteUint32(b, uint32(h.Version))
+	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
+	if err != nil {
+		return err
+	}
+	b.WriteByte(connIDLen)
+	b.Write(h.DestConnectionID.Bytes())
+	b.Write(h.SrcConnectionID.Bytes())
+
+	if h.Type == protocol.PacketTypeInitial {
+		utils.WriteVarInt(b, uint64(len(h.Token)))
+		b.Write(h.Token)
+	}
+
+	if h.Type == protocol.PacketTypeRetry {
+		odcil, err := encodeSingleConnIDLen(h.OrigDestConnectionID)
+		if err != nil {
+			return err
+		}
+		// randomize the first 4 bits
+		odcilByte := make([]byte, 1)
+		_, _ = rand.Read(odcilByte) // it's safe to ignore the error here
+		odcilByte[0] = (odcilByte[0] & 0xf0) | odcil
+		b.Write(odcilByte)
+		b.Write(h.OrigDestConnectionID.Bytes())
+		b.Write(h.Token)
+		return nil
+	}
+
+	utils.WriteVarInt(b, uint64(h.PayloadLen))
+	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
+}
+
+func (h *Header) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
+	typeByte := byte(0x30)
+	typeByte |= byte(h.KeyPhase << 6)
+
+	b.WriteByte(typeByte)
+	b.Write(h.DestConnectionID.Bytes())
+	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
 // GetLength determines the length of the Header.
-func (h *Header) GetLength(pers protocol.Perspective, version protocol.VersionNumber) (protocol.ByteCount, error) {
-	if !version.UsesTLS() {
-		return h.getPublicHeaderLength(pers)
+func (h *Header) GetLength(v protocol.VersionNumber) protocol.ByteCount {
+	if h.IsLongHeader {
+		length := 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + utils.VarIntLen(uint64(h.PayloadLen))
+		if h.Type == protocol.PacketTypeInitial {
+			length += utils.VarIntLen(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
+		}
+		return length
 	}
-	return h.getHeaderLength()
+
+	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
+	length += protocol.ByteCount(h.PacketNumberLen)
+	return length
 }
 
 // Log logs the Header
-func (h *Header) Log() {
-	if h.isPublicHeader {
-		h.logPublicHeader()
+func (h *Header) Log(logger utils.Logger) {
+	if h.IsLongHeader {
+		if h.Version == 0 {
+			logger.Debugf("\tVersionNegotiationPacket{DestConnectionID: %s, SrcConnectionID: %s, SupportedVersions: %s}", h.DestConnectionID, h.SrcConnectionID, h.SupportedVersions)
+		} else {
+			var token string
+			if h.Type == protocol.PacketTypeInitial || h.Type == protocol.PacketTypeRetry {
+				if len(h.Token) == 0 {
+					token = "Token: (empty), "
+				} else {
+					token = fmt.Sprintf("Token: %#x, ", h.Token)
+				}
+			}
+			if h.Type == protocol.PacketTypeRetry {
+				logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sOrigDestConnectionID: %s, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.OrigDestConnectionID, h.Version)
+				return
+			}
+			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %#x, PacketNumberLen: %d, PayloadLen: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.PayloadLen, h.Version)
+		}
 	} else {
-		h.logHeader()
+		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
 	}
+}
+
+func encodeConnIDLen(dest, src protocol.ConnectionID) (byte, error) {
+	dcil, err := encodeSingleConnIDLen(dest)
+	if err != nil {
+		return 0, err
+	}
+	scil, err := encodeSingleConnIDLen(src)
+	if err != nil {
+		return 0, err
+	}
+	return scil | dcil<<4, nil
+}
+
+func encodeSingleConnIDLen(id protocol.ConnectionID) (byte, error) {
+	len := id.Len()
+	if len == 0 {
+		return 0, nil
+	}
+	if len < 4 || len > 18 {
+		return 0, fmt.Errorf("invalid connection ID length: %d bytes", len)
+	}
+	return byte(len - 3), nil
+}
+
+func decodeConnIDLen(enc byte) (int /*dest conn id len*/, int /*src conn id len*/) {
+	return decodeSingleConnIDLen(enc >> 4), decodeSingleConnIDLen(enc & 0xf)
+}
+
+func decodeSingleConnIDLen(enc uint8) int {
+	if enc == 0 {
+		return 0
+	}
+	return int(enc) + 3
 }

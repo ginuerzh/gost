@@ -8,6 +8,7 @@ gost - GO Simple Tunnel
 [![Go Report Card](https://goreportcard.com/badge/github.com/ginuerzh/gost)](https://goreportcard.com/report/github.com/ginuerzh/gost)
 [![GitHub release](https://img.shields.io/github/release/ginuerzh/gost.svg)](https://github.com/ginuerzh/gost/releases/latest)
 [![Snap Status](https://build.snapcraft.io/badge/ginuerzh/gost.svg)](https://build.snapcraft.io/user/ginuerzh/gost)
+[![Docker Build Status](https://img.shields.io/docker/build/ginuerzh/gost.svg)](https://hub.docker.com/r/ginuerzh/gost/)
  
 [English README](README_en.md)
 
@@ -26,10 +27,14 @@ gost - GO Simple Tunnel
 * [支持SNI代理](https://docs.ginuerzh.xyz/gost/sni/)
 * [权限控制](https://docs.ginuerzh.xyz/gost/permission/)
 * [负载均衡](https://docs.ginuerzh.xyz/gost/load-balancing/)
+* [路由控制](https://docs.ginuerzh.xyz/gost/bypass/)
+* [DNS控制](https://docs.ginuerzh.xyz/gost/dns/)
 
 Wiki站点: <https://docs.ginuerzh.xyz/gost/>
 
 Google讨论组: <https://groups.google.com/d/forum/go-gost>
+
+Telegram讨论群: <https://t.me/gogost>
 
 安装
 ------

@@ -82,6 +82,14 @@ func MinByteCount(a, b protocol.ByteCount) protocol.ByteCount {
 	return b
 }
 
+// MaxByteCount returns the maximum of two ByteCounts
+func MaxByteCount(a, b protocol.ByteCount) protocol.ByteCount {
+	if a < b {
+		return b
+	}
+	return a
+}
+
 // MaxDuration returns the max duration
 func MaxDuration(a, b time.Duration) time.Duration {
 	if a > b {
@@ -112,6 +120,14 @@ func MinTime(a, b time.Time) time.Time {
 		return b
 	}
 	return a
+}
+
+// MaxTime returns the later time
+func MaxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 // MaxPacketNumber returns the max packet number

@@ -26,5 +26,5 @@ _testmain.go
 
 *.bak
 
-cmd/gost
+cmd/gost/gost
 snap

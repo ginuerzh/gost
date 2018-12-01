@@ -2,7 +2,9 @@ package dissector
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -62,6 +64,11 @@ func (h *ClientHelloHandshake) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	length := int(b[1])<<16 | int(b[2])<<8 | int(b[3])
+	if length < 34 { // length of version + random
+		err = fmt.Errorf("bad length, need at least 34 bytes, got %d", length)
+		return
+	}
+
 	b = make([]byte, length)
 	nn, err = io.ReadFull(r, b)
 	n += int64(nn)
@@ -69,6 +76,10 @@ func (h *ClientHelloHandshake) ReadFrom(r io.Reader) (n int64, err error) {
 		return
 	}
 	h.Version = Version(binary.BigEndian.Uint16(b[:2]))
+	if h.Version < tls.VersionTLS12 {
+		err = fmt.Errorf("bad version: only TLSv1.2 is supported")
+		return
+	}
 
 	pos := 2
 	h.Random.Time = binary.BigEndian.Uint32(b[pos : pos+4])
@@ -76,38 +87,113 @@ func (h *ClientHelloHandshake) ReadFrom(r io.Reader) (n int64, err error) {
 	copy(h.Random.Opaque[:], b[pos:pos+28])
 	pos += 28
 
-	sessionLen := int(b[pos])
-	pos++
-	h.SessionID = make([]byte, sessionLen)
-	copy(h.SessionID, b[pos:pos+sessionLen])
-	pos += sessionLen
+	nn, err = h.readSession(b[pos:])
+	if err != nil {
+		return
+	}
+	pos += nn
 
-	cipherLen := int(binary.BigEndian.Uint16(b[pos : pos+2]))
-	pos += 2
-	for i := 0; i < cipherLen/2; i++ {
-		h.CipherSuites = append(h.CipherSuites, CipherSuite(binary.BigEndian.Uint16(b[pos:pos+2])))
-		pos += 2
+	nn, err = h.readCipherSuites(b[pos:])
+	if err != nil {
+		return
+	}
+	pos += nn
+
+	nn, err = h.readCompressionMethods(b[pos:])
+	if err != nil {
+		return
+	}
+	pos += nn
+
+	nn, err = h.readExtensions(b[pos:])
+	if err != nil {
+		return
+	}
+	// pos += nn
+
+	return
+}
+
+func (h *ClientHelloHandshake) readSession(b []byte) (n int, err error) {
+	if len(b) == 0 {
+		err = fmt.Errorf("bad length: data too short for session")
+		return
 	}
 
-	compLen := int(b[pos])
-	pos++
-	for i := 0; i < compLen; i++ {
-		h.CompressionMethods = append(h.CompressionMethods, CompressionMethod(b[pos]))
-		pos++
+	nlen := int(b[0])
+	n++
+	if len(b) < n+nlen {
+		err = fmt.Errorf("bad length: malformed data for session")
+	}
+	if nlen > 0 && n+nlen <= len(b) {
+		h.SessionID = make([]byte, nlen)
+		copy(h.SessionID, b[n:n+nlen])
+		n += nlen
 	}
 
-	// extLen := int(binary.BigEndian.Uint16(b[pos : pos+2]))
-	pos += 2
+	return
+}
 
-	br := bytes.NewReader(b[pos:])
+func (h *ClientHelloHandshake) readCipherSuites(b []byte) (n int, err error) {
+	if len(b) < 2 {
+		err = fmt.Errorf("bad length: data too short for cipher suites")
+		return
+	}
+
+	nlen := int(binary.BigEndian.Uint16(b[:2]))
+	n += 2
+	if len(b) < n+nlen {
+		err = fmt.Errorf("bad length: malformed data for cipher suites")
+	}
+	for i := 0; i < nlen/2; i++ {
+		h.CipherSuites = append(h.CipherSuites, CipherSuite(binary.BigEndian.Uint16(b[n:n+2])))
+		n += 2
+	}
+
+	return
+}
+
+func (h *ClientHelloHandshake) readCompressionMethods(b []byte) (n int, err error) {
+	if len(b) == 0 {
+		err = fmt.Errorf("bad length: data too short for compression methods")
+		return
+	}
+	nlen := int(b[0])
+	n++
+	if len(b) < n+nlen {
+		err = fmt.Errorf("bad length: malformed data for compression methods")
+	}
+	for i := 0; i < nlen; i++ {
+		h.CompressionMethods = append(h.CompressionMethods, CompressionMethod(b[n]))
+		n++
+	}
+	return
+}
+
+func (h *ClientHelloHandshake) readExtensions(b []byte) (n int, err error) {
+	if len(b) < 2 {
+		err = fmt.Errorf("bad length: data too short for extensions")
+		return
+	}
+	nlen := int(binary.BigEndian.Uint16(b[:2]))
+	n += 2
+	if len(b) < n+nlen {
+		err = fmt.Errorf("bad length: malformed data for extensions")
+		return
+	}
+
+	br := bytes.NewReader(b[n:])
 	for br.Len() > 0 {
+		cn := br.Len()
 		var ext Extension
 		ext, err = ReadExtension(br)
 		if err != nil {
 			return
 		}
 		h.Extensions = append(h.Extensions, ext)
+		n += (cn - br.Len())
 	}
+
 	return
 }
 

@@ -8,6 +8,7 @@ gost - GO Simple Tunnel
 [![Go Report Card](https://goreportcard.com/badge/github.com/ginuerzh/gost)](https://goreportcard.com/report/github.com/ginuerzh/gost)
 [![GitHub release](https://img.shields.io/github/release/ginuerzh/gost.svg)](https://github.com/ginuerzh/gost/releases/latest)
 [![Snap Status](https://build.snapcraft.io/badge/ginuerzh/gost.svg)](https://build.snapcraft.io/user/ginuerzh/gost)
+[![Docker Build Status](https://img.shields.io/docker/build/ginuerzh/gost.svg)](https://hub.docker.com/r/ginuerzh/gost/)
 
 Features
 ------
@@ -23,11 +24,14 @@ Features
 * [SNI proxy](https://docs.ginuerzh.xyz/gost/en/sni/)
 * [Permission control](https://docs.ginuerzh.xyz/gost/en/permission/)
 * [Load balancing](https://docs.ginuerzh.xyz/gost/en/load-balancing/)
+* [Routing control](https://docs.ginuerzh.xyz/gost/en/bypass/)
+* [DNS control](https://docs.ginuerzh.xyz/gost/en/dns/)
 
 Wiki: <https://docs.ginuerzh.xyz/gost/en/>
 
 Google group: <https://groups.google.com/d/forum/go-gost>
 
+Telegram group: <https://t.me/gogost>
 
 Installation
 ------

@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/crypto"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 const (
@@ -16,43 +16,47 @@ const (
 
 // A Cookie is derived from the client address and can be used to verify the ownership of this address.
 type Cookie struct {
-	RemoteAddr string
-	// The time that the STK was issued (resolution 1 second)
+	RemoteAddr               string
+	OriginalDestConnectionID protocol.ConnectionID
+	// The time that the Cookie was issued (resolution 1 second)
 	SentTime time.Time
 }
 
 // token is the struct that is used for ASN1 serialization and deserialization
 type token struct {
-	Data      []byte
+	RemoteAddr               []byte
+	OriginalDestConnectionID []byte
+
 	Timestamp int64
 }
 
 // A CookieGenerator generates Cookies
 type CookieGenerator struct {
-	cookieSource crypto.StkSource
+	cookieProtector cookieProtector
 }
 
 // NewCookieGenerator initializes a new CookieGenerator
 func NewCookieGenerator() (*CookieGenerator, error) {
-	stkSource, err := crypto.NewStkSource()
+	cookieProtector, err := newCookieProtector()
 	if err != nil {
 		return nil, err
 	}
 	return &CookieGenerator{
-		cookieSource: stkSource,
+		cookieProtector: cookieProtector,
 	}, nil
 }
 
 // NewToken generates a new Cookie for a given source address
-func (g *CookieGenerator) NewToken(raddr net.Addr) ([]byte, error) {
+func (g *CookieGenerator) NewToken(raddr net.Addr, origConnID protocol.ConnectionID) ([]byte, error) {
 	data, err := asn1.Marshal(token{
-		Data:      encodeRemoteAddr(raddr),
-		Timestamp: time.Now().Unix(),
+		RemoteAddr:               encodeRemoteAddr(raddr),
+		OriginalDestConnectionID: origConnID,
+		Timestamp:                time.Now().Unix(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return g.cookieSource.NewToken(data)
+	return g.cookieProtector.NewToken(data)
 }
 
 // DecodeToken decodes a Cookie
@@ -62,7 +66,7 @@ func (g *CookieGenerator) DecodeToken(encrypted []byte) (*Cookie, error) {
 		return nil, nil
 	}
 
-	data, err := g.cookieSource.DecodeToken(encrypted)
+	data, err := g.cookieProtector.DecodeToken(encrypted)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +78,14 @@ func (g *CookieGenerator) DecodeToken(encrypted []byte) (*Cookie, error) {
 	if len(rest) != 0 {
 		return nil, fmt.Errorf("rest when unpacking token: %d", len(rest))
 	}
-	return &Cookie{
-		RemoteAddr: decodeRemoteAddr(t.Data),
+	cookie := &Cookie{
+		RemoteAddr: decodeRemoteAddr(t.RemoteAddr),
 		SentTime:   time.Unix(t.Timestamp, 0),
-	}, nil
+	}
+	if len(t.OriginalDestConnectionID) > 0 {
+		cookie.OriginalDestConnectionID = protocol.ConnectionID(t.OriginalDestConnectionID)
+	}
+	return cookie, nil
 }
 
 // encodeRemoteAddr encodes a remote address such that it can be saved in the Cookie

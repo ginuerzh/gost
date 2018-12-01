@@ -2,16 +2,17 @@ package flowcontrol
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 type connectionFlowController struct {
 	baseFlowController
+
+	queueWindowUpdate func()
 }
 
 var _ ConnectionFlowController = &connectionFlowController{}
@@ -21,22 +22,23 @@ var _ ConnectionFlowController = &connectionFlowController{}
 func NewConnectionFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
+	queueWindowUpdate func(),
 	rttStats *congestion.RTTStats,
+	logger utils.Logger,
 ) ConnectionFlowController {
 	return &connectionFlowController{
 		baseFlowController: baseFlowController{
-			rttStats:                  rttStats,
-			receiveWindow:             receiveWindow,
-			receiveWindowIncrement:    receiveWindow,
-			maxReceiveWindowIncrement: maxReceiveWindow,
+			rttStats:             rttStats,
+			receiveWindow:        receiveWindow,
+			receiveWindowSize:    receiveWindow,
+			maxReceiveWindowSize: maxReceiveWindow,
+			logger:               logger,
 		},
+		queueWindowUpdate: queueWindowUpdate,
 	}
 }
 
 func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
 	return c.baseFlowController.sendWindowSize()
 }
 
@@ -52,26 +54,34 @@ func (c *connectionFlowController) IncrementHighestReceived(increment protocol.B
 	return nil
 }
 
+func (c *connectionFlowController) MaybeQueueWindowUpdate() {
+	c.mutex.Lock()
+	hasWindowUpdate := c.hasWindowUpdate()
+	c.mutex.Unlock()
+	if hasWindowUpdate {
+		c.queueWindowUpdate()
+	}
+}
+
 func (c *connectionFlowController) GetWindowUpdate() protocol.ByteCount {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	oldWindowIncrement := c.receiveWindowIncrement
+	oldWindowSize := c.receiveWindowSize
 	offset := c.baseFlowController.getWindowUpdate()
-	if oldWindowIncrement < c.receiveWindowIncrement {
-		utils.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowIncrement/(1<<10))
+	if oldWindowSize < c.receiveWindowSize {
+		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowSize/(1<<10))
 	}
+	c.mutex.Unlock()
 	return offset
 }
 
-// EnsureMinimumWindowIncrement sets a minimum window increment
+// EnsureMinimumWindowSize sets a minimum window size
 // it should make sure that the connection-level window is increased when a stream-level window grows
-func (c *connectionFlowController) EnsureMinimumWindowIncrement(inc protocol.ByteCount) {
+func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCount) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if inc > c.receiveWindowIncrement {
-		c.receiveWindowIncrement = utils.MinByteCount(inc, c.maxReceiveWindowIncrement)
-		c.lastWindowUpdateTime = time.Time{} // disables autotuning for the next window update
+	if inc > c.receiveWindowSize {
+		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB, in response to stream flow control window increase", c.receiveWindowSize/(1<<10))
+		c.receiveWindowSize = utils.MinByteCount(inc, c.maxReceiveWindowSize)
+		c.startNewAutoTuningEpoch()
 	}
+	c.mutex.Unlock()
 }

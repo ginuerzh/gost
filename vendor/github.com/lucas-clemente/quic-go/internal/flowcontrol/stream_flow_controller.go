@@ -3,10 +3,10 @@ package flowcontrol
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 type streamFlowController struct {
@@ -14,8 +14,9 @@ type streamFlowController struct {
 
 	streamID protocol.StreamID
 
-	connection              connectionFlowControllerI
-	contributesToConnection bool // does the stream contribute to connection level flow control
+	queueWindowUpdate func()
+
+	connection connectionFlowControllerI
 
 	receivedFinalOffset bool
 }
@@ -25,23 +26,25 @@ var _ StreamFlowController = &streamFlowController{}
 // NewStreamFlowController gets a new flow controller for a stream
 func NewStreamFlowController(
 	streamID protocol.StreamID,
-	contributesToConnection bool,
 	cfc ConnectionFlowController,
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
+	queueWindowUpdate func(protocol.StreamID),
 	rttStats *congestion.RTTStats,
+	logger utils.Logger,
 ) StreamFlowController {
 	return &streamFlowController{
-		streamID:                streamID,
-		contributesToConnection: contributesToConnection,
-		connection:              cfc.(connectionFlowControllerI),
+		streamID:          streamID,
+		connection:        cfc.(connectionFlowControllerI),
+		queueWindowUpdate: func() { queueWindowUpdate(streamID) },
 		baseFlowController: baseFlowController{
-			rttStats:                  rttStats,
-			receiveWindow:             receiveWindow,
-			receiveWindowIncrement:    receiveWindow,
-			maxReceiveWindowIncrement: maxReceiveWindow,
-			sendWindow:                initialSendWindow,
+			rttStats:             rttStats,
+			receiveWindow:        receiveWindow,
+			receiveWindowSize:    receiveWindow,
+			maxReceiveWindowSize: maxReceiveWindow,
+			sendWindow:           initialSendWindow,
+			logger:               logger,
 		},
 	}
 }
@@ -81,48 +84,48 @@ func (c *streamFlowController) UpdateHighestReceived(byteOffset protocol.ByteCou
 	if c.checkFlowControlViolation() {
 		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, c.streamID, c.receiveWindow))
 	}
-	if c.contributesToConnection {
-		return c.connection.IncrementHighestReceived(increment)
-	}
-	return nil
+	return c.connection.IncrementHighestReceived(increment)
 }
 
 func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) {
 	c.baseFlowController.AddBytesRead(n)
-	if c.contributesToConnection {
-		c.connection.AddBytesRead(n)
-	}
+	c.connection.AddBytesRead(n)
 }
 
 func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 	c.baseFlowController.AddBytesSent(n)
-	if c.contributesToConnection {
-		c.connection.AddBytesSent(n)
-	}
+	c.connection.AddBytesSent(n)
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	return utils.MinByteCount(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
+}
 
-	window := c.baseFlowController.sendWindowSize()
-	if c.contributesToConnection {
-		window = utils.MinByteCount(window, c.connection.SendWindowSize())
+func (c *streamFlowController) MaybeQueueWindowUpdate() {
+	c.mutex.Lock()
+	hasWindowUpdate := !c.receivedFinalOffset && c.hasWindowUpdate()
+	c.mutex.Unlock()
+	if hasWindowUpdate {
+		c.queueWindowUpdate()
 	}
-	return window
+	c.connection.MaybeQueueWindowUpdate()
 }
 
 func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
+	// don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	oldWindowIncrement := c.receiveWindowIncrement
-	offset := c.baseFlowController.getWindowUpdate()
-	if c.receiveWindowIncrement > oldWindowIncrement { // auto-tuning enlarged the window increment
-		utils.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowIncrement/(1<<10))
-		if c.contributesToConnection {
-			c.connection.EnsureMinimumWindowIncrement(protocol.ByteCount(float64(c.receiveWindowIncrement) * protocol.ConnectionFlowControlMultiplier))
-		}
+	// if we already received the final offset for this stream, the peer won't need any additional flow control credit
+	if c.receivedFinalOffset {
+		c.mutex.Unlock()
+		return 0
 	}
+
+	oldWindowSize := c.receiveWindowSize
+	offset := c.baseFlowController.getWindowUpdate()
+	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
+		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
+		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
+	}
+	c.mutex.Unlock()
 	return offset
 }

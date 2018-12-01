@@ -1,0 +1,16 @@
+# resolver timeout, default 30s.
+timeout     10s
+
+# resolver cache TTL, default 60s, minus value means that cache is disabled.
+ttl         300s
+
+# period for live reloading
+reload      10s
+
+# ip[:port]  [protocol]  [hostname]
+
+1.1.1.1:853 tls     cloudflare-dns.com
+8.8.8.8
+8.8.8.8     tcp
+1.1.1.1     udp
+1.1.1.1:53  tcp

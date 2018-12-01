@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.5"
+const Version = "2.6.1"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -44,19 +45,19 @@ var (
 )
 
 var (
-	// DefaultTLSConfig is a default TLS config for internal use
+	// DefaultTLSConfig is a default TLS config for internal use.
 	DefaultTLSConfig *tls.Config
 
-	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket
+	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket.
 	DefaultUserAgent = "Chrome/60.0.3112.90"
 )
 
-// SetLogger sets a new logger for internal log system
+// SetLogger sets a new logger for internal log system.
 func SetLogger(logger log.Logger) {
 	log.DefaultLogger = logger
 }
 
-// GenCertificate generates a random TLS certificate
+// GenCertificate generates a random TLS certificate.
 func GenCertificate() (cert tls.Certificate, err error) {
 	rawCert, rawKey, err := generateKeyPair()
 	if err != nil {
@@ -99,4 +100,17 @@ func generateKeyPair() (rawCert, rawKey []byte, err error) {
 	rawKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
 	return
+}
+
+type readWriter struct {
+	r io.Reader
+	w io.Writer
+}
+
+func (rw *readWriter) Read(p []byte) (n int, err error) {
+	return rw.r.Read(p)
+}
+
+func (rw *readWriter) Write(p []byte) (n int, err error) {
+	return rw.w.Write(p)
 }

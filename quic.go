@@ -33,7 +33,7 @@ func (session *quicSession) GetConn() (*quicConn, error) {
 }
 
 func (session *quicSession) Close() error {
-	return session.session.Close(nil)
+	return session.session.Close()
 }
 
 type quicTransporter struct {
@@ -133,7 +133,7 @@ func (tr *quicTransporter) initSession(addr string, conn net.Conn, config *QUICC
 	}
 	session, err := quic.Dial(udpConn, udpAddr, addr, config.TLSConfig, quicConfig)
 	if err != nil {
-		log.Log("quic dial", err)
+		log.Log("quic dial:", err)
 		return nil, err
 	}
 	return &quicSession{conn: conn, session: session}, nil
@@ -226,7 +226,7 @@ func (l *quicListener) sessionLoop(session quic.Session) {
 		stream, err := session.AcceptStream()
 		if err != nil {
 			log.Log("[quic] accept stream:", err)
-			session.Close(err)
+			session.Close()
 			return
 		}
 
