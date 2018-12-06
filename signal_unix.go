@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/go-log/log"
-	"gopkg.in/xtaci/kcp-go.v2"
+	"gopkg.in/xtaci/kcp-go.v4"
 )
 
 func kcpSigHandler() {

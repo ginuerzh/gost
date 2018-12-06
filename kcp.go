@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/klauspost/compress/snappy"
-	"gopkg.in/xtaci/kcp-go.v2"
+	"gopkg.in/xtaci/kcp-go.v4"
 	"gopkg.in/xtaci/smux.v1"
 )
 
@@ -52,15 +52,13 @@ type KCPConfig struct {
 func (c *KCPConfig) Init() {
 	switch c.Mode {
 	case "normal":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 50, 2, 1
-	case "fast2":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 30, 2, 1
-	case "fast3":
-		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 20, 2, 1
-	case "fast":
-		fallthrough
-	default:
 		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 40, 2, 1
+	case "fast":
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 0, 30, 2, 1
+	case "fast2":
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 20, 2, 1
+	case "fast3":
+		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 10, 2, 1
 	}
 }
 
@@ -177,18 +175,17 @@ func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPCon
 
 	kcpconn, err := kcp.NewConn(addr,
 		blockCrypt(config.Key, config.Crypt, KCPSalt),
-		config.DataShard, config.ParityShard,
-		&kcp.ConnectedUDPConn{UDPConn: udpConn, Conn: udpConn})
+		config.DataShard, config.ParityShard, &connectedUDPConn{udpConn})
 	if err != nil {
 		return nil, err
 	}
 
 	kcpconn.SetStreamMode(true)
+	kcpconn.SetWriteDelay(false)
 	kcpconn.SetNoDelay(config.NoDelay, config.Interval, config.Resend, config.NoCongestion)
 	kcpconn.SetWindowSize(config.SndWnd, config.RcvWnd)
 	kcpconn.SetMtu(config.MTU)
 	kcpconn.SetACKNoDelay(config.AckNodelay)
-	kcpconn.SetKeepAlive(config.KeepAlive)
 
 	// if err := kcpconn.SetDSCP(config.DSCP); err != nil {
 	// 	log.Log("[kcp]", err)
@@ -203,6 +200,7 @@ func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPCon
 	// stream multiplex
 	smuxConfig := smux.DefaultConfig()
 	smuxConfig.MaxReceiveBuffer = config.SockBuf
+	smuxConfig.KeepAliveInterval = time.Duration(config.KeepAlive) * time.Second
 	var cc net.Conn = kcpconn
 	if !config.NoComp {
 		cc = newCompStreamConn(kcpconn)
@@ -274,11 +272,11 @@ func (l *kcpListener) listenLoop() {
 			return
 		}
 		conn.SetStreamMode(true)
+		conn.SetWriteDelay(false)
 		conn.SetNoDelay(l.config.NoDelay, l.config.Interval, l.config.Resend, l.config.NoCongestion)
 		conn.SetMtu(l.config.MTU)
 		conn.SetWindowSize(l.config.SndWnd, l.config.RcvWnd)
 		conn.SetACKNoDelay(l.config.AckNodelay)
-		conn.SetKeepAlive(l.config.KeepAlive)
 		go l.mux(conn)
 	}
 }
@@ -286,6 +284,7 @@ func (l *kcpListener) listenLoop() {
 func (l *kcpListener) mux(conn net.Conn) {
 	smuxConfig := smux.DefaultConfig()
 	smuxConfig.MaxReceiveBuffer = l.config.SockBuf
+	smuxConfig.KeepAliveInterval = time.Duration(l.config.KeepAlive) * time.Second
 
 	log.Logf("[kcp] %s - %s", conn.RemoteAddr(), l.Addr())
 
@@ -343,6 +342,8 @@ func blockCrypt(key, crypt, salt string) (block kcp.BlockCrypt) {
 	pass := pbkdf2.Key([]byte(key), []byte(salt), 4096, 32, sha1.New)
 
 	switch crypt {
+	case "sm4":
+		block, _ = kcp.NewSM4BlockCrypt(pass[:16])
 	case "tea":
 		block, _ = kcp.NewTEABlockCrypt(pass[:16])
 	case "xor":
@@ -451,3 +452,11 @@ func (c *compStreamConn) SetReadDeadline(t time.Time) error {
 func (c *compStreamConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
+
+// connectedUDPConn is a wrapper for net.UDPConn which converts WriteTo syscalls
+// to Write syscalls that are 4 times faster on some OS'es. This should only be
+// used for connections that were produced by a net.Dial* call.
+type connectedUDPConn struct{ *net.UDPConn }
+
+// WriteTo redirects all writes to the Write syscall, which is 4 times faster.
+func (c *connectedUDPConn) WriteTo(b []byte, addr net.Addr) (int, error) { return c.Write(b) }
