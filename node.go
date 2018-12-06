@@ -2,6 +2,7 @@ package gost
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -140,6 +141,10 @@ func (node *Node) GetInt(key string) int {
 }
 
 func (node Node) String() string {
+	if node.url == nil {
+		return fmt.Sprintf("%s+%s://%s",
+			node.Protocol, node.Transport, node.Addr)
+	}
 	return node.url.String()
 }
 

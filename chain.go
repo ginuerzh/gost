@@ -256,7 +256,10 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 
 // selectRouteFor selects route with bypass testing.
 func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
-	if c.IsEmpty() || c.isRoute {
+	if c.IsEmpty() {
+		return newRoute(), nil
+	}
+	if c.isRoute {
 		return c, nil
 	}
 
