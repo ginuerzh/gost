@@ -79,7 +79,7 @@ func (addr *Addr) Encode(b []byte) error {
 		copy(b[2:], ip4)
 	case AddrDomain:
 		ip4 := net.IPv4(0, 0, 0, 1)
-		copy(b[2:], ip4)
+		copy(b[2:], ip4.To4())
 	default:
 		return ErrBadAddrType
 	}
