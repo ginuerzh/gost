@@ -152,7 +152,7 @@ func NewBypassPatterns(reversed bool, patterns ...string) *Bypass {
 
 // Contains reports whether the bypass includes addr.
 func (bp *Bypass) Contains(addr string) bool {
-	if bp == nil {
+	if bp == nil || addr == "" {
 		return false
 	}
 	// try to strip the port

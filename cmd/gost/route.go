@@ -407,7 +407,8 @@ func (r *route) GenRouters() ([]router, error) {
 		hosts := parseHosts(node.Get("hosts"))
 
 		handler.Init(
-			gost.AddrHandlerOption(node.Addr),
+			// gost.AddrHandlerOption(node.Addr),
+			gost.AddrHandlerOption(ln.Addr().String()),
 			gost.ChainHandlerOption(chain),
 			gost.UsersHandlerOption(users...),
 			gost.TLSConfigHandlerOption(tlsCfg),
@@ -417,9 +418,10 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.BypassHandlerOption(node.Bypass),
 			gost.ResolverHandlerOption(resolver),
 			gost.HostsHandlerOption(hosts),
-			gost.RetryHandlerOption(node.GetInt("retry")),
+			gost.RetryHandlerOption(node.GetInt("retry")), // override the global retry option.
 			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
 			gost.ProbeResistHandlerOption(node.Get("probe_resist")),
+			gost.NodeHandlerOption(node),
 		)
 
 		rt := router{
@@ -446,7 +448,7 @@ type router struct {
 }
 
 func (r *router) Serve() error {
-	log.Logf("[route] start %s on %s", r.node.String(), r.server.Addr())
+	log.Logf("%s on %s", r.node.String(), r.server.Addr())
 	return r.server.Serve(r.handler)
 }
 

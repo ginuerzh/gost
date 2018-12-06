@@ -33,6 +33,7 @@ type HandlerOptions struct {
 	Resolver    Resolver
 	Hosts       *Hosts
 	ProbeResist string
+	Node        Node
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -126,6 +127,13 @@ func HostsHandlerOption(hosts *Hosts) HandlerOption {
 func ProbeResistHandlerOption(pr string) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.ProbeResist = pr
+	}
+}
+
+// NodeHandlerOption set the server node for server handler.
+func NodeHandlerOption(node Node) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Node = node
 	}
 }
 

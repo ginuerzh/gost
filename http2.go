@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -50,6 +51,7 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 		Host:          cc.addr,
 		ContentLength: -1,
 	}
+	// TODO: use the standard CONNECT method.
 	req.Header.Set("Gost-Target", addr)
 	if c.User != nil {
 		u := c.User.Username()
@@ -110,8 +112,20 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 	}
 
 	tr.clientMutex.Lock()
+	defer tr.clientMutex.Unlock()
+
 	client, ok := tr.clients[addr]
 	if !ok {
+		// NOTE: due to the dummy connection, HTTP2 node in a proxy chain can not be marked as dead.
+		// There is no real connection to the HTTP2 server at this moment.
+		// So we should try to connect the server.
+		conn, err := opts.Chain.Dial(addr)
+		if err != nil {
+
+			return nil, err
+		}
+		conn.Close()
+
 		transport := http2.Transport{
 			TLSClientConfig: tr.tlsConfig,
 			DialTLS: func(network, adr string, cfg *tls.Config) (net.Conn, error) {
@@ -128,7 +142,6 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 		}
 		tr.clients[addr] = client
 	}
-	tr.clientMutex.Unlock()
 
 	return &http2ClientConn{
 		addr:   addr,
@@ -283,31 +296,40 @@ func (h *http2Handler) Handle(conn net.Conn) {
 }
 
 func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
-	target := r.Header.Get("Gost-Target")
-	if target == "" {
-		target = r.Host
+	host := r.Header.Get("Gost-Target")
+	if host == "" {
+		host = r.Host
 	}
 
-	if !strings.Contains(target, ":") {
-		target += ":80"
+	if _, port, _ := net.SplitHostPort(host); port == "" {
+		host = net.JoinHostPort(host, "80")
 	}
+
+	laddr := h.options.Addr
+	u, _, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
+	if u != "" {
+		u += "@"
+	}
+	log.Logf("[http2] %s%s -> %s -> %s",
+		u, r.RemoteAddr, h.options.Node.String(), host)
 
 	if Debug {
-		log.Logf("[http2] %s %s - %s %s", r.Method, r.RemoteAddr, target, r.Proto)
 		dump, _ := httputil.DumpRequest(r, false)
-		log.Log("[http2]", string(dump))
+		log.Logf("[http2] %s - %s\n%s", r.RemoteAddr, laddr, string(dump))
 	}
 
 	w.Header().Set("Proxy-Agent", "gost/"+Version)
 
-	if !Can("tcp", target, h.options.Whitelist, h.options.Blacklist) {
-		log.Logf("[http2] Unauthorized to tcp connect to %s", target)
+	if !Can("tcp", host, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[http2] %s - %s : Unauthorized to tcp connect to %s",
+			r.RemoteAddr, laddr, host)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
-	if h.options.Bypass.Contains(target) {
-		log.Logf("[http2] [bypass] %s", target)
+	if h.options.Bypass.Contains(host) {
+		log.Logf("[http2] %s - %s bypass %s",
+			r.RemoteAddr, laddr, host)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -319,86 +341,54 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		Body:       ioutil.NopCloser(bytes.NewReader([]byte{})),
 	}
 
-	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
-	if Debug && (u != "" || p != "") {
-		log.Logf("[http2] %s - %s : Authorization: '%s' '%s'", r.RemoteAddr, target, u, p)
-	}
-	if !authenticate(u, p, h.options.Users...) {
-		// probing resistance is enabled
-		if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
-			switch ss[0] {
-			case "code":
-				resp.StatusCode, _ = strconv.Atoi(ss[1])
-			case "web":
-				url := ss[1]
-				if !strings.HasPrefix(url, "http") {
-					url = "http://" + url
-				}
-				if r, err := http.Get(url); err == nil {
-					resp = r
-				}
-			case "host":
-				cc, err := net.Dial("tcp", ss[1])
-				if err == nil {
-					defer cc.Close()
-					log.Logf("[http2] %s <-> %s : forward to %s", r.RemoteAddr, target, ss[1])
-					if err := h.forwardRequest(w, r, cc); err != nil {
-						log.Logf("[http2] %s - %s : %s", r.RemoteAddr, target, err)
-					}
-					log.Logf("[http2] %s >-< %s : forward to %s", r.RemoteAddr, target, ss[1])
-					return
-				}
-			case "file":
-				f, _ := os.Open(ss[1])
-				if f != nil {
-					resp.StatusCode = http.StatusOK
-					if finfo, _ := f.Stat(); finfo != nil {
-						resp.ContentLength = finfo.Size()
-					}
-					resp.Body = f
-				}
-			}
-		}
-
-		if resp.StatusCode == 0 {
-			log.Logf("[http2] %s <- %s : proxy authentication required", r.RemoteAddr, target)
-			resp.StatusCode = http.StatusProxyAuthRequired
-			resp.Header.Add("Proxy-Authenticate", "Basic realm=\"gost\"")
-		} else {
-			w.Header().Del("Proxy-Agent")
-			resp.Header = http.Header{}
-			resp.Header.Set("Server", "nginx/1.14.1")
-			resp.Header.Set("Date", time.Now().Format(http.TimeFormat))
-			if resp.ContentLength > 0 {
-				resp.Header.Set("Content-Type", "text/html")
-			}
-			if resp.StatusCode == http.StatusOK {
-				resp.Header.Set("Connection", "keep-alive")
-			}
-		}
-
-		if Debug {
-			dump, _ := httputil.DumpResponse(resp, false)
-			log.Logf("[http2] %s <- %s\n%s", r.RemoteAddr, target, string(dump))
-		}
-
-		h.writeResponse(w, resp)
-		resp.Body.Close()
-
+	if !h.authenticate(w, r, resp) {
 		return
 	}
 
+	// delete the proxy related headers.
 	r.Header.Del("Proxy-Authorization")
 	r.Header.Del("Proxy-Connection")
 
-	cc, err := h.options.Chain.Dial(target,
-		RetryChainOption(h.options.Retries),
-		TimeoutChainOption(h.options.Timeout),
-		HostsChainOption(h.options.Hosts),
-		ResolverChainOption(h.options.Resolver),
-	)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var err error
+	var cc net.Conn
+	var route *Chain
+	for i := 0; i < retries; i++ {
+		route, err = h.options.Chain.selectRouteFor(host)
+		if err != nil {
+			log.Logf("[http2] %s -> %s : %s",
+				r.RemoteAddr, laddr, err)
+			continue
+		}
+
+		buf := bytes.Buffer{}
+		fmt.Fprintf(&buf, "%s -> %s -> ",
+			r.RemoteAddr, h.options.Node.String())
+		for _, nd := range route.route {
+			fmt.Fprintf(&buf, "%d@%s -> ", nd.ID, nd.String())
+		}
+		fmt.Fprintf(&buf, "%s", host)
+		log.Log("[route]", buf.String())
+
+		cc, err = route.Dial(host,
+			TimeoutChainOption(h.options.Timeout),
+			HostsChainOption(h.options.Hosts),
+			ResolverChainOption(h.options.Resolver),
+		)
+		if err == nil {
+			break
+		}
+		log.Logf("[http2] %s -> %s : %s", r.RemoteAddr, laddr, err)
+	}
+
 	if err != nil {
-		log.Logf("[http2] %s -> %s : %s", r.RemoteAddr, target, err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
@@ -415,29 +405,103 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 			// we take over the underly connection
 			conn, _, err := hj.Hijack()
 			if err != nil {
-				log.Logf("[http2] %s -> %s : %s", r.RemoteAddr, target, err)
+				log.Logf("[http2] %s -> %s : %s",
+					r.RemoteAddr, laddr, err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			defer conn.Close()
 
-			log.Logf("[http2] %s <-> %s : downgrade to HTTP/1.1", r.RemoteAddr, target)
+			log.Logf("[http2] %s <-> %s : downgrade to HTTP/1.1", r.RemoteAddr, host)
 			transport(conn, cc)
-			log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
+			log.Logf("[http2] %s >-< %s", r.RemoteAddr, host)
 			return
 		}
 
-		log.Logf("[http2] %s <-> %s", r.RemoteAddr, target)
+		log.Logf("[http2] %s <-> %s", r.RemoteAddr, host)
 		transport(&readWriter{r: r.Body, w: flushWriter{w}}, cc)
-		log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
+		log.Logf("[http2] %s >-< %s", r.RemoteAddr, host)
 		return
 	}
 
-	log.Logf("[http2] %s <-> %s", r.RemoteAddr, target)
+	log.Logf("[http2] %s <-> %s", r.RemoteAddr, host)
 	if err := h.forwardRequest(w, r, cc); err != nil {
-		log.Logf("[http2] %s - %s : %s", r.RemoteAddr, target, err)
+		log.Logf("[http2] %s - %s : %s", r.RemoteAddr, host, err)
 	}
-	log.Logf("[http2] %s >-< %s", r.RemoteAddr, target)
+	log.Logf("[http2] %s >-< %s", r.RemoteAddr, host)
+}
+
+func (h *http2Handler) authenticate(w http.ResponseWriter, r *http.Request, resp *http.Response) (ok bool) {
+	laddr := h.options.Addr
+	u, p, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
+	if Debug && (u != "" || p != "") {
+		log.Logf("[http2] %s - %s : Authorization '%s' '%s'", r.RemoteAddr, laddr, u, p)
+	}
+	if authenticate(u, p, h.options.Users...) {
+		return true
+	}
+	// probing resistance is enabled
+	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
+		switch ss[0] {
+		case "code":
+			resp.StatusCode, _ = strconv.Atoi(ss[1])
+		case "web":
+			url := ss[1]
+			if !strings.HasPrefix(url, "http") {
+				url = "http://" + url
+			}
+			if r, err := http.Get(url); err == nil {
+				resp = r
+			}
+		case "host":
+			cc, err := net.Dial("tcp", ss[1])
+			if err == nil {
+				defer cc.Close()
+				log.Logf("[http2] %s <-> %s : forward to %s", r.RemoteAddr, laddr, ss[1])
+				if err := h.forwardRequest(w, r, cc); err != nil {
+					log.Logf("[http2] %s - %s : %s", r.RemoteAddr, laddr, err)
+				}
+				log.Logf("[http2] %s >-< %s : forward to %s", r.RemoteAddr, laddr, ss[1])
+				return
+			}
+		case "file":
+			f, _ := os.Open(ss[1])
+			if f != nil {
+				resp.StatusCode = http.StatusOK
+				if finfo, _ := f.Stat(); finfo != nil {
+					resp.ContentLength = finfo.Size()
+				}
+				resp.Body = f
+			}
+		}
+	}
+
+	if resp.StatusCode == 0 {
+		log.Logf("[http2] %s <- %s : proxy authentication required", r.RemoteAddr, laddr)
+		resp.StatusCode = http.StatusProxyAuthRequired
+		resp.Header.Add("Proxy-Authenticate", "Basic realm=\"gost\"")
+	} else {
+		w.Header().Del("Proxy-Agent")
+		resp.Header = http.Header{}
+		resp.Header.Set("Server", "nginx/1.14.1")
+		resp.Header.Set("Date", time.Now().Format(http.TimeFormat))
+		if resp.ContentLength > 0 {
+			resp.Header.Set("Content-Type", "text/html")
+		}
+		if resp.StatusCode == http.StatusOK {
+			resp.Header.Set("Connection", "keep-alive")
+		}
+	}
+
+	if Debug {
+		dump, _ := httputil.DumpResponse(resp, false)
+		log.Logf("[http2] %s <- %s\n%s", r.RemoteAddr, laddr, string(dump))
+	}
+
+	h.writeResponse(w, resp)
+	resp.Body.Close()
+
+	return
 }
 
 func (h *http2Handler) forwardRequest(w http.ResponseWriter, r *http.Request, rw io.ReadWriter) (err error) {

@@ -444,15 +444,15 @@ func (h *sshForwardHandler) Init(options ...HandlerOption) {
 func (h *sshForwardHandler) Handle(conn net.Conn) {
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, h.config)
 	if err != nil {
-		log.Logf("[ssh-forward] %s -> %s : %s", conn.RemoteAddr(), h.options.Addr, err)
+		log.Logf("[ssh-forward] %s -> %s : %s", conn.RemoteAddr(), h.options.Node.Addr, err)
 		conn.Close()
 		return
 	}
 	defer sshConn.Close()
 
-	log.Logf("[ssh-forward] %s <-> %s", conn.RemoteAddr(), h.options.Addr)
+	log.Logf("[ssh-forward] %s <-> %s", conn.RemoteAddr(), h.options.Node.Addr)
 	h.handleForward(sshConn, chans, reqs)
-	log.Logf("[ssh-forward] %s >-< %s", conn.RemoteAddr(), h.options.Addr)
+	log.Logf("[ssh-forward] %s >-< %s", conn.RemoteAddr(), h.options.Node.Addr)
 }
 
 func (h *sshForwardHandler) handleForward(conn ssh.Conn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request) {
@@ -506,7 +506,7 @@ func (h *sshForwardHandler) handleForward(conn ssh.Conn, chans <-chan ssh.NewCha
 func (h *sshForwardHandler) directPortForwardChannel(channel ssh.Channel, raddr string) {
 	defer channel.Close()
 
-	log.Logf("[ssh-tcp] %s - %s", h.options.Addr, raddr)
+	log.Logf("[ssh-tcp] %s - %s", h.options.Node.Addr, raddr)
 
 	if !Can("tcp", raddr, h.options.Whitelist, h.options.Blacklist) {
 		log.Logf("[ssh-tcp] Unauthorized to tcp connect to %s", raddr)
@@ -525,14 +525,14 @@ func (h *sshForwardHandler) directPortForwardChannel(channel ssh.Channel, raddr 
 		ResolverChainOption(h.options.Resolver),
 	)
 	if err != nil {
-		log.Logf("[ssh-tcp] %s - %s : %s", h.options.Addr, raddr, err)
+		log.Logf("[ssh-tcp] %s - %s : %s", h.options.Node.Addr, raddr, err)
 		return
 	}
 	defer conn.Close()
 
-	log.Logf("[ssh-tcp] %s <-> %s", h.options.Addr, raddr)
+	log.Logf("[ssh-tcp] %s <-> %s", h.options.Node.Addr, raddr)
 	transport(conn, channel)
-	log.Logf("[ssh-tcp] %s >-< %s", h.options.Addr, raddr)
+	log.Logf("[ssh-tcp] %s >-< %s", h.options.Node.Addr, raddr)
 }
 
 // tcpipForward is structure for RFC 4254 7.1 "tcpip-forward" request

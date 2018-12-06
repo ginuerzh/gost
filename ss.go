@@ -125,49 +125,84 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 	}
 	cipher, err := ss.NewCipher(method, password)
 	if err != nil {
-		log.Log("[ss]", err)
+		log.Logf("[ss] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 	conn = &shadowConn{conn: ss.NewConn(conn, cipher)}
 
-	log.Logf("[ss] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
-
 	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	addr, err := h.getRequest(conn)
+	host, err := h.getRequest(conn)
 	if err != nil {
-		log.Logf("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+		log.Logf("[ss] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 	// clear timer
 	conn.SetReadDeadline(time.Time{})
 
-	log.Logf("[ss] %s -> %s", conn.RemoteAddr(), addr)
+	log.Logf("[ss] %s -> %s -> %s",
+		conn.RemoteAddr(), h.options.Node.String(), host)
 
-	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
-		log.Logf("[ss] Unauthorized to tcp connect to %s", addr)
+	if !Can("tcp", host, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[ss] %s - %s : Unauthorized to tcp connect to %s",
+			conn.RemoteAddr(), conn.LocalAddr(), host)
 		return
 	}
 
-	if h.options.Bypass.Contains(addr) {
-		log.Logf("[ss] [bypass] %s", addr)
+	if h.options.Bypass.Contains(host) {
+		log.Logf("[ss] %s - %s : Bypass %s",
+			conn.RemoteAddr(), conn.LocalAddr(), host)
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr,
-		RetryChainOption(h.options.Retries),
-		TimeoutChainOption(h.options.Timeout),
-		HostsChainOption(h.options.Hosts),
-		ResolverChainOption(h.options.Resolver),
-	)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var cc net.Conn
+	var route *Chain
+	for i := 0; i < retries; i++ {
+		route, err = h.options.Chain.selectRouteFor(host)
+		if err != nil {
+			log.Logf("[ss] %s -> %s : %s",
+				conn.RemoteAddr(), conn.LocalAddr(), err)
+			continue
+		}
+
+		buf := bytes.Buffer{}
+		fmt.Fprintf(&buf, "%s -> %s -> ",
+			conn.RemoteAddr(), h.options.Node.String())
+		for _, nd := range route.route {
+			fmt.Fprintf(&buf, "%d@%s -> ", nd.ID, nd.String())
+		}
+		fmt.Fprintf(&buf, "%s", host)
+		log.Log("[route]", buf.String())
+
+		cc, err = route.Dial(host,
+			TimeoutChainOption(h.options.Timeout),
+			HostsChainOption(h.options.Hosts),
+			ResolverChainOption(h.options.Resolver),
+		)
+		if err == nil {
+			break
+		}
+		log.Logf("[ss] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
+	}
+
 	if err != nil {
-		log.Logf("[ss] %s -> %s : %s", conn.RemoteAddr(), addr, err)
 		return
 	}
 	defer cc.Close()
 
-	log.Logf("[ss] %s <-> %s", conn.RemoteAddr(), addr)
+	log.Logf("[ss] %s <-> %s", conn.RemoteAddr(), host)
 	transport(conn, cc)
-	log.Logf("[ss] %s >-< %s", conn.RemoteAddr(), addr)
+	log.Logf("[ss] %s >-< %s", conn.RemoteAddr(), host)
 }
 
 const (

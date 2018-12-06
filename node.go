@@ -20,8 +20,8 @@ type Node struct {
 	Host             string
 	Protocol         string
 	Transport        string
-	Remote           string // remote address, used by tcp/udp port forwarding
-	url              string // raw url
+	Remote           string   // remote address, used by tcp/udp port forwarding
+	url              *url.URL // raw url
 	User             *url.Userinfo
 	Values           url.Values
 	DialOptions      []DialOption
@@ -55,10 +55,11 @@ func ParseNode(s string) (node Node, err error) {
 		Values: u.Query(),
 		User:   u.User,
 		marker: &failMarker{},
+		url:    u,
 	}
 
 	u.RawQuery = ""
-	node.url = u.String()
+	u.User = nil
 
 	schemes := strings.Split(u.Scheme, "+")
 	if len(schemes) == 1 {
@@ -139,7 +140,7 @@ func (node *Node) GetInt(key string) int {
 }
 
 func (node Node) String() string {
-	return node.url
+	return node.url.String()
 }
 
 // NodeGroup is a group of nodes.

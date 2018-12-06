@@ -386,12 +386,14 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 	conn = gosocks5.ServerConn(conn, h.selector)
 	req, err := gosocks5.ReadRequest(conn)
 	if err != nil {
-		log.Log("[socks5]", err)
+		log.Logf("[socks5] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 
 	if Debug {
-		log.Logf("[socks5] %s - %s\n%s", conn.RemoteAddr(), req.Addr, req)
+		log.Logf("[socks5] %s -> %s\n%s",
+			conn.RemoteAddr(), conn.LocalAddr(), req)
 	}
 	switch req.Cmd {
 	case gosocks5.CmdConnect:
@@ -410,43 +412,86 @@ func (h *socks5Handler) Handle(conn net.Conn) {
 		h.handleUDPTunnel(conn, req)
 
 	default:
-		log.Log("[socks5] Unrecognized request:", req.Cmd)
+		log.Logf("[socks5] %s - %s : Unrecognized request: %d",
+			conn.RemoteAddr(), conn.LocalAddr(), req.Cmd)
 	}
 }
 
 func (h *socks5Handler) handleConnect(conn net.Conn, req *gosocks5.Request) {
-	addr := req.Addr.String()
-	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
-		log.Logf("[socks5-connect] Unauthorized to tcp connect to %s", addr)
+	host := req.Addr.String()
+
+	log.Logf("[socks5] %s -> %s -> %s",
+		conn.RemoteAddr(), h.options.Node.String(), host)
+
+	if !Can("tcp", host, h.options.Whitelist, h.options.Blacklist) {
+		log.Logf("[socks5] %s - %s : Unauthorized to tcp connect to %s",
+			conn.RemoteAddr(), conn.LocalAddr(), host)
 		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
 		rep.Write(conn)
 		if Debug {
-			log.Logf("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			log.Logf("[socks5] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), rep)
 		}
 		return
 	}
-	if h.options.Bypass.Contains(addr) {
-		log.Logf("[socks5-connect] [bypass] %s", addr)
+	if h.options.Bypass.Contains(host) {
+		log.Logf("[socks5] %s - %s : Bypass %s",
+			conn.RemoteAddr(), conn.LocalAddr(), host)
 		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
 		rep.Write(conn)
 		if Debug {
-			log.Logf("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			log.Logf("[socks5] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), rep)
 		}
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr,
-		RetryChainOption(h.options.Retries),
-		TimeoutChainOption(h.options.Timeout),
-		HostsChainOption(h.options.Hosts),
-		ResolverChainOption(h.options.Resolver),
-	)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var err error
+	var cc net.Conn
+	var route *Chain
+	for i := 0; i < retries; i++ {
+		route, err = h.options.Chain.selectRouteFor(host)
+		if err != nil {
+			log.Logf("[socks5] %s -> %s : %s",
+				conn.RemoteAddr(), conn.LocalAddr(), err)
+			continue
+		}
+
+		buf := bytes.Buffer{}
+		fmt.Fprintf(&buf, "%s -> %s -> ",
+			conn.RemoteAddr(), h.options.Node.String())
+		for _, nd := range route.route {
+			fmt.Fprintf(&buf, "%d@%s -> ", nd.ID, nd.String())
+		}
+		fmt.Fprintf(&buf, "%s", host)
+		log.Log("[route]", buf.String())
+
+		cc, err = route.Dial(host,
+			TimeoutChainOption(h.options.Timeout),
+			HostsChainOption(h.options.Hosts),
+			ResolverChainOption(h.options.Resolver),
+		)
+		if err == nil {
+			break
+		}
+		log.Logf("[socks5] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
+	}
+
 	if err != nil {
-		log.Logf("[socks5-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		rep := gosocks5.NewReply(gosocks5.HostUnreachable, nil)
 		rep.Write(conn)
 		if Debug {
-			log.Logf("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			log.Logf("[socks5] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), rep)
 		}
 		return
 	}
@@ -454,22 +499,29 @@ func (h *socks5Handler) handleConnect(conn net.Conn, req *gosocks5.Request) {
 
 	rep := gosocks5.NewReply(gosocks5.Succeeded, nil)
 	if err := rep.Write(conn); err != nil {
-		log.Logf("[socks5-connect] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+		log.Logf("[socks5] %s <- %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 	if Debug {
-		log.Logf("[socks5-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+		log.Logf("[socks5] %s <- %s\n%s",
+			conn.RemoteAddr(), conn.LocalAddr(), rep)
 	}
-	log.Logf("[socks5-connect] %s <-> %s", conn.RemoteAddr(), req.Addr)
+	log.Logf("[socks5] %s <-> %s", conn.RemoteAddr(), host)
 	transport(conn, cc)
-	log.Logf("[socks5-connect] %s >-< %s", conn.RemoteAddr(), req.Addr)
+	log.Logf("[socks5] %s >-< %s", conn.RemoteAddr(), host)
 }
 
 func (h *socks5Handler) handleBind(conn net.Conn, req *gosocks5.Request) {
+	addr := req.Addr.String()
+
+	log.Logf("[socks5-bind] %s -> %s -> %s",
+		conn.RemoteAddr(), h.options.Node.String(), addr)
+
 	if h.options.Chain.IsEmpty() {
-		addr := req.Addr.String()
 		if !Can("rtcp", addr, h.options.Whitelist, h.options.Blacklist) {
-			log.Logf("Unauthorized to tcp bind to %s", addr)
+			log.Logf("[socks5-bind] %s - %s : Unauthorized to tcp bind to %s",
+				conn.RemoteAddr(), conn.LocalAddr(), addr)
 			return
 		}
 		h.bindOn(conn, addr)
@@ -478,11 +530,13 @@ func (h *socks5Handler) handleBind(conn net.Conn, req *gosocks5.Request) {
 
 	cc, err := h.options.Chain.Conn()
 	if err != nil {
-		log.Logf("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+		log.Logf("[socks5-bind] %s <- %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
 		reply.Write(conn)
 		if Debug {
-			log.Logf("[socks5-bind] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, reply)
+			log.Logf("[socks5-bind] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), reply)
 		}
 		return
 	}
@@ -492,16 +546,17 @@ func (h *socks5Handler) handleBind(conn net.Conn, req *gosocks5.Request) {
 	// so we don't need to authenticate it, as it's as explicit as whitelisting
 	defer cc.Close()
 	req.Write(cc)
-	log.Logf("[socks5-bind] %s <-> %s", conn.RemoteAddr(), cc.RemoteAddr())
+	log.Logf("[socks5-bind] %s <-> %s", conn.RemoteAddr(), addr)
 	transport(conn, cc)
-	log.Logf("[socks5-bind] %s >-< %s", conn.RemoteAddr(), cc.RemoteAddr())
+	log.Logf("[socks5-bind] %s >-< %s", conn.RemoteAddr(), addr)
 }
 
 func (h *socks5Handler) bindOn(conn net.Conn, addr string) {
 	bindAddr, _ := net.ResolveTCPAddr("tcp", addr)
 	ln, err := net.ListenTCP("tcp", bindAddr) // strict mode: if the port already in use, it will return error
 	if err != nil {
-		log.Logf("[socks5-bind] %s -> %s : %s", conn.RemoteAddr(), addr, err)
+		log.Logf("[socks5-bind] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		gosocks5.NewReply(gosocks5.Failure, nil).Write(conn)
 		return
 	}
@@ -511,14 +566,17 @@ func (h *socks5Handler) bindOn(conn net.Conn, addr string) {
 	socksAddr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
 	reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 	if err := reply.Write(conn); err != nil {
-		log.Logf("[socks5-bind] %s <- %s : %s", conn.RemoteAddr(), addr, err)
+		log.Logf("[socks5-bind] %s <- %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		ln.Close()
 		return
 	}
 	if Debug {
-		log.Logf("[socks5-bind] %s <- %s\n%s", conn.RemoteAddr(), addr, reply)
+		log.Logf("[socks5-bind] %s <- %s\n%s",
+			conn.RemoteAddr(), conn.LocalAddr(), reply)
 	}
-	log.Logf("[socks5-bind] %s - %s BIND ON %s OK", conn.RemoteAddr(), addr, socksAddr)
+	log.Logf("[socks5-bind] %s - %s BIND ON %s OK",
+		conn.RemoteAddr(), conn.LocalAddr(), socksAddr)
 
 	var pconn net.Conn
 	accept := func() <-chan error {
@@ -1142,17 +1200,18 @@ func (h *socks4Handler) Handle(conn net.Conn) {
 
 	req, err := gosocks4.ReadRequest(conn)
 	if err != nil {
-		log.Log("[socks4]", err)
+		log.Logf("[socks4] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 
 	if Debug {
-		log.Logf("[socks4] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, req)
+		log.Logf("[socks4] %s -> %s\n%s",
+			conn.RemoteAddr(), conn.LocalAddr(), req)
 	}
 
 	switch req.Cmd {
 	case gosocks4.CmdConnect:
-		log.Logf("[socks4-connect] %s -> %s", conn.RemoteAddr(), req.Addr)
 		h.handleConnect(conn, req)
 
 	case gosocks4.CmdBind:
@@ -1160,42 +1219,86 @@ func (h *socks4Handler) Handle(conn net.Conn) {
 		h.handleBind(conn, req)
 
 	default:
-		log.Logf("[socks4] Unrecognized request: %d", req.Cmd)
+		log.Logf("[socks4] %s - %s : Unrecognized request: %d",
+			conn.RemoteAddr(), conn.LocalAddr(), req.Cmd)
 	}
 }
 
 func (h *socks4Handler) handleConnect(conn net.Conn, req *gosocks4.Request) {
 	addr := req.Addr.String()
 
+	log.Logf("[socks4] %s -> %s -> %s",
+		conn.RemoteAddr(), h.options.Node.String(), addr)
+
 	if !Can("tcp", addr, h.options.Whitelist, h.options.Blacklist) {
-		log.Logf("[socks4-connect] Unauthorized to tcp connect to %s", addr)
+		log.Logf("[socks4] %s - %s : Unauthorized to tcp connect to %s",
+			conn.RemoteAddr(), conn.LocalAddr(), addr)
 		rep := gosocks4.NewReply(gosocks4.Rejected, nil)
 		rep.Write(conn)
 		if Debug {
-			log.Logf("[socks4-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			log.Logf("[socks4] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), rep)
 		}
 		return
 	}
 	if h.options.Bypass.Contains(addr) {
-		log.Log("[socks4-connect] [bypass]", addr)
+		log.Log("[socks4] %s - %s : Bypass %s",
+			conn.RemoteAddr(), conn.LocalAddr(), addr)
 		rep := gosocks4.NewReply(gosocks4.Rejected, nil)
 		rep.Write(conn)
 		if Debug {
-			log.Logf("[socks4-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			log.Logf("[socks4] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), rep)
 		}
 		return
 	}
 
-	cc, err := h.options.Chain.Dial(addr,
-		RetryChainOption(h.options.Retries),
-		TimeoutChainOption(h.options.Timeout),
-	)
+	retries := 1
+	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
+		retries = h.options.Chain.Retries
+	}
+	if h.options.Retries > 0 {
+		retries = h.options.Retries
+	}
+
+	var err error
+	var cc net.Conn
+	var route *Chain
+	for i := 0; i < retries; i++ {
+		route, err = h.options.Chain.selectRouteFor(addr)
+		if err != nil {
+			log.Logf("[socks4] %s -> %s : %s",
+				conn.RemoteAddr(), conn.LocalAddr(), err)
+			continue
+		}
+
+		buf := bytes.Buffer{}
+		fmt.Fprintf(&buf, "%s -> %s -> ",
+			conn.RemoteAddr(), h.options.Node.String())
+		for _, nd := range route.route {
+			fmt.Fprintf(&buf, "%d@%s -> ", nd.ID, nd.String())
+		}
+		fmt.Fprintf(&buf, "%s", addr)
+		log.Log("[route]", buf.String())
+
+		cc, err = route.Dial(addr,
+			TimeoutChainOption(h.options.Timeout),
+			HostsChainOption(h.options.Hosts),
+			ResolverChainOption(h.options.Resolver),
+		)
+		if err == nil {
+			break
+		}
+		log.Logf("[socks4] %s -> %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
+	}
+
 	if err != nil {
-		log.Logf("[socks4-connect] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		rep := gosocks4.NewReply(gosocks4.Failed, nil)
 		rep.Write(conn)
 		if Debug {
-			log.Logf("[socks4-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+			log.Logf("[socks4] %s <- %s\n%s",
+				conn.RemoteAddr(), conn.LocalAddr(), rep)
 		}
 		return
 	}
@@ -1203,16 +1306,18 @@ func (h *socks4Handler) handleConnect(conn net.Conn, req *gosocks4.Request) {
 
 	rep := gosocks4.NewReply(gosocks4.Granted, nil)
 	if err := rep.Write(conn); err != nil {
-		log.Logf("[socks4-connect] %s <- %s : %s", conn.RemoteAddr(), req.Addr, err)
+		log.Logf("[socks4] %s <- %s : %s",
+			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 	if Debug {
-		log.Logf("[socks4-connect] %s <- %s\n%s", conn.RemoteAddr(), req.Addr, rep)
+		log.Logf("[socks4] %s <- %s\n%s",
+			conn.RemoteAddr(), conn.LocalAddr(), rep)
 	}
 
-	log.Logf("[socks4-connect] %s <-> %s", conn.RemoteAddr(), req.Addr)
+	log.Logf("[socks4] %s <-> %s", conn.RemoteAddr(), addr)
 	transport(conn, cc)
-	log.Logf("[socks4-connect] %s >-< %s", conn.RemoteAddr(), req.Addr)
+	log.Logf("[socks4] %s >-< %s", conn.RemoteAddr(), addr)
 }
 
 func (h *socks4Handler) handleBind(conn net.Conn, req *gosocks4.Request) {
