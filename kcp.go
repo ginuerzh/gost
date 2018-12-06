@@ -66,7 +66,7 @@ func (c *KCPConfig) Init() {
 
 var (
 	// DefaultKCPConfig is the default KCP config.
-	DefaultKCPConfig = &KCPConfig{
+	DefaultKCPConfig = KCPConfig{
 		Key:          "it's a secrect",
 		Crypt:        "aes",
 		Mode:         "fast",
@@ -99,7 +99,8 @@ type kcpTransporter struct {
 // KCPTransporter creates a Transporter that is used by KCP proxy client.
 func KCPTransporter(config *KCPConfig) Transporter {
 	if config == nil {
-		config = DefaultKCPConfig
+		config = &KCPConfig{}
+		*config = DefaultKCPConfig
 	}
 	config.Init()
 
@@ -227,7 +228,8 @@ type kcpListener struct {
 // KCPListener creates a Listener for KCP proxy server.
 func KCPListener(addr string, config *KCPConfig) (Listener, error) {
 	if config == nil {
-		config = DefaultKCPConfig
+		config = &KCPConfig{}
+		*config = DefaultKCPConfig
 	}
 	config.Init()
 
