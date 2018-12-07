@@ -1,11 +1,14 @@
 package protocol
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 // VersionNumber is a version number as int
-type VersionNumber int
+type VersionNumber uint32
 
 // gQUIC version range as defined in the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
 const (
@@ -15,21 +18,18 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9 + iota
 	VersionTLS      VersionNumber = 101
-	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
-	VersionUnknown  VersionNumber = -1
+	VersionWhatever VersionNumber = 1 // for when the version doesn't matter
+	VersionUnknown  VersionNumber = math.MaxUint32
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
-var SupportedVersions = []VersionNumber{
-	Version39,
-}
+var SupportedVersions = []VersionNumber{VersionTLS}
 
-// UsesTLS says if this QUIC version uses TLS 1.3 for the handshake
-func (vn VersionNumber) UsesTLS() bool {
-	return vn == VersionTLS
+// IsValidVersion says if the version is known to quic-go
+func IsValidVersion(v VersionNumber) bool {
+	return v == VersionTLS || IsSupportedVersion(SupportedVersions, v)
 }
 
 func (vn VersionNumber) String() string {
@@ -44,40 +44,13 @@ func (vn VersionNumber) String() string {
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
-		return fmt.Sprintf("%d", vn)
+		return fmt.Sprintf("%#x", uint32(vn))
 	}
 }
 
 // ToAltSvc returns the representation of the version for the H2 Alt-Svc parameters
 func (vn VersionNumber) ToAltSvc() string {
-	if vn.isGQUIC() {
-		return fmt.Sprintf("%d", vn.toGQUICVersion())
-	}
 	return fmt.Sprintf("%d", vn)
-}
-
-// CryptoStreamID gets the Stream ID of the crypto stream
-func (vn VersionNumber) CryptoStreamID() StreamID {
-	if vn.isGQUIC() {
-		return 1
-	}
-	return 0
-}
-
-// UsesMaxDataFrame tells if this version uses MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED instead of WINDOW_UDPATE and BLOCKED frames
-func (vn VersionNumber) UsesMaxDataFrame() bool {
-	return vn.CryptoStreamID() == 0
-}
-
-// StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
-func (vn VersionNumber) StreamContributesToConnectionFlowControl(id StreamID) bool {
-	if id == vn.CryptoStreamID() {
-		return false
-	}
-	if vn.isGQUIC() && id == 3 {
-		return false
-	}
-	return true
 }
 
 func (vn VersionNumber) isGQUIC() bool {
@@ -111,4 +84,34 @@ func ChooseSupportedVersion(ours, theirs []VersionNumber) (VersionNumber, bool) 
 		}
 	}
 	return 0, false
+}
+
+// generateReservedVersion generates a reserved version number (v & 0x0f0f0f0f == 0x0a0a0a0a)
+func generateReservedVersion() VersionNumber {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
+	return VersionNumber((binary.BigEndian.Uint32(b) | 0x0a0a0a0a) & 0xfafafafa)
+}
+
+// GetGreasedVersions adds one reserved version number to a slice of version numbers, at a random position
+func GetGreasedVersions(supported []VersionNumber) []VersionNumber {
+	b := make([]byte, 1)
+	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
+	randPos := int(b[0]) % (len(supported) + 1)
+	greased := make([]VersionNumber, len(supported)+1)
+	copy(greased, supported[:randPos])
+	greased[randPos] = generateReservedVersion()
+	copy(greased[randPos+1:], supported[randPos:])
+	return greased
+}
+
+// StripGreasedVersions strips all greased versions from a slice of versions
+func StripGreasedVersions(versions []VersionNumber) []VersionNumber {
+	realVersions := make([]VersionNumber, 0, len(versions))
+	for _, v := range versions {
+		if v&0x0f0f0f0f != 0x0a0a0a0a {
+			realVersions = append(realVersions, v)
+		}
+	}
+	return realVersions
 }

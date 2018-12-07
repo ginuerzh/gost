@@ -38,7 +38,7 @@ func newRoute(nodes ...Node) *Chain {
 }
 
 // Nodes returns the proxy nodes that the chain holds.
-// If a node is a node group, the first node in the group will be returned.
+// The first node in each group will be returned.
 func (c *Chain) Nodes() (nodes []Node) {
 	for _, group := range c.nodeGroups {
 		if ns := group.Nodes(); len(ns) > 0 {
@@ -61,7 +61,7 @@ func (c *Chain) LastNode() Node {
 		return Node{}
 	}
 	group := c.nodeGroups[len(c.nodeGroups)-1]
-	return group.nodes[0].Clone()
+	return group.GetNode(0)
 }
 
 // LastNodeGroup returns the last group of the group list.
@@ -136,13 +136,14 @@ func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, e
 		return nil, err
 	}
 
-	addr = c.resolve(addr, options.Resolver, options.Hosts)
+	ipAddr := c.resolve(addr, options.Resolver, options.Hosts)
 
 	if route.IsEmpty() {
-		return net.DialTimeout("tcp", addr, options.Timeout)
+
+		return net.DialTimeout("tcp", ipAddr, options.Timeout)
 	}
 
-	conn, err := route.getConn(addr)
+	conn, err := route.getConn(ipAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +173,6 @@ func (c *Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
 }
 
 // Conn obtains a handshaked connection to the last node of the chain.
-// If the chain is empty, it returns an ErrEmptyChain error.
 func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
 	options := &ChainOptions{}
 	for _, opt := range opts {
@@ -215,18 +215,22 @@ func (c *Chain) getConn(addr string) (conn net.Conn, err error) {
 
 	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
-		node.MarkDead()
+
+		node.group.MarkDeadNode(node.ID)
 		return
 	}
 
 	cn, err = node.Client.Handshake(cn, node.HandshakeOptions...)
 	if err != nil {
-		node.MarkDead()
+
+		node.group.MarkDeadNode(node.ID)
 		return
 	}
 
+	node.group.ResetDeadNode(node.ID)
+
 	if len(nodes) > 1 {
-		node.ResetDead() // don't reset the last node as we are going to check if it will connect successfully.
+		node.group.ResetDeadNode(node.ID) // don't reset the last node as we are going to check if it will connect successfully.
 	}
 
 	preNode := node
@@ -235,17 +239,19 @@ func (c *Chain) getConn(addr string) (conn net.Conn, err error) {
 		cc, err = preNode.Client.Connect(cn, node.Addr)
 		if err != nil {
 			cn.Close()
-			node.MarkDead()
+
+			node.group.MarkDeadNode(node.ID)
 			return
 		}
 		cc, err = node.Client.Handshake(cc, node.HandshakeOptions...)
 		if err != nil {
 			cn.Close()
-			node.MarkDead()
+
+			node.group.MarkDeadNode(node.ID)
 			return
 		}
 		if len(nodes) > 1 {
-			node.ResetDead()
+			node.group.ResetDeadNode(node.ID)
 		}
 		cn = cc
 		preNode = node
@@ -257,14 +263,14 @@ func (c *Chain) getConn(addr string) (conn net.Conn, err error) {
 		cc, err = node.Client.Connect(conn, addr)
 		if err != nil {
 			if _, ok := err.(*net.OpError); ok {
-				node.MarkDead()
+				node.group.MarkDeadNode(node.ID)
 			}
 			conn.Close()
 			return
 		}
 		conn = cc
 	}
-	node.ResetDead()
+	node.group.ResetDeadNode(node.ID)
 	return
 }
 

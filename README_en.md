@@ -31,6 +31,7 @@ Wiki: <https://docs.ginuerzh.xyz/gost/en/>
 
 Google group: <https://groups.google.com/d/forum/go-gost>
 
+Telegram group: <https://t.me/gogost>
 
 Installation
 ------

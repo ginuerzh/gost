@@ -1,0 +1,14 @@
+# strategy for node selecting
+strategy        random
+
+max_fails       1
+
+fail_timeout    30s
+
+# period for live reloading
+reload          10s
+
+# peers
+peer    http://:18080
+peer    socks://:11080
+peer    ss://chacha20:123456@:18338

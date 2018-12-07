@@ -2,166 +2,209 @@ package handshake
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
+	"io"
+	"sort"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-// errMalformedTag is returned when the tag value cannot be read
-var errMalformedTag = qerr.Error(qerr.InvalidCryptoMessageParameter, "malformed Tag value")
+type transportParameterID uint16
+
+const (
+	originalConnectionIDParameterID           transportParameterID = 0x0
+	idleTimeoutParameterID                    transportParameterID = 0x1
+	statelessResetTokenParameterID            transportParameterID = 0x2
+	maxPacketSizeParameterID                  transportParameterID = 0x3
+	initialMaxDataParameterID                 transportParameterID = 0x4
+	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x5
+	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0x6
+	initialMaxStreamDataUniParameterID        transportParameterID = 0x7
+	initialMaxStreamsBidiParameterID          transportParameterID = 0x8
+	initialMaxStreamsUniParameterID           transportParameterID = 0x9
+	disableMigrationParameterID               transportParameterID = 0xc
+)
 
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
-	StreamFlowControlWindow     protocol.ByteCount
-	ConnectionFlowControlWindow protocol.ByteCount
+	InitialMaxStreamDataBidiLocal  protocol.ByteCount
+	InitialMaxStreamDataBidiRemote protocol.ByteCount
+	InitialMaxStreamDataUni        protocol.ByteCount
+	InitialMaxData                 protocol.ByteCount
 
-	MaxStreams uint32
+	MaxPacketSize protocol.ByteCount
 
-	OmitConnectionID bool
+	MaxUniStreams  uint64
+	MaxBidiStreams uint64
+
 	IdleTimeout      time.Duration
+	DisableMigration bool
+
+	StatelessResetToken  []byte
+	OriginalConnectionID protocol.ConnectionID
 }
 
-// readHelloMap reads the transport parameters from the tags sent in a gQUIC handshake message
-func readHelloMap(tags map[Tag][]byte) (*TransportParameters, error) {
-	params := &TransportParameters{}
-	if value, ok := tags[TagTCID]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
+func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective) error {
+	// needed to check that every parameter is only sent at most once
+	var parameterIDs []transportParameterID
+
+	r := bytes.NewReader(data)
+	for r.Len() >= 4 {
+		paramIDInt, _ := utils.BigEndian.ReadUint16(r)
+		paramID := transportParameterID(paramIDInt)
+		paramLen, _ := utils.BigEndian.ReadUint16(r)
+		parameterIDs = append(parameterIDs, paramID)
+		switch paramID {
+		case initialMaxStreamDataBidiLocalParameterID,
+			initialMaxStreamDataBidiRemoteParameterID,
+			initialMaxStreamDataUniParameterID,
+			initialMaxDataParameterID,
+			initialMaxStreamsBidiParameterID,
+			initialMaxStreamsUniParameterID,
+			idleTimeoutParameterID,
+			maxPacketSizeParameterID:
+			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
+				return err
+			}
+		default:
+			if r.Len() < int(paramLen) {
+				return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
+			}
+			switch paramID {
+			case disableMigrationParameterID:
+				if paramLen != 0 {
+					return fmt.Errorf("wrong length for disable_migration: %d (expected empty)", paramLen)
+				}
+				p.DisableMigration = true
+			case statelessResetTokenParameterID:
+				if sentBy == protocol.PerspectiveClient {
+					return errors.New("client sent a stateless_reset_token")
+				}
+				if paramLen != 16 {
+					return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
+				}
+				b := make([]byte, 16)
+				r.Read(b)
+				p.StatelessResetToken = b
+			case originalConnectionIDParameterID:
+				if sentBy == protocol.PerspectiveClient {
+					return errors.New("client sent an original_connection_id")
+				}
+				p.OriginalConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+			default:
+				r.Seek(int64(paramLen), io.SeekCurrent)
+			}
 		}
-		params.OmitConnectionID = (v == 0)
 	}
-	if value, ok := tags[TagMIDS]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
+
+	// check that every transport parameter was sent at most once
+	sort.Slice(parameterIDs, func(i, j int) bool { return parameterIDs[i] < parameterIDs[j] })
+	for i := 0; i < len(parameterIDs)-1; i++ {
+		if parameterIDs[i] == parameterIDs[i+1] {
+			return fmt.Errorf("received duplicate transport parameter %#x", parameterIDs[i])
 		}
-		params.MaxStreams = v
 	}
-	if value, ok := tags[TagICSL]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(v)*time.Second)
+
+	if r.Len() != 0 {
+		return fmt.Errorf("should have read all data. Still have %d bytes", r.Len())
 	}
-	if value, ok := tags[TagSFCW]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.StreamFlowControlWindow = protocol.ByteCount(v)
-	}
-	if value, ok := tags[TagCFCW]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.ConnectionFlowControlWindow = protocol.ByteCount(v)
-	}
-	return params, nil
+	return nil
 }
 
-// GetHelloMap gets all parameters needed for the Hello message in the gQUIC handshake.
-func (p *TransportParameters) getHelloMap() map[Tag][]byte {
-	sfcw := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(sfcw, uint32(p.StreamFlowControlWindow))
-	cfcw := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(cfcw, uint32(p.ConnectionFlowControlWindow))
-	mids := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(mids, p.MaxStreams)
-	icsl := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(icsl, uint32(p.IdleTimeout/time.Second))
-
-	tags := map[Tag][]byte{
-		TagICSL: icsl.Bytes(),
-		TagMIDS: mids.Bytes(),
-		TagCFCW: cfcw.Bytes(),
-		TagSFCW: sfcw.Bytes(),
+func (p *TransportParameters) readNumericTransportParameter(
+	r *bytes.Reader,
+	paramID transportParameterID,
+	expectedLen int,
+) error {
+	remainingLen := r.Len()
+	val, err := utils.ReadVarInt(r)
+	if err != nil {
+		return fmt.Errorf("error while reading transport parameter %d: %s", paramID, err)
 	}
-	if p.OmitConnectionID {
-		tags[TagTCID] = []byte{0, 0, 0, 0}
+	if remainingLen-r.Len() != expectedLen {
+		return fmt.Errorf("inconsistent transport parameter length for %d", paramID)
 	}
-	return tags
-}
-
-// readTransportParameters reads the transport parameters sent in the QUIC TLS extension
-func readTransportParamters(paramsList []transportParameter) (*TransportParameters, error) {
-	params := &TransportParameters{}
-
-	var foundInitialMaxStreamData bool
-	var foundInitialMaxData bool
-	var foundInitialMaxStreamID bool
-	var foundIdleTimeout bool
-
-	for _, p := range paramsList {
-		switch p.Parameter {
-		case initialMaxStreamDataParameterID:
-			foundInitialMaxStreamData = true
-			if len(p.Value) != 4 {
-				return nil, fmt.Errorf("wrong length for initial_max_stream_data: %d (expected 4)", len(p.Value))
-			}
-			params.StreamFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
-		case initialMaxDataParameterID:
-			foundInitialMaxData = true
-			if len(p.Value) != 4 {
-				return nil, fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", len(p.Value))
-			}
-			params.ConnectionFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
-		case initialMaxStreamIDParameterID:
-			foundInitialMaxStreamID = true
-			if len(p.Value) != 4 {
-				return nil, fmt.Errorf("wrong length for initial_max_stream_id: %d (expected 4)", len(p.Value))
-			}
-			// TODO: handle this value
-		case idleTimeoutParameterID:
-			foundIdleTimeout = true
-			if len(p.Value) != 2 {
-				return nil, fmt.Errorf("wrong length for idle_timeout: %d (expected 2)", len(p.Value))
-			}
-			params.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(binary.BigEndian.Uint16(p.Value))*time.Second)
-		case omitConnectionIDParameterID:
-			if len(p.Value) != 0 {
-				return nil, fmt.Errorf("wrong length for omit_connection_id: %d (expected empty)", len(p.Value))
-			}
-			params.OmitConnectionID = true
+	switch paramID {
+	case initialMaxStreamDataBidiLocalParameterID:
+		p.InitialMaxStreamDataBidiLocal = protocol.ByteCount(val)
+	case initialMaxStreamDataBidiRemoteParameterID:
+		p.InitialMaxStreamDataBidiRemote = protocol.ByteCount(val)
+	case initialMaxStreamDataUniParameterID:
+		p.InitialMaxStreamDataUni = protocol.ByteCount(val)
+	case initialMaxDataParameterID:
+		p.InitialMaxData = protocol.ByteCount(val)
+	case initialMaxStreamsBidiParameterID:
+		p.MaxBidiStreams = val
+	case initialMaxStreamsUniParameterID:
+		p.MaxUniStreams = val
+	case idleTimeoutParameterID:
+		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Second)
+	case maxPacketSizeParameterID:
+		if val < 1200 {
+			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
 		}
+		p.MaxPacketSize = protocol.ByteCount(val)
+	default:
+		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
-
-	if !(foundInitialMaxStreamData && foundInitialMaxData && foundInitialMaxStreamID && foundIdleTimeout) {
-		return nil, errors.New("missing parameter")
-	}
-	return params, nil
+	return nil
 }
 
-// GetTransportParameters gets the parameters needed for the TLS handshake.
-func (p *TransportParameters) getTransportParameters() []transportParameter {
-	initialMaxStreamData := make([]byte, 4)
-	binary.BigEndian.PutUint32(initialMaxStreamData, uint32(p.StreamFlowControlWindow))
-	initialMaxData := make([]byte, 4)
-	binary.BigEndian.PutUint32(initialMaxData, uint32(p.ConnectionFlowControlWindow))
-	initialMaxStreamID := make([]byte, 4)
-	// TODO: use a reasonable value here
-	binary.BigEndian.PutUint32(initialMaxStreamID, math.MaxUint32)
-	idleTimeout := make([]byte, 2)
-	binary.BigEndian.PutUint16(idleTimeout, uint16(p.IdleTimeout/time.Second))
-	maxPacketSize := make([]byte, 2)
-	binary.BigEndian.PutUint16(maxPacketSize, uint16(protocol.MaxReceivePacketSize))
-	params := []transportParameter{
-		{initialMaxStreamDataParameterID, initialMaxStreamData},
-		{initialMaxDataParameterID, initialMaxData},
-		{initialMaxStreamIDParameterID, initialMaxStreamID},
-		{idleTimeoutParameterID, idleTimeout},
-		{maxPacketSizeParameterID, maxPacketSize},
+func (p *TransportParameters) marshal(b *bytes.Buffer) {
+	// initial_max_stream_data_bidi_local
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiLocalParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataBidiLocal))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxStreamDataBidiLocal))
+	// initial_max_stream_data_bidi_remote
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiRemoteParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataBidiRemote))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxStreamDataBidiRemote))
+	// initial_max_stream_data_uni
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataUniParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataUni))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxStreamDataUni))
+	// initial_max_data
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxDataParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxData))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxData))
+	// initial_max_bidi_streams
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamsBidiParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxBidiStreams)))
+	utils.WriteVarInt(b, p.MaxBidiStreams)
+	// initial_max_uni_streams
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamsUniParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxUniStreams)))
+	utils.WriteVarInt(b, p.MaxUniStreams)
+	// idle_timeout
+	utils.BigEndian.WriteUint16(b, uint16(idleTimeoutParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.IdleTimeout/time.Second))))
+	utils.WriteVarInt(b, uint64(p.IdleTimeout/time.Second))
+	// max_packet_size
+	utils.BigEndian.WriteUint16(b, uint16(maxPacketSizeParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(protocol.MaxReceivePacketSize))))
+	utils.WriteVarInt(b, uint64(protocol.MaxReceivePacketSize))
+	// disable_migration
+	if p.DisableMigration {
+		utils.BigEndian.WriteUint16(b, uint16(disableMigrationParameterID))
+		utils.BigEndian.WriteUint16(b, 0)
 	}
-	if p.OmitConnectionID {
-		params = append(params, transportParameter{omitConnectionIDParameterID, []byte{}})
+	if len(p.StatelessResetToken) > 0 {
+		utils.BigEndian.WriteUint16(b, uint16(statelessResetTokenParameterID))
+		utils.BigEndian.WriteUint16(b, uint16(len(p.StatelessResetToken))) // should always be 16 bytes
+		b.Write(p.StatelessResetToken)
 	}
-	return params
+	// original_connection_id
+	if p.OriginalConnectionID.Len() > 0 {
+		utils.BigEndian.WriteUint16(b, uint16(originalConnectionIDParameterID))
+		utils.BigEndian.WriteUint16(b, uint16(p.OriginalConnectionID.Len()))
+		b.Write(p.OriginalConnectionID.Bytes())
+	}
+}
+
+// String returns a string representation, intended for logging.
+func (p *TransportParameters) String() string {
+	return fmt.Sprintf("&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
 }

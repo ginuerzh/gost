@@ -1,0 +1,3 @@
+[submodule "vendor/github.com/shadowsocks/go-shadowsocks2"]
+	path = vendor/github.com/shadowsocks/go-shadowsocks2
+	url = https://github.com/shadowsocks/go-shadowsocks2.git

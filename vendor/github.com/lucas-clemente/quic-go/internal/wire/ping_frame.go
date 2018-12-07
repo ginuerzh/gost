@@ -6,28 +6,22 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
-// A PingFrame is a ping frame
+// A PingFrame is a PING frame
 type PingFrame struct{}
 
-// ParsePingFrame parses a Ping frame
-func ParsePingFrame(r *bytes.Reader, version protocol.VersionNumber) (*PingFrame, error) {
-	frame := &PingFrame{}
-
-	_, err := r.ReadByte()
-	if err != nil {
+func parsePingFrame(r *bytes.Reader, version protocol.VersionNumber) (*PingFrame, error) {
+	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
-
-	return frame, nil
+	return &PingFrame{}, nil
 }
 
 func (f *PingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	typeByte := uint8(0x07)
-	b.WriteByte(typeByte)
+	b.WriteByte(0x1)
 	return nil
 }
 
-// MinLength of a written frame
-func (f *PingFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return 1, nil
+// Length of a written frame
+func (f *PingFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+	return 1
 }

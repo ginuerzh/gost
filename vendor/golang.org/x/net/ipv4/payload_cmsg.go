@@ -2,14 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build !plan9,!windows
+// +build !js,!nacl,!plan9,!windows
 
 package ipv4
 
-import (
-	"net"
-	"syscall"
-)
+import "net"
 
 // ReadFrom reads a payload of the received IPv4 datagram, from the
 // endpoint c, copying the payload into b. It returns the number of
@@ -17,39 +14,9 @@ import (
 // src of the received datagram.
 func (c *payloadHandler) ReadFrom(b []byte) (n int, cm *ControlMessage, src net.Addr, err error) {
 	if !c.ok() {
-		return 0, nil, nil, syscall.EINVAL
+		return 0, nil, nil, errInvalidConn
 	}
-	oob := newControlMessage(&c.rawOpt)
-	var oobn int
-	switch c := c.PacketConn.(type) {
-	case *net.UDPConn:
-		if n, oobn, _, src, err = c.ReadMsgUDP(b, oob); err != nil {
-			return 0, nil, nil, err
-		}
-	case *net.IPConn:
-		if sockOpts[ssoStripHeader].name > 0 {
-			if n, oobn, _, src, err = c.ReadMsgIP(b, oob); err != nil {
-				return 0, nil, nil, err
-			}
-		} else {
-			nb := make([]byte, maxHeaderLen+len(b))
-			if n, oobn, _, src, err = c.ReadMsgIP(nb, oob); err != nil {
-				return 0, nil, nil, err
-			}
-			hdrlen := int(nb[0]&0x0f) << 2
-			copy(b, nb[hdrlen:])
-			n -= hdrlen
-		}
-	default:
-		return 0, nil, nil, errInvalidConnType
-	}
-	if cm, err = parseControlMessage(oob[:oobn]); err != nil {
-		return 0, nil, nil, err
-	}
-	if cm != nil {
-		cm.Src = netAddrToIP4(src)
-	}
-	return
+	return c.readFrom(b)
 }
 
 // WriteTo writes a payload of the IPv4 datagram, to the destination
@@ -60,22 +27,7 @@ func (c *payloadHandler) ReadFrom(b []byte) (n int, cm *ControlMessage, src net.
 // control of the outgoing datagram is not required.
 func (c *payloadHandler) WriteTo(b []byte, cm *ControlMessage, dst net.Addr) (n int, err error) {
 	if !c.ok() {
-		return 0, syscall.EINVAL
+		return 0, errInvalidConn
 	}
-	oob := marshalControlMessage(cm)
-	if dst == nil {
-		return 0, errMissingAddress
-	}
-	switch c := c.PacketConn.(type) {
-	case *net.UDPConn:
-		n, _, err = c.WriteMsgUDP(b, oob, dst.(*net.UDPAddr))
-	case *net.IPConn:
-		n, _, err = c.WriteMsgIP(b, oob, dst.(*net.IPAddr))
-	default:
-		return 0, errInvalidConnType
-	}
-	if err != nil {
-		return 0, err
-	}
-	return
+	return c.writeTo(b, cm, dst)
 }

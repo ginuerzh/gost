@@ -89,7 +89,7 @@ var httpProxyTests = []struct {
 	{"", url.UserPassword("", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, ""},
 	{"", url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("admin", "123456")}, ""},
 	{"", url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("user", "pass"), url.UserPassword("admin", "123456")}, ""},
-	{"http://:0", nil, nil, "503 Service unavailable"},
+	{"http://:0", nil, nil, "503 Service Unavailable"},
 }
 
 func TestHTTPProxy(t *testing.T) {

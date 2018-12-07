@@ -9,12 +9,34 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
+	core "github.com/shadowsocks/go-shadowsocks2/core"
+	socks "github.com/shadowsocks/go-shadowsocks2/socks"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
+
+// Check if shadowsocks2 should be used for AEAD encryption.
+func isModernCipher(c string) bool {
+	c = strings.ToUpper(c)
+	modern := strings.Contains(c, "AEAD_")
+	switch c {
+	case "DUMMY":
+		fallthrough
+	case "CHACHA20-IETF-POLY1305":
+		fallthrough
+	case "AES-128-GCM":
+		fallthrough
+	case "AES-192-GCM":
+		fallthrough
+	case "AES-256-GCM":
+		modern = true
+	}
+	return modern
+}
 
 // Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
 // we wrap around it to make io.Copy happy.
@@ -67,7 +89,7 @@ func ShadowConnector(cipher *url.Userinfo) Connector {
 	return &shadowConnector{Cipher: cipher}
 }
 
-func (c *shadowConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	rawaddr, err := ss.RawAddr(addr)
 	if err != nil {
 		return nil, err
@@ -79,16 +101,28 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string) (net.Conn, error) 
 		password, _ = c.Cipher.Password()
 	}
 
-	cipher, err := ss.NewCipher(method, password)
-	if err != nil {
-		return nil, err
-	}
+	if isModernCipher(method) {
+		cipher, err := core.PickCipher(method, []byte{}, password)
+		if err != nil {
+			return nil, err
+		}
+		conn = cipher.StreamConn(conn)
+		if _, err = conn.Write(rawaddr); err != nil {
+			return nil, err
+		}
+		return conn, nil
+	} else {
+		cipher, err := ss.NewCipher(method, password)
+		if err != nil {
+			return nil, err
+		}
 
-	sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
-	if err != nil {
-		return nil, err
+		sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
+		if err != nil {
+			return nil, err
+		}
+		return &shadowConn{conn: sc}, nil
 	}
-	return &shadowConn{conn: sc}, nil
 }
 
 type shadowHandler struct {
@@ -116,29 +150,53 @@ func (h *shadowHandler) Init(options ...HandlerOption) {
 func (h *shadowHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	var method, password string
+	var method, password, addr string
 	users := h.options.Users
 	if len(users) > 0 {
 		method = users[0].Username()
 		password, _ = users[0].Password()
 	}
-	cipher, err := ss.NewCipher(method, password)
-	if err != nil {
-		log.Log("[ss]", err)
-		return
-	}
-	conn = &shadowConn{conn: ss.NewConn(conn, cipher)}
 
-	log.Logf("[ss] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
+	if isModernCipher(method) {
+		//ss with aead
+		ciph, err := core.PickCipher(method, []byte{}, password)
+		if err != nil {
+			log.Log("[ss]", err)
+			return
+		}
 
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	addr, err := h.getRequest(conn)
-	if err != nil {
-		log.Logf("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
-		return
+		log.Logf("[ss] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
+
+		conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+		conn = ciph.StreamConn(conn)
+		tgt, err := socks.ReadAddr(conn)
+		if err != nil {
+			log.Logf("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+			return
+		}
+		// clear timer
+		conn.SetReadDeadline(time.Time{})
+		addr = tgt.String()
+	} else {
+		// outdated ss
+		cipher, err := ss.NewCipher(method, password)
+		if err != nil {
+			log.Log("[ss]", err)
+			return
+		}
+		conn = &shadowConn{conn: ss.NewConn(conn, cipher)}
+
+		log.Logf("[ss] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
+
+		conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+		addr, err = h.getRequest(conn)
+		if err != nil {
+			log.Logf("[ss] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+			return
+		}
+		// clear timer
+		conn.SetReadDeadline(time.Time{})
 	}
-	// clear timer
-	conn.SetReadDeadline(time.Time{})
 
 	log.Logf("[ss] %s -> %s", conn.RemoteAddr(), addr)
 
@@ -259,18 +317,38 @@ func ShadowUDPListener(addr string, cipher *url.Userinfo, ttl time.Duration) (Li
 		method = cipher.Username()
 		password, _ = cipher.Password()
 	}
-	cp, err := ss.NewCipher(method, password)
-	if err != nil {
-		ln.Close()
-		return nil, err
+
+	var l *shadowUDPListener = nil
+	if isModernCipher(method) {
+		//modern ss
+		cp, err := core.PickCipher(method, []byte{}, password)
+		if err != nil {
+			ln.Close()
+			return nil, err
+		}
+		l = &shadowUDPListener{
+			ln:       cp.PacketConn(ln),
+			conns:    make(map[string]*udpServerConn),
+			connChan: make(chan net.Conn, 1024),
+			errChan:  make(chan error, 1),
+			ttl:      ttl,
+		}
+	} else {
+		//ancient ss
+		cp, err := ss.NewCipher(method, password)
+		if err != nil {
+			ln.Close()
+			return nil, err
+		}
+		l = &shadowUDPListener{
+			ln:       ss.NewSecurePacketConn(ln, cp, false),
+			conns:    make(map[string]*udpServerConn),
+			connChan: make(chan net.Conn, 1024),
+			errChan:  make(chan error, 1),
+			ttl:      ttl,
+		}
 	}
-	l := &shadowUDPListener{
-		ln:       ss.NewSecurePacketConn(ln, cp, false),
-		conns:    make(map[string]*udpServerConn),
-		connChan: make(chan net.Conn, 1024),
-		errChan:  make(chan error, 1),
-		ttl:      ttl,
-	}
+
 	go l.listenLoop()
 	return l, nil
 }

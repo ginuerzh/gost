@@ -26,13 +26,12 @@ func PeriodReload(r Reloader, configFile string) error {
 
 		finfo, err := f.Stat()
 		if err != nil {
+			f.Close()
 			return err
 		}
 		mt := finfo.ModTime()
 		if !mt.Equal(lastMod) {
-			if Debug {
-				log.Log("[reload]", configFile)
-			}
+			log.Log("[reload]", configFile)
 			r.Reload(f)
 			lastMod = mt
 		}

@@ -20,18 +20,19 @@ type Handler interface {
 
 // HandlerOptions describes the options for Handler.
 type HandlerOptions struct {
-	Addr      string
-	Chain     *Chain
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
-	Whitelist *Permissions
-	Blacklist *Permissions
-	Strategy  Strategy
-	Bypass    *Bypass
-	Retries   int
-	Timeout   time.Duration
-	Resolver  Resolver
-	Hosts     *Hosts
+	Addr        string
+	Chain       *Chain
+	Users       []*url.Userinfo
+	TLSConfig   *tls.Config
+	Whitelist   *Permissions
+	Blacklist   *Permissions
+	Strategy    Strategy
+	Bypass      *Bypass
+	Retries     int
+	Timeout     time.Duration
+	Resolver    Resolver
+	Hosts       *Hosts
+	ProbeResist string
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -121,6 +122,13 @@ func HostsHandlerOption(hosts *Hosts) HandlerOption {
 	}
 }
 
+// ProbeResistHandlerOption adds the probe resistance for HTTP proxy.
+func ProbeResistHandlerOption(pr string) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.ProbeResist = pr
+	}
+}
+
 type autoHandler struct {
 	options *HandlerOptions
 }
@@ -145,7 +153,7 @@ func (h *autoHandler) Handle(conn net.Conn) {
 	br := bufio.NewReader(conn)
 	b, err := br.Peek(1)
 	if err != nil {
-		log.Log(err)
+		log.Logf("[auto] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		conn.Close()
 		return
 	}

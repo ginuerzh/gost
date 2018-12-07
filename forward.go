@@ -22,7 +22,7 @@ func ForwardConnector() Connector {
 	return &forwardConnector{}
 }
 
-func (c *forwardConnector) Connect(conn net.Conn, addr string) (net.Conn, error) {
+func (c *forwardConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
 	return conn, nil
 }
 
@@ -41,6 +41,9 @@ func TCPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		group: NewNodeGroup(),
 	}
 
+	if raddr == "" {
+		raddr = ":0" // dummy address
+	}
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
 			continue
@@ -104,7 +107,7 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 		)
 		if err != nil {
 			log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), node.Addr, err)
-			node.MarkDead()
+			node.group.MarkDeadNode(node.ID)
 		} else {
 			break
 		}
@@ -113,7 +116,7 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	node.ResetDead()
+	node.group.ResetDeadNode(node.ID)
 	defer cc.Close()
 
 	log.Logf("[tcp] %s <-> %s", conn.RemoteAddr(), node.Addr)
@@ -136,6 +139,9 @@ func UDPDirectForwardHandler(raddr string, opts ...HandlerOption) Handler {
 		group: NewNodeGroup(),
 	}
 
+	if raddr == "" {
+		raddr = ":0" // dummy address
+	}
 	for i, addr := range strings.Split(raddr, ",") {
 		if addr == "" {
 			continue
@@ -185,13 +191,13 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 	if h.options.Chain.IsEmpty() {
 		raddr, err := net.ResolveUDPAddr("udp", node.Addr)
 		if err != nil {
-			node.MarkDead()
+			node.group.MarkDeadNode(node.ID)
 			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
 		cc, err = net.DialUDP("udp", nil, raddr)
 		if err != nil {
-			node.MarkDead()
+			node.group.MarkDeadNode(node.ID)
 			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
@@ -206,7 +212,7 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 	}
 
 	defer cc.Close()
-	node.ResetDead()
+	node.group.ResetDeadNode(node.ID)
 
 	log.Logf("[udp] %s <-> %s", conn.RemoteAddr(), node.Addr)
 	transport(conn, cc)
@@ -285,7 +291,7 @@ func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
 		cc, err = net.DialTimeout("tcp", node.Addr, h.options.Timeout)
 		if err != nil {
 			log.Logf("[rtcp] %s -> %s : %s", conn.LocalAddr(), node.Addr, err)
-			node.MarkDead()
+			node.group.MarkDeadNode(node.ID)
 		} else {
 			break
 		}
@@ -295,7 +301,7 @@ func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
 	}
 
 	defer cc.Close()
-	node.ResetDead()
+	node.group.ResetDeadNode(node.ID)
 
 	log.Logf("[rtcp] %s <-> %s", conn.LocalAddr(), node.Addr)
 	transport(cc, conn)
@@ -363,18 +369,18 @@ func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {
 
 	raddr, err := net.ResolveUDPAddr("udp", node.Addr)
 	if err != nil {
-		node.MarkDead()
+		node.group.MarkDeadNode(node.ID)
 		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 		return
 	}
 	cc, err := net.DialUDP("udp", nil, raddr)
 	if err != nil {
-		node.MarkDead()
+		node.group.MarkDeadNode(node.ID)
 		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 		return
 	}
 	defer cc.Close()
-	node.ResetDead()
+	node.group.ResetDeadNode(node.ID)
 
 	log.Logf("[rudp] %s <-> %s", conn.RemoteAddr(), node.Addr)
 	transport(conn, cc)

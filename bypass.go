@@ -124,7 +124,7 @@ type Bypass struct {
 	matchers []Matcher
 	reversed bool
 	period   time.Duration // the period for live reloading
-	mux      sync.Mutex
+	mux      sync.RWMutex
 }
 
 // NewBypass creates and initializes a new Bypass using matchers as its match rules.
@@ -160,8 +160,8 @@ func (bp *Bypass) Contains(addr string) bool {
 		}
 	}
 
-	bp.mux.Lock()
-	defer bp.mux.Unlock()
+	bp.mux.RLock()
+	defer bp.mux.RUnlock()
 
 	var matched bool
 	for _, matcher := range bp.matchers {
@@ -179,22 +179,33 @@ func (bp *Bypass) Contains(addr string) bool {
 
 // AddMatchers appends matchers to the bypass matcher list.
 func (bp *Bypass) AddMatchers(matchers ...Matcher) {
+	bp.mux.Lock()
+	defer bp.mux.Unlock()
+
 	bp.matchers = append(bp.matchers, matchers...)
 }
 
 // Matchers return the bypass matcher list.
 func (bp *Bypass) Matchers() []Matcher {
+	bp.mux.RLock()
+	defer bp.mux.RUnlock()
+
 	return bp.matchers
 }
 
 // Reversed reports whether the rules of the bypass are reversed.
 func (bp *Bypass) Reversed() bool {
+	bp.mux.RLock()
+	defer bp.mux.RUnlock()
+
 	return bp.reversed
 }
 
 // Reload parses config from r, then live reloads the bypass.
 func (bp *Bypass) Reload(r io.Reader) error {
 	var matchers []Matcher
+	var period time.Duration
+	var reversed bool
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -217,7 +228,7 @@ func (bp *Bypass) Reload(r io.Reader) error {
 				}
 			}
 			if len(ss) == 2 {
-				bp.period, _ = time.ParseDuration(ss[1])
+				period, _ = time.ParseDuration(ss[1])
 				continue
 			}
 		}
@@ -231,7 +242,7 @@ func (bp *Bypass) Reload(r io.Reader) error {
 				}
 			}
 			if len(ss) == 2 {
-				bp.reversed, _ = strconv.ParseBool(ss[1])
+				reversed, _ = strconv.ParseBool(ss[1])
 				continue
 			}
 		}
@@ -247,19 +258,28 @@ func (bp *Bypass) Reload(r io.Reader) error {
 	defer bp.mux.Unlock()
 
 	bp.matchers = matchers
+	bp.period = period
+	bp.reversed = reversed
 
 	return nil
 }
 
 // Period returns the reload period
 func (bp *Bypass) Period() time.Duration {
+	bp.mux.RLock()
+	defer bp.mux.RUnlock()
+
 	return bp.period
 }
 
 func (bp *Bypass) String() string {
+	bp.mux.RLock()
+	defer bp.mux.RUnlock()
+
 	b := &bytes.Buffer{}
-	fmt.Fprintf(b, "reversed: %v\n", bp.Reversed())
-	for _, m := range bp.Matchers() {
+	fmt.Fprintf(b, "reversed: %v\n", bp.reversed)
+	fmt.Fprintf(b, "reload: %v\n", bp.period)
+	for _, m := range bp.matchers {
 		b.WriteString(m.String())
 		b.WriteByte('\n')
 	}

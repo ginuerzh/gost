@@ -3,7 +3,6 @@ package gost
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-log/log"
+	"github.com/miekg/dns"
 )
 
 var (
@@ -46,14 +46,13 @@ type NameServer struct {
 func (ns NameServer) String() string {
 	addr := ns.Addr
 	prot := ns.Protocol
-	host := ns.Hostname
 	if _, port, _ := net.SplitHostPort(addr); port == "" {
 		addr = net.JoinHostPort(addr, "53")
 	}
 	if prot == "" {
 		prot = "udp"
 	}
-	return fmt.Sprintf("%s/%s %s", addr, prot, host)
+	return fmt.Sprintf("%s/%s", addr, prot)
 }
 
 type resolverCacheItem struct {
@@ -68,6 +67,8 @@ type resolver struct {
 	Timeout  time.Duration
 	TTL      time.Duration
 	period   time.Duration
+	domain   string
+	mux      sync.RWMutex
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
@@ -78,95 +79,116 @@ func NewResolver(timeout, ttl time.Duration, servers ...NameServer) ReloadResolv
 		TTL:     ttl,
 		mCache:  &sync.Map{},
 	}
-	r.init()
-	return r
-}
 
-func (r *resolver) init() {
 	if r.Timeout <= 0 {
 		r.Timeout = DefaultResolverTimeout
 	}
 	if r.TTL == 0 {
 		r.TTL = DefaultResolverTTL
 	}
-
-	r.Resolver = &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, address string) (conn net.Conn, err error) {
-			for _, ns := range r.Servers {
-				conn, err = r.dial(ctx, ns)
-				if err == nil {
-					break
-				}
-				log.Logf("[resolver] %s : %s", ns, err)
-			}
-			return
-		},
-	}
+	return r
 }
 
-func (r *resolver) dial(ctx context.Context, ns NameServer) (net.Conn, error) {
-	var d net.Dialer
+func (r *resolver) copyServers() []NameServer {
+	var servers []NameServer
+	for i := range r.Servers {
+		servers = append(servers, r.Servers[i])
+	}
 
+	return servers
+}
+
+func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
+	if r == nil {
+		return
+	}
+
+	var domain string
+	var timeout, ttl time.Duration
+	var servers []NameServer
+
+	r.mux.RLock()
+	domain = r.domain
+	timeout = r.Timeout
+	servers = r.copyServers()
+	r.mux.RUnlock()
+
+	if ip := net.ParseIP(host); ip != nil {
+		return []net.IP{ip}, nil
+	}
+
+	if !strings.Contains(host, ".") && domain != "" {
+		host = host + "." + domain
+	}
+	ips = r.loadCache(host, ttl)
+	if len(ips) > 0 {
+		if Debug {
+			log.Logf("[resolver] cache hit %s: %v", host, ips)
+		}
+		return
+	}
+
+	for _, ns := range servers {
+		ips, err = r.resolve(ns, host, timeout)
+		if err != nil {
+			log.Logf("[resolver] %s via %s : %s", host, ns, err)
+			continue
+		}
+
+		if Debug {
+			log.Logf("[resolver] %s via %s %v", host, ns, ips)
+		}
+		if len(ips) > 0 {
+			break
+		}
+	}
+
+	r.storeCache(host, ips)
+	return
+}
+
+func (*resolver) resolve(ns NameServer, host string, timeout time.Duration) (ips []net.IP, err error) {
 	addr := ns.Addr
 	if _, port, _ := net.SplitHostPort(addr); port == "" {
 		addr = net.JoinHostPort(addr, "53")
 	}
+
+	client := dns.Client{
+		Timeout: timeout,
+	}
 	switch strings.ToLower(ns.Protocol) {
 	case "tcp":
-		return d.DialContext(ctx, "tcp", addr)
+		client.Net = "tcp"
 	case "tls":
-		conn, err := d.DialContext(ctx, "tcp", addr)
-		if err != nil {
-			return nil, err
-		}
 		cfg := &tls.Config{
 			ServerName: ns.Hostname,
 		}
 		if cfg.ServerName == "" {
 			cfg.InsecureSkipVerify = true
 		}
-		return tls.Client(conn, cfg), nil
+		client.Net = "tcp-tls"
+		client.TLSConfig = cfg
 	case "udp":
 		fallthrough
 	default:
-		return d.DialContext(ctx, "udp", addr)
+		client.Net = "udp"
 	}
-}
 
-func (r *resolver) Resolve(name string) (ips []net.IP, err error) {
-	if r == nil {
+	m := dns.Msg{}
+	m.SetQuestion(dns.Fqdn(host), dns.TypeA)
+	mr, _, err := client.Exchange(&m, addr)
+	if err != nil {
 		return
 	}
-	timeout := r.Timeout
-
-	if ip := net.ParseIP(name); ip != nil {
-		return []net.IP{ip}, nil
-	}
-
-	ips = r.loadCache(name)
-	if len(ips) > 0 {
-		if Debug {
-			log.Logf("[resolver] cache hit: %s %v", name, ips)
+	for _, ans := range mr.Answer {
+		if ar, _ := ans.(*dns.A); ar != nil {
+			ips = append(ips, ar.A)
 		}
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	addrs, err := r.Resolver.LookupIPAddr(ctx, name)
-	for _, addr := range addrs {
-		ips = append(ips, addr.IP)
-	}
-	r.storeCache(name, ips)
-	if len(ips) > 0 && Debug {
-		log.Logf("[resolver] %s %v", name, ips)
 	}
 	return
 }
 
-func (r *resolver) loadCache(name string) []net.IP {
-	ttl := r.TTL
+func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
 	if ttl < 0 {
 		return nil
 	}
@@ -183,8 +205,7 @@ func (r *resolver) loadCache(name string) []net.IP {
 }
 
 func (r *resolver) storeCache(name string, ips []net.IP) {
-	ttl := r.TTL
-	if ttl < 0 || name == "" || len(ips) == 0 {
+	if name == "" || len(ips) == 0 {
 		return
 	}
 	r.mCache.Store(name, &resolverCacheItem{
@@ -194,73 +215,99 @@ func (r *resolver) storeCache(name string, ips []net.IP) {
 }
 
 func (r *resolver) Reload(rd io.Reader) error {
+	var ttl, timeout, period time.Duration
+	var domain string
 	var nss []NameServer
 
-	scanner := bufio.NewScanner(rd)
-	for scanner.Scan() {
-		line := scanner.Text()
+	split := func(line string) []string {
+		if line == "" {
+			return nil
+		}
 		if n := strings.IndexByte(line, '#'); n >= 0 {
 			line = line[:n]
 		}
 		line = strings.Replace(line, "\t", " ", -1)
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+
 		var ss []string
 		for _, s := range strings.Split(line, " ") {
 			if s = strings.TrimSpace(s); s != "" {
 				ss = append(ss, s)
 			}
 		}
+		return ss
+	}
 
+	scanner := bufio.NewScanner(rd)
+	for scanner.Scan() {
+		line := scanner.Text()
+		ss := split(line)
 		if len(ss) == 0 {
 			continue
 		}
 
-		if len(ss) >= 2 {
-			// timeout option
-			if strings.ToLower(ss[0]) == "timeout" {
-				r.Timeout, _ = time.ParseDuration(ss[1])
-				continue
+		switch ss[0] {
+		case "timeout": // timeout option
+			if len(ss) > 1 {
+				timeout, _ = time.ParseDuration(ss[1])
 			}
-
-			// ttl option
-			if strings.ToLower(ss[0]) == "ttl" {
-				r.TTL, _ = time.ParseDuration(ss[1])
-				continue
+		case "ttl": // ttl option
+			if len(ss) > 1 {
+				ttl, _ = time.ParseDuration(ss[1])
 			}
-
-			// reload option
-			if strings.ToLower(ss[0]) == "reload" {
-				r.period, _ = time.ParseDuration(ss[1])
-				continue
+		case "reload": // reload option
+			if len(ss) > 1 {
+				period, _ = time.ParseDuration(ss[1])
 			}
-		}
-
-		var ns NameServer
-		switch len(ss) {
-		case 1:
-			ns.Addr = ss[0]
-		case 2:
-			ns.Addr = ss[0]
-			ns.Protocol = ss[1]
+		case "domain":
+			if len(ss) > 1 {
+				domain = ss[1]
+			}
+		case "search", "sortlist", "options": // we don't support these features in /etc/resolv.conf
+		case "nameserver": // nameserver option, compatible with /etc/resolv.conf
+			if len(ss) <= 1 {
+				break
+			}
+			ss = ss[1:]
+			fallthrough
 		default:
-			ns.Addr = ss[0]
-			ns.Protocol = ss[1]
-			ns.Hostname = ss[2]
+			var ns NameServer
+			switch len(ss) {
+			case 0:
+				break
+			case 1:
+				ns.Addr = ss[0]
+			case 2:
+				ns.Addr = ss[0]
+				ns.Protocol = ss[1]
+			default:
+				ns.Addr = ss[0]
+				ns.Protocol = ss[1]
+				ns.Hostname = ss[2]
+			}
+			nss = append(nss, ns)
 		}
-		nss = append(nss, ns)
 	}
+
 	if err := scanner.Err(); err != nil {
 		return err
 	}
 
+	r.mux.Lock()
+	r.Timeout = timeout
+	r.TTL = ttl
+	r.domain = domain
+	r.period = period
 	r.Servers = nss
+	r.mux.Unlock()
+
 	return nil
 }
 
 func (r *resolver) Period() time.Duration {
+	r.mux.RLock()
+	defer r.mux.RUnlock()
+
 	return r.period
 }
 
@@ -268,6 +315,9 @@ func (r *resolver) String() string {
 	if r == nil {
 		return ""
 	}
+
+	r.mux.RLock()
+	defer r.mux.RUnlock()
 
 	b := &bytes.Buffer{}
 	fmt.Fprintf(b, "Timeout %v\n", r.Timeout)
