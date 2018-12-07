@@ -4,7 +4,6 @@ require (
 	git.torproject.org/pluggable-transports/goptlib.git v0.0.0-20180321061416-7d56ec4f381e
 	git.torproject.org/pluggable-transports/obfs4.git v0.0.0-20181103133120-08f4d470188e
 	github.com/Yawning/chacha20 v0.0.0-20170904085104-e3b1f968fc63 // indirect
-	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/dchest/siphash v1.2.1 // indirect
@@ -16,7 +15,6 @@ require (
 	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/klauspost/compress v1.4.1
 	github.com/klauspost/cpuid v1.2.0 // indirect
-	github.com/klauspost/crc32 v1.2.0 // indirect
 	github.com/klauspost/reedsolomon v1.7.0 // indirect
 	github.com/lucas-clemente/aes12 v0.0.0-20171027163421-cd47fb39b79f // indirect
 	github.com/lucas-clemente/quic-go v0.10.0
