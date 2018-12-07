@@ -227,8 +227,6 @@ func (c *Chain) getConn(addr string) (conn net.Conn, err error) {
 		return
 	}
 
-	node.group.ResetDeadNode(node.ID)
-
 	if len(nodes) > 1 {
 		node.group.ResetDeadNode(node.ID) // don't reset the last node as we are going to check if it will connect successfully.
 	}
