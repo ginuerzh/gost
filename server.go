@@ -12,6 +12,7 @@ import (
 // Server is a proxy server.
 type Server struct {
 	Listener Listener
+	Handler  Handler
 	options  *ServerOptions
 }
 
@@ -45,6 +46,10 @@ func (s *Server) Serve(h Handler, opts ...ServerOption) error {
 			return err
 		}
 		s.Listener = ln
+	}
+
+	if h == nil {
+		h = s.Handler
 	}
 	if h == nil {
 		h = HTTPHandler()
@@ -82,6 +87,11 @@ func (s *Server) Serve(h Handler, opts ...ServerOption) error {
 
 		go h.Handle(conn)
 	}
+}
+
+// Run starts to serve.
+func (s *Server) Run() error {
+	return s.Serve(s.Handler)
 }
 
 // ServerOptions holds the options for Server.

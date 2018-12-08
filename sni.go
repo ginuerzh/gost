@@ -93,7 +93,7 @@ func (h *sniHandler) Handle(conn net.Conn) {
 
 	host = net.JoinHostPort(host, "443")
 
-	log.Logf("[ss] %s -> %s -> %s",
+	log.Logf("[sni] %s -> %s -> %s",
 		conn.RemoteAddr(), h.options.Node.String(), host)
 
 	if !Can("tcp", host, h.options.Whitelist, h.options.Blacklist) {
