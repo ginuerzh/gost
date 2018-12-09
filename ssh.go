@@ -252,6 +252,7 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 		Timeout:         opts.Timeout,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
+	// TODO: support pubkey auth.
 	if opts.User != nil {
 		config.User = opts.User.Username()
 		password, _ := opts.User.Password()
@@ -847,13 +848,13 @@ func (c *sshConn) RemoteAddr() net.Addr {
 }
 
 func (c *sshConn) SetDeadline(t time.Time) error {
-	return nil
+	return c.conn.SetDeadline(t)
 }
 
 func (c *sshConn) SetReadDeadline(t time.Time) error {
-	return nil
+	return c.conn.SetReadDeadline(t)
 }
 
 func (c *sshConn) SetWriteDeadline(t time.Time) error {
-	return nil
+	return c.conn.SetWriteDeadline(t)
 }

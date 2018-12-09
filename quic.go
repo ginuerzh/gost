@@ -21,7 +21,7 @@ type quicSession struct {
 }
 
 func (session *quicSession) GetConn() (*quicConn, error) {
-	stream, err := session.session.OpenStream()
+	stream, err := session.session.OpenStreamSync()
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +130,10 @@ func (tr *quicTransporter) initSession(addr string, conn net.Conn, config *QUICC
 		HandshakeTimeout: config.Timeout,
 		KeepAlive:        config.KeepAlive,
 		IdleTimeout:      config.IdleTimeout,
+		Versions: []quic.VersionNumber{
+			quic.VersionGQUIC43,
+			quic.VersionGQUIC39,
+		},
 	}
 	session, err := quic.Dial(udpConn, udpAddr, addr, config.TLSConfig, quicConfig)
 	if err != nil {

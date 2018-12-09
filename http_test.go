@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,42 +17,43 @@ import (
 	"time"
 )
 
+func init() {
+	// SetLogger(&LogLogger{})
+	// Debug = true
+	cert, err := GenCertificate()
+	if err != nil {
+		panic(err)
+	}
+	DefaultTLSConfig = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+}
+
 var httpTestHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, r.Body)
 })
 
-func proxyRoundtrip(client *Client, server *Server, targetURL string, data []byte) (err error) {
+// proxyConn obtains a connection to the proxy server.
+func proxyConn(client *Client, server *Server) (net.Conn, error) {
 	conn, err := client.Dial(server.Addr().String())
 	if err != nil {
-		return
-	}
-	defer conn.Close()
-
-	conn.SetDeadline(time.Now().Add(1 * time.Second))
-
-	conn, err = client.Handshake(conn)
-	if err != nil {
-		return
-	}
-	u, err := url.Parse(targetURL)
-	if err != nil {
-		return
-	}
-	conn, err = client.Connect(conn, u.Host)
-	if err != nil {
-		return
+		return nil, err
 	}
 
-	if u.Scheme == "https" {
-		conn = tls.Client(conn,
-			&tls.Config{
-				InsecureSkipVerify: true,
-			})
-		u.Scheme = "http"
+	cc, err := client.Handshake(conn, AddrHandshakeOption(server.Addr().String()))
+	if err != nil {
+		conn.Close()
+		return nil, err
 	}
+
+	return cc, nil
+}
+
+// httpRoundtrip does a HTTP request-response roundtrip, and checks the data received.
+func httpRoundtrip(conn net.Conn, targetURL string, data []byte) (err error) {
 	req, err := http.NewRequest(
 		http.MethodGet,
-		u.String(),
+		targetURL,
 		bytes.NewReader(data),
 	)
 	if err != nil {
@@ -78,8 +80,30 @@ func proxyRoundtrip(client *Client, server *Server, targetURL string, data []byt
 	if !bytes.Equal(data, recv) {
 		return fmt.Errorf("data not equal")
 	}
-
 	return
+}
+
+func proxyRoundtrip(client *Client, server *Server, targetURL string, data []byte) (err error) {
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return
+	}
+
+	conn.SetDeadline(time.Now().Add(1 * time.Second))
+	defer conn.SetDeadline(time.Time{})
+
+	conn, err = client.Connect(conn, u.Host)
+	if err != nil {
+		return
+	}
+
+	return httpRoundtrip(conn, targetURL, data)
 }
 
 var httpProxyTests = []struct {

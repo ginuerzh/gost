@@ -2,24 +2,23 @@ package gost
 
 import (
 	"crypto/rand"
-	"crypto/tls"
 	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 )
 
-func httpOverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
+func httpOverWSRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := TLSListener("", tlsConfig)
+	ln, err := WSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(clientInfo),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -35,7 +34,7 @@ func httpOverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestHTTPOverTLS(t *testing.T) {
+func TestHTTPOverWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -45,7 +44,7 @@ func TestHTTPOverTLS(t *testing.T) {
 	for i, tc := range httpProxyTests {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpOverTLSRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
+			err := httpOverWSRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
 			if err == nil {
 				if tc.errStr != "" {
 					t.Errorf("#%d should failed with error %s", i, tc.errStr)
@@ -62,21 +61,21 @@ func TestHTTPOverTLS(t *testing.T) {
 	}
 }
 
-func BenchmarkHTTPOverTLS(b *testing.B) {
+func BenchmarkHTTPOverWS(b *testing.B) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := TLSListener("", nil)
+	ln, err := WSListener("", nil)
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -95,21 +94,21 @@ func BenchmarkHTTPOverTLS(b *testing.B) {
 	}
 }
 
-func BenchmarkHTTPOverTLSParallel(b *testing.B) {
+func BenchmarkHTTPOverWSParallel(b *testing.B) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := TLSListener("", nil)
+	ln, err := WSListener("", nil)
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -130,17 +129,17 @@ func BenchmarkHTTPOverTLSParallel(b *testing.B) {
 	})
 }
 
-func socks5OverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
+func socks5OverWSRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := TLSListener("", tlsConfig)
+	ln, err := WSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS5Connector(clientInfo),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -156,7 +155,7 @@ func socks5OverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSOCKS5OverTLS(t *testing.T) {
+func TestSOCKS5OverWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -166,8 +165,7 @@ func TestSOCKS5OverTLS(t *testing.T) {
 	for i, tc := range socks5ProxyTests {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5OverTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
+			err := socks5OverWSRoundtrip(httpSrv.URL, sendData,
 				tc.cliUser,
 				tc.srvUsers,
 			)
@@ -185,15 +183,15 @@ func TestSOCKS5OverTLS(t *testing.T) {
 	}
 }
 
-func socks4OverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config) error {
-	ln, err := TLSListener("", tlsConfig)
+func socks4OverWSRoundtrip(targetURL string, data []byte) error {
+	ln, err := WSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4Connector(),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -207,29 +205,29 @@ func socks4OverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSOCKS4OverTLS(t *testing.T) {
+func TestSOCKS4OverWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := socks4OverTLSRoundtrip(httpSrv.URL, sendData, nil)
+	err := socks4OverWSRoundtrip(httpSrv.URL, sendData)
 	// t.Logf("#%d %v", i, err)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
 }
 
-func socks4aOverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config) error {
-	ln, err := TLSListener("", tlsConfig)
+func socks4aOverWSRoundtrip(targetURL string, data []byte) error {
+	ln, err := WSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4AConnector(),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -243,31 +241,32 @@ func socks4aOverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Confi
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSOCKS4AOverTLS(t *testing.T) {
+func TestSOCKS4AOverWS(t *testing.T) {
+
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := socks4aOverTLSRoundtrip(httpSrv.URL, sendData, nil)
+	err := socks4aOverWSRoundtrip(httpSrv.URL, sendData)
 	// t.Logf("#%d %v", i, err)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
 }
 
-func ssOverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
+func ssOverWSRoundtrip(targetURL string, data []byte,
 	clientInfo, serverInfo *url.Userinfo) error {
 
-	ln, err := TLSListener("", tlsConfig)
+	ln, err := WSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   ShadowConnector(clientInfo),
-		Transporter: TLSTransporter(),
+		Transporter: WSTransporter(nil),
 	}
 
 	server := &Server{
@@ -283,7 +282,7 @@ func ssOverTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSSOverTLS(t *testing.T) {
+func TestSSOverWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -293,8 +292,7 @@ func TestSSOverTLS(t *testing.T) {
 	for i, tc := range ssProxyTests {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
+			err := ssOverWSRoundtrip(httpSrv.URL, sendData,
 				tc.clientCipher,
 				tc.serverCipher,
 			)
@@ -312,17 +310,17 @@ func TestSSOverTLS(t *testing.T) {
 	}
 }
 
-func httpOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
+func httpOverMWSRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := MTLSListener("", tlsConfig)
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(clientInfo),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -338,7 +336,7 @@ func httpOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestHTTPOverMTLS(t *testing.T) {
+func TestHTTPOverMWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -348,7 +346,7 @@ func TestHTTPOverMTLS(t *testing.T) {
 	for i, tc := range httpProxyTests {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpOverMTLSRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
+			err := httpOverMWSRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
 			if err == nil {
 				if tc.errStr != "" {
 					t.Errorf("#%d should failed with error %s", i, tc.errStr)
@@ -365,21 +363,21 @@ func TestHTTPOverMTLS(t *testing.T) {
 	}
 }
 
-func BenchmarkHTTPOverMTLS(b *testing.B) {
+func BenchmarkHTTPOverMWS(b *testing.B) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := MTLSListener("", nil)
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -398,21 +396,22 @@ func BenchmarkHTTPOverMTLS(b *testing.B) {
 	}
 }
 
-func BenchmarkHTTPOverMTLSParallel(b *testing.B) {
+func BenchmarkHTTPOverMWSParallel(b *testing.B) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := MTLSListener("", nil)
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		b.Error(err)
 	}
 
+	b.Log(ln.Addr())
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -433,17 +432,17 @@ func BenchmarkHTTPOverMTLSParallel(b *testing.B) {
 	})
 }
 
-func socks5OverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
+func socks5OverMWSRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := MTLSListener("", tlsConfig)
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS5Connector(clientInfo),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -459,7 +458,7 @@ func socks5OverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Confi
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSOCKS5OverMTLS(t *testing.T) {
+func TestSOCKS5OverMWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -469,8 +468,7 @@ func TestSOCKS5OverMTLS(t *testing.T) {
 	for i, tc := range socks5ProxyTests {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5OverMTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
+			err := socks5OverMWSRoundtrip(httpSrv.URL, sendData,
 				tc.cliUser,
 				tc.srvUsers,
 			)
@@ -488,15 +486,15 @@ func TestSOCKS5OverMTLS(t *testing.T) {
 	}
 }
 
-func socks4OverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config) error {
-	ln, err := MTLSListener("", tlsConfig)
+func socks4OverMWSRoundtrip(targetURL string, data []byte) error {
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4Connector(),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -510,29 +508,29 @@ func socks4OverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Confi
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSOCKS4OverMTLS(t *testing.T) {
+func TestSOCKS4OverMWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := socks4OverMTLSRoundtrip(httpSrv.URL, sendData, nil)
+	err := socks4OverMWSRoundtrip(httpSrv.URL, sendData)
 	// t.Logf("#%d %v", i, err)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
 }
 
-func socks4aOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config) error {
-	ln, err := MTLSListener("", tlsConfig)
+func socks4aOverMWSRoundtrip(targetURL string, data []byte) error {
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4AConnector(),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -546,31 +544,32 @@ func socks4aOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Conf
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSOCKS4AOverMTLS(t *testing.T) {
+func TestSOCKS4AOverMWS(t *testing.T) {
+
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := socks4aOverMTLSRoundtrip(httpSrv.URL, sendData, nil)
+	err := socks4aOverMWSRoundtrip(httpSrv.URL, sendData)
 	// t.Logf("#%d %v", i, err)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
 }
 
-func ssOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
+func ssOverMWSRoundtrip(targetURL string, data []byte,
 	clientInfo, serverInfo *url.Userinfo) error {
 
-	ln, err := MTLSListener("", tlsConfig)
+	ln, err := MWSListener("", nil)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   ShadowConnector(clientInfo),
-		Transporter: MTLSTransporter(),
+		Transporter: MWSTransporter(nil),
 	}
 
 	server := &Server{
@@ -586,7 +585,7 @@ func ssOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestSSOverMTLS(t *testing.T) {
+func TestSSOverMWS(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -596,8 +595,7 @@ func TestSSOverMTLS(t *testing.T) {
 	for i, tc := range ssProxyTests {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverMTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
+			err := ssOverMWSRoundtrip(httpSrv.URL, sendData,
 				tc.clientCipher,
 				tc.serverCipher,
 			)

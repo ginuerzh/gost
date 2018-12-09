@@ -90,15 +90,18 @@ func sniProxyRoundtrip(targetURL string, data []byte, host string) error {
 }
 
 func TestSNIProxy(t *testing.T) {
-	// SetLogger(&LogLogger{})
-	// Debug = true
 	httpSrv := httptest.NewTLSServer(httpTestHandler)
 	defer httpSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := sniProxyRoundtrip("https://github.com", sendData, "google.com")
+	err := sniProxyRoundtrip("https://github.com", sendData, "")
+	if err != nil {
+		t.Errorf("got error: %v", err)
+	}
+
+	err = sniProxyRoundtrip("https://github.com", sendData, "google.com")
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
