@@ -124,7 +124,7 @@ func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Con
 
 	session, ok := tr.sessions[addr]
 	if !ok {
-		conn, err = net.DialUDP("udp", nil, uaddr)
+		conn, err = net.DialUDP("udp", &net.UDPAddr{IP: net.IPv4zero}, uaddr)
 		if err != nil {
 			return
 		}
