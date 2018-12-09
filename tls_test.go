@@ -3,7 +3,6 @@ package gost
 import (
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -43,22 +42,19 @@ func TestHTTPOverTLS(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range httpProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpOverTLSRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
-			if err == nil {
-				if tc.errStr != "" {
-					t.Errorf("#%d should failed with error %s", i, tc.errStr)
-				}
-			} else {
-				if tc.errStr == "" {
-					t.Errorf("#%d got error %v", i, err)
-				}
-				if err.Error() != tc.errStr {
-					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
-				}
+		err := httpOverTLSRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
+		if err == nil {
+			if tc.errStr != "" {
+				t.Errorf("#%d should failed with error %s", i, tc.errStr)
 			}
-		})
+		} else {
+			if tc.errStr == "" {
+				t.Errorf("#%d got error %v", i, err)
+			}
+			if err.Error() != tc.errStr {
+				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+			}
+		}
 	}
 }
 
@@ -164,24 +160,21 @@ func TestSOCKS5OverTLS(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range socks5ProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5OverTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.cliUser,
-				tc.srvUsers,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := socks5OverTLSRoundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.cliUser,
+			tc.srvUsers,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
@@ -291,24 +284,21 @@ func TestSSOverTLS(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := ssOverTLSRoundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
@@ -346,22 +336,19 @@ func TestHTTPOverMTLS(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range httpProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpOverMTLSRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
-			if err == nil {
-				if tc.errStr != "" {
-					t.Errorf("#%d should failed with error %s", i, tc.errStr)
-				}
-			} else {
-				if tc.errStr == "" {
-					t.Errorf("#%d got error %v", i, err)
-				}
-				if err.Error() != tc.errStr {
-					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
-				}
+		err := httpOverMTLSRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
+		if err == nil {
+			if tc.errStr != "" {
+				t.Errorf("#%d should failed with error %s", i, tc.errStr)
 			}
-		})
+		} else {
+			if tc.errStr == "" {
+				t.Errorf("#%d got error %v", i, err)
+			}
+			if err.Error() != tc.errStr {
+				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+			}
+		}
 	}
 }
 
@@ -467,24 +454,21 @@ func TestSOCKS5OverMTLS(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range socks5ProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5OverMTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.cliUser,
-				tc.srvUsers,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := socks5OverMTLSRoundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.cliUser,
+			tc.srvUsers,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
@@ -594,23 +578,20 @@ func TestSSOverMTLS(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverMTLSRoundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := ssOverMTLSRoundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }

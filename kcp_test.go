@@ -290,22 +290,19 @@ func TestSSOverKCP(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverKCPRoundtrip(httpSrv.URL, sendData,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := ssOverKCPRoundtrip(httpSrv.URL, sendData,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }

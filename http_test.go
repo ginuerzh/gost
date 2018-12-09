@@ -158,22 +158,19 @@ func TestHTTPProxy(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range httpProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpProxyRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
-			if err == nil {
-				if tc.errStr != "" {
-					t.Errorf("#%d should failed with error %s", i, tc.errStr)
-				}
-			} else {
-				if tc.errStr == "" {
-					t.Errorf("#%d got error %v", i, err)
-				}
-				if err.Error() != tc.errStr {
-					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
-				}
+		err := httpProxyRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
+		if err == nil {
+			if tc.errStr != "" {
+				t.Errorf("#%d should failed with error %s", i, tc.errStr)
 			}
-		})
+		} else {
+			if tc.errStr == "" {
+				t.Errorf("#%d got error %v", i, err)
+			}
+			if err.Error() != tc.errStr {
+				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+			}
+		}
 	}
 }
 

@@ -2,13 +2,12 @@ package gost
 
 import (
 	"crypto/rand"
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 )
 
-var ssProxyTests = []struct {
+var ssTests = []struct {
 	clientCipher *url.Userinfo
 	serverCipher *url.Userinfo
 	pass         bool
@@ -23,54 +22,18 @@ var ssProxyTests = []struct {
 	{url.UserPassword("aes-128-cfb", "123456"), url.User("aes-128-cfb"), false},
 	{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "abc"), false},
 	{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "123456"), true},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-192-cfb", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-256-cfb", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-ctr", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-192-ctr", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-256-ctr", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("des-cfb", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("bf-cfb", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("cast5-cfb", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("rc4-md5", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("chacha20", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("chacha20-ietf", "123456"), false},
-	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("salsa20", "123456"), false},
 
 	{url.User("aes-192-cfb"), url.User("aes-192-cfb"), false},
 	{url.User("aes-192-cfb"), url.UserPassword("aes-192-cfb", "123456"), false},
 	{url.UserPassword("aes-192-cfb", "123456"), url.User("aes-192-cfb"), false},
 	{url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-192-cfb", "abc"), false},
 	{url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-192-cfb", "123456"), true},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-128-cfb", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-256-cfb", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-128-ctr", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-192-ctr", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("aes-256-ctr", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("des-cfb", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("bf-cfb", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("cast5-cfb", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("rc4-md5", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("chacha20", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("chacha20-ietf", "123456"), false},
-	// {url.UserPassword("aes-192-cfb", "123456"), url.UserPassword("salsa20", "123456"), false},
 
 	{url.User("aes-256-cfb"), url.User("aes-256-cfb"), false},
 	{url.User("aes-256-cfb"), url.UserPassword("aes-256-cfb", "123456"), false},
 	{url.UserPassword("aes-256-cfb", "123456"), url.User("aes-256-cfb"), false},
 	{url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-256-cfb", "abc"), false},
 	{url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-256-cfb", "123456"), true},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-128-cfb", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-192-cfb", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-128-ctr", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-192-ctr", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("aes-256-ctr", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("des-cfb", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("bf-cfb", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("cast5-cfb", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("rc4-md5", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("chacha20", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("chacha20-ietf", "123456"), false},
-	// {url.UserPassword("aes-256-cfb", "123456"), url.UserPassword("salsa20", "123456"), false},
 
 	{url.User("aes-128-ctr"), url.User("aes-128-ctr"), false},
 	{url.User("aes-128-ctr"), url.UserPassword("aes-128-ctr", "123456"), false},
@@ -133,6 +96,23 @@ var ssProxyTests = []struct {
 	{url.UserPassword("salsa20", "123456"), url.UserPassword("salsa20", "123456"), true},
 }
 
+var ssProxyTests = []struct {
+	clientCipher *url.Userinfo
+	serverCipher *url.Userinfo
+	pass         bool
+}{
+	{nil, nil, false},
+	{&url.Userinfo{}, &url.Userinfo{}, false},
+	{url.User("abc"), url.User("abc"), false},
+	{url.UserPassword("abc", "def"), url.UserPassword("abc", "def"), false},
+
+	{url.User("aes-128-cfb"), url.User("aes-128-cfb"), false},
+	{url.User("aes-128-cfb"), url.UserPassword("aes-128-cfb", "123456"), false},
+	{url.UserPassword("aes-128-cfb", "123456"), url.User("aes-128-cfb"), false},
+	{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "abc"), false},
+	{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "123456"), true},
+}
+
 func ssProxyRoundtrip(targetURL string, data []byte, clientInfo *url.Userinfo, serverInfo *url.Userinfo) error {
 	ln, err := TCPListener("")
 	if err != nil {
@@ -162,24 +142,21 @@ func TestSSProxy(t *testing.T) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssProxyRoundtrip(httpSrv.URL, sendData,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+	for i, tc := range ssTests {
+		err := ssProxyRoundtrip(httpSrv.URL, sendData,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 

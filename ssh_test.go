@@ -3,7 +3,6 @@ package gost
 import (
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -43,22 +42,19 @@ func TestHTTPOverSSHTunnel(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range httpProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpOverSSHTunnelRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
-			if err == nil {
-				if tc.errStr != "" {
-					t.Errorf("#%d should failed with error %s", i, tc.errStr)
-				}
-			} else {
-				if tc.errStr == "" {
-					t.Errorf("#%d got error %v", i, err)
-				}
-				if err.Error() != tc.errStr {
-					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
-				}
+		err := httpOverSSHTunnelRoundtrip(httpSrv.URL, sendData, nil, tc.cliUser, tc.srvUsers)
+		if err == nil {
+			if tc.errStr != "" {
+				t.Errorf("#%d should failed with error %s", i, tc.errStr)
 			}
-		})
+		} else {
+			if tc.errStr == "" {
+				t.Errorf("#%d got error %v", i, err)
+			}
+			if err.Error() != tc.errStr {
+				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+			}
+		}
 	}
 }
 
@@ -164,24 +160,21 @@ func TestSOCKS5OverSSHTunnel(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range socks5ProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5OverSSHTunnelRoundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.cliUser,
-				tc.srvUsers,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := socks5OverSSHTunnelRoundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.cliUser,
+			tc.srvUsers,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
@@ -291,23 +284,20 @@ func TestSSOverSSHTunnel(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverSSHTunnelRoundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := ssOverSSHTunnelRoundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }

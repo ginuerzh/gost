@@ -3,7 +3,6 @@ package gost
 import (
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -67,23 +66,20 @@ func TestSOCKS5Proxy(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range socks5ProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5ProxyRoundtrip(httpSrv.URL, sendData,
-				tc.cliUser,
-				tc.srvUsers,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := socks5ProxyRoundtrip(httpSrv.URL, sendData,
+			tc.cliUser,
+			tc.srvUsers,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
