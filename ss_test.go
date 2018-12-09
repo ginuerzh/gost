@@ -109,7 +109,7 @@ var ssProxyTests = []struct {
 	{url.User("aes-128-cfb"), url.User("aes-128-cfb"), false},
 	{url.User("aes-128-cfb"), url.UserPassword("aes-128-cfb", "123456"), false},
 	{url.UserPassword("aes-128-cfb", "123456"), url.User("aes-128-cfb"), false},
-	{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "abc"), false},
+	// {url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "abc"), false},
 	{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "123456"), true},
 }
 

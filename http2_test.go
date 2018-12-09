@@ -3,7 +3,6 @@ package gost
 import (
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -401,24 +400,21 @@ func TestSSOverH2(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverH2Roundtrip(httpSrv.URL, sendData,
-				nil,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := ssOverH2Roundtrip(httpSrv.URL, sendData,
+			nil,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
@@ -456,22 +452,19 @@ func TestHTTPOverH2C(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range httpProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := httpOverH2CRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
-			if err == nil {
-				if tc.errStr != "" {
-					t.Errorf("#%d should failed with error %s", i, tc.errStr)
-				}
-			} else {
-				if tc.errStr == "" {
-					t.Errorf("#%d got error %v", i, err)
-				}
-				if err.Error() != tc.errStr {
-					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
-				}
+		err := httpOverH2CRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
+		if err == nil {
+			if tc.errStr != "" {
+				t.Errorf("#%d should failed with error %s", i, tc.errStr)
 			}
-		})
+		} else {
+			if tc.errStr == "" {
+				t.Errorf("#%d got error %v", i, err)
+			}
+			if err.Error() != tc.errStr {
+				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+			}
+		}
 	}
 }
 
@@ -577,23 +570,20 @@ func TestSOCKS5OverH2C(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range socks5ProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := socks5OverH2CRoundtrip(httpSrv.URL, sendData,
-				tc.cliUser,
-				tc.srvUsers,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := socks5OverH2CRoundtrip(httpSrv.URL, sendData,
+			tc.cliUser,
+			tc.srvUsers,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
 
@@ -702,40 +692,20 @@ func TestSSOverH2C(t *testing.T) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	var ssProxyTests = []struct {
-		clientCipher *url.Userinfo
-		serverCipher *url.Userinfo
-		pass         bool
-	}{
-		{nil, nil, false},
-		{&url.Userinfo{}, &url.Userinfo{}, false},
-		{url.User("abc"), url.User("abc"), false},
-		{url.UserPassword("abc", "def"), url.UserPassword("abc", "def"), false},
-
-		{url.User("aes-128-cfb"), url.User("aes-128-cfb"), false},
-		{url.User("aes-128-cfb"), url.UserPassword("aes-128-cfb", "123456"), false},
-		{url.UserPassword("aes-128-cfb", "123456"), url.User("aes-128-cfb"), false},
-		{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "abc"), false},
-		{url.UserPassword("aes-128-cfb", "123456"), url.UserPassword("aes-128-cfb", "123456"), true},
-	}
-
 	for i, tc := range ssProxyTests {
-		tc := tc
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			err := ssOverH2CRoundtrip(httpSrv.URL, sendData,
-				tc.clientCipher,
-				tc.serverCipher,
-			)
-			if err == nil {
-				if !tc.pass {
-					t.Errorf("#%d should failed", i)
-				}
-			} else {
-				// t.Logf("#%d %v", i, err)
-				if tc.pass {
-					t.Errorf("#%d got error: %v", i, err)
-				}
+		err := ssOverH2CRoundtrip(httpSrv.URL, sendData,
+			tc.clientCipher,
+			tc.serverCipher,
+		)
+		if err == nil {
+			if !tc.pass {
+				t.Errorf("#%d should failed", i)
 			}
-		})
+		} else {
+			// t.Logf("#%d %v", i, err)
+			if tc.pass {
+				t.Errorf("#%d got error: %v", i, err)
+			}
+		}
 	}
 }
