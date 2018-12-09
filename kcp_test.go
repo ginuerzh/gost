@@ -10,7 +10,7 @@ import (
 func httpOverKCPRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := KCPListener("", nil)
+	ln, err := KCPListener("localhost:0", nil)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func BenchmarkHTTPOverKCPParallel(b *testing.B) {
 func socks5OverKCPRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := KCPListener("", nil)
+	ln, err := KCPListener("localhost:0", nil)
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func TestSOCKS5OverKCP(t *testing.T) {
 }
 
 func socks4OverKCPRoundtrip(targetURL string, data []byte) error {
-	ln, err := KCPListener("", nil)
+	ln, err := KCPListener("localhost:0", nil)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func TestSOCKS4OverKCP(t *testing.T) {
 }
 
 func socks4aOverKCPRoundtrip(targetURL string, data []byte) error {
-	ln, err := KCPListener("", nil)
+	ln, err := KCPListener("localhost:0", nil)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func TestSOCKS4AOverKCP(t *testing.T) {
 func ssOverKCPRoundtrip(targetURL string, data []byte,
 	clientInfo, serverInfo *url.Userinfo) error {
 
-	ln, err := KCPListener("", nil)
+	ln, err := KCPListener("localhost:0", nil)
 	if err != nil {
 		return err
 	}
