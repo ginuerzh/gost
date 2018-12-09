@@ -3,6 +3,7 @@ package gost
 import (
 	"crypto/rand"
 	"crypto/tls"
+	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -302,6 +303,71 @@ func TestSSOverTLS(t *testing.T) {
 	}
 }
 
+func sniOverTLSRoundtrip(targetURL string, data []byte, host string) error {
+	ln, err := TLSListener("", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   SNIConnector(host),
+		Transporter: TLSTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SNIHandler(HostHandlerOption(u.Host)),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return sniRoundtrip(client, server, targetURL, data)
+}
+
+func TestSNIOverTLS(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+	httpsSrv := httptest.NewTLSServer(httpTestHandler)
+	defer httpsSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	var sniProxyTests = []struct {
+		targetURL string
+		host      string
+		pass      bool
+	}{
+		{httpSrv.URL, "", true},
+		{httpSrv.URL, "example.com", true},
+		{httpsSrv.URL, "", true},
+		{httpsSrv.URL, "example.com", true},
+	}
+
+	for i, tc := range sniProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := sniOverTLSRoundtrip(tc.targetURL, sendData, tc.host)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
+	}
+}
+
 func httpOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
@@ -593,5 +659,70 @@ func TestSSOverMTLS(t *testing.T) {
 				t.Errorf("#%d got error: %v", i, err)
 			}
 		}
+	}
+}
+
+func sniOverMTLSRoundtrip(targetURL string, data []byte, host string) error {
+	ln, err := MTLSListener("", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   SNIConnector(host),
+		Transporter: MTLSTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SNIHandler(HostHandlerOption(u.Host)),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return sniRoundtrip(client, server, targetURL, data)
+}
+
+func TestSNIOverMTLS(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+	httpsSrv := httptest.NewTLSServer(httpTestHandler)
+	defer httpsSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	var sniProxyTests = []struct {
+		targetURL string
+		host      string
+		pass      bool
+	}{
+		{httpSrv.URL, "", true},
+		{httpSrv.URL, "example.com", true},
+		{httpsSrv.URL, "", true},
+		{httpsSrv.URL, "example.com", true},
+	}
+
+	for i, tc := range sniProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := sniOverMTLSRoundtrip(tc.targetURL, sendData, tc.host)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
 	}
 }

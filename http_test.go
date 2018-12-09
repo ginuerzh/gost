@@ -20,6 +20,7 @@ import (
 func init() {
 	// SetLogger(&LogLogger{})
 	// Debug = true
+
 	cert, err := GenCertificate()
 	if err != nil {
 		panic(err)

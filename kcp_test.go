@@ -2,6 +2,7 @@ package gost
 
 import (
 	"crypto/rand"
+	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -297,5 +298,70 @@ func TestSSOverKCP(t *testing.T) {
 				t.Errorf("#%d got error: %v", i, err)
 			}
 		}
+	}
+}
+
+func sniOverKCPRoundtrip(targetURL string, data []byte, host string) error {
+	ln, err := KCPListener("localhost:0", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   SNIConnector(host),
+		Transporter: KCPTransporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SNIHandler(HostHandlerOption(u.Host)),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return sniRoundtrip(client, server, targetURL, data)
+}
+
+func TestSNIOverKCP(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+	httpsSrv := httptest.NewTLSServer(httpTestHandler)
+	defer httpsSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	var sniProxyTests = []struct {
+		targetURL string
+		host      string
+		pass      bool
+	}{
+		{httpSrv.URL, "", true},
+		{httpSrv.URL, "example.com", true},
+		{httpsSrv.URL, "", true},
+		{httpsSrv.URL, "example.com", true},
+	}
+
+	for i, tc := range sniProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := sniOverKCPRoundtrip(tc.targetURL, sendData, tc.host)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
 	}
 }

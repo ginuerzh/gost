@@ -3,6 +3,7 @@ package gost
 import (
 	"crypto/rand"
 	"crypto/tls"
+	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -418,6 +419,71 @@ func TestSSOverH2(t *testing.T) {
 	}
 }
 
+func sniOverH2Roundtrip(targetURL string, data []byte, host string) error {
+	ln, err := H2Listener("", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   SNIConnector(host),
+		Transporter: H2Transporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SNIHandler(HostHandlerOption(u.Host)),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return sniRoundtrip(client, server, targetURL, data)
+}
+
+func TestSNIOverH2(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+	httpsSrv := httptest.NewTLSServer(httpTestHandler)
+	defer httpsSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	var sniProxyTests = []struct {
+		targetURL string
+		host      string
+		pass      bool
+	}{
+		{httpSrv.URL, "", true},
+		{httpSrv.URL, "example.com", true},
+		{httpsSrv.URL, "", true},
+		{httpsSrv.URL, "example.com", true},
+	}
+
+	for i, tc := range sniProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := sniOverH2Roundtrip(tc.targetURL, sendData, tc.host)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
+	}
+}
+
 func httpOverH2CRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
@@ -707,5 +773,70 @@ func TestSSOverH2C(t *testing.T) {
 				t.Errorf("#%d got error: %v", i, err)
 			}
 		}
+	}
+}
+
+func sniOverH2CRoundtrip(targetURL string, data []byte, host string) error {
+	ln, err := H2CListener("")
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   SNIConnector(host),
+		Transporter: H2CTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SNIHandler(HostHandlerOption(u.Host)),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return sniRoundtrip(client, server, targetURL, data)
+}
+
+func TestSNIOverH2C(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+	httpsSrv := httptest.NewTLSServer(httpTestHandler)
+	defer httpsSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	var sniProxyTests = []struct {
+		targetURL string
+		host      string
+		pass      bool
+	}{
+		{httpSrv.URL, "", true},
+		{httpSrv.URL, "example.com", true},
+		{httpsSrv.URL, "", true},
+		{httpsSrv.URL, "example.com", true},
+	}
+
+	for i, tc := range sniProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := sniOverH2CRoundtrip(tc.targetURL, sendData, tc.host)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
 	}
 }

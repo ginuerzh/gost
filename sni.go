@@ -91,7 +91,11 @@ func (h *sniHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	host = net.JoinHostPort(host, "443")
+	_, sport, _ := net.SplitHostPort(h.options.Host)
+	if sport == "" {
+		sport = "443"
+	}
+	host = net.JoinHostPort(host, sport)
 
 	log.Logf("[sni] %s -> %s -> %s",
 		conn.RemoteAddr(), h.options.Node.String(), host)

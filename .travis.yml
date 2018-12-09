@@ -7,3 +7,6 @@ install: true
 script:
   - env GO111MODULE=on go test -race -v
   - cd cmd/gost && env GO111MODULE=on go build
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)

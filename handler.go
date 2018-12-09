@@ -34,6 +34,7 @@ type HandlerOptions struct {
 	Hosts       *Hosts
 	ProbeResist string
 	Node        Node
+	Host        string
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -134,6 +135,13 @@ func ProbeResistHandlerOption(pr string) HandlerOption {
 func NodeHandlerOption(node Node) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Node = node
+	}
+}
+
+// HostHandlerOption sets the target host for SNI proxy.
+func HostHandlerOption(host string) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Host = host
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,18 +20,21 @@ func sniRoundtrip(client *Client, server *Server, targetURL string, data []byte)
 	if err != nil {
 		return
 	}
-	defer conn.Close()
 
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
-
-	conn, err = client.Handshake(conn)
+	conn, err = client.Handshake(conn, AddrHandshakeOption(server.Addr().String()))
 	if err != nil {
 		return
 	}
+	defer conn.Close()
+
 	u, err := url.Parse(targetURL)
 	if err != nil {
 		return
 	}
+
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	defer conn.SetDeadline(time.Time{})
+
 	conn, err = client.Connect(conn, u.Host)
 	if err != nil {
 		return
@@ -38,8 +43,8 @@ func sniRoundtrip(client *Client, server *Server, targetURL string, data []byte)
 	if u.Scheme == "https" {
 		conn = tls.Client(conn,
 			&tls.Config{
-				InsecureSkipVerify: false,
-				ServerName:         u.Hostname(),
+				InsecureSkipVerify: true,
+				// ServerName:         u.Hostname(),
 			})
 		u.Scheme = "http"
 	}
@@ -64,11 +69,25 @@ func sniRoundtrip(client *Client, server *Server, targetURL string, data []byte)
 		return errors.New(resp.Status)
 	}
 
+	recv, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	if !bytes.Equal(data, recv) {
+		return fmt.Errorf("data not equal")
+	}
+
 	return
 }
 
 func sniProxyRoundtrip(targetURL string, data []byte, host string) error {
 	ln, err := TCPListener("")
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
 	if err != nil {
 		return err
 	}
@@ -80,7 +99,7 @@ func sniProxyRoundtrip(targetURL string, data []byte, host string) error {
 
 	server := &Server{
 		Listener: ln,
-		Handler:  SNIHandler(),
+		Handler:  SNIHandler(HostHandlerOption(u.Host)),
 	}
 
 	go server.Run()
@@ -90,19 +109,40 @@ func sniProxyRoundtrip(targetURL string, data []byte, host string) error {
 }
 
 func TestSNIProxy(t *testing.T) {
-	httpSrv := httptest.NewTLSServer(httpTestHandler)
+	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
+
+	httpsSrv := httptest.NewTLSServer(httpTestHandler)
+	defer httpsSrv.Close()
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := sniProxyRoundtrip("https://github.com", sendData, "")
-	if err != nil {
-		t.Errorf("got error: %v", err)
+	var sniProxyTests = []struct {
+		targetURL string
+		host      string
+		pass      bool
+	}{
+		{httpSrv.URL, "", true},
+		{httpSrv.URL, "example.com", true},
+		{httpsSrv.URL, "", true},
+		{httpsSrv.URL, "example.com", true},
 	}
 
-	err = sniProxyRoundtrip("https://github.com", sendData, "google.com")
-	if err != nil {
-		t.Errorf("got error: %v", err)
+	for i, tc := range sniProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := sniProxyRoundtrip(tc.targetURL, sendData, tc.host)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
 	}
 }
