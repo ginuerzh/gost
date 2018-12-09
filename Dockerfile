@@ -1,8 +1,10 @@
-FROM golang:alpine as builder
+FROM golang:1 as builder
 
-ADD . /go/src/github.com/ginuerzh/gost/
+ADD . /data
 
-RUN go install github.com/ginuerzh/gost/cmd/gost
+WORKDIR /data
+
+RUN cd cmd/gost && go install
 
 FROM alpine:latest
 
