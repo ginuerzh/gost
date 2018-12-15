@@ -272,9 +272,6 @@ func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
 	retries := 1
-	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
-		retries = h.options.Chain.Retries
-	}
 	if h.options.Retries > 0 {
 		retries = h.options.Retries
 	}
@@ -422,7 +419,7 @@ func (l *udpDirectForwardListener) listenLoop() {
 		n, raddr, err := l.ln.ReadFrom(b)
 		if err != nil {
 			log.Logf("[udp] peer -> %s : %s", l.Addr(), err)
-			l.ln.Close()
+			l.Close()
 			l.errChan <- err
 			close(l.errChan)
 			return
@@ -593,10 +590,14 @@ func (c *udpServerConn) ttlWait() {
 		ttl = defaultTTL
 	}
 	timer := time.NewTimer(ttl)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-c.nopChan:
+			if !timer.Stop() {
+				<-timer.C
+			}
 			timer.Reset(ttl)
 		case <-timer.C:
 			close(c.brokenChan)
@@ -628,12 +629,15 @@ func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
 }
 
 type tcpRemoteForwardListener struct {
-	addr    net.Addr
-	chain   *Chain
-	ln      net.Listener
-	session *muxSession
-	mutex   sync.Mutex
-	closed  chan struct{}
+	addr       net.Addr
+	chain      *Chain
+	connChan   chan net.Conn
+	ln         net.Listener
+	session    *muxSession
+	sessionMux sync.Mutex
+	closed     chan struct{}
+	closeMux   sync.Mutex
+	errChan    chan error
 }
 
 // TCPRemoteForwardListener creates a Listener for TCP remote port forwarding server.
@@ -643,23 +647,56 @@ func TCPRemoteForwardListener(addr string, chain *Chain) (Listener, error) {
 		return nil, err
 	}
 
-	return &tcpRemoteForwardListener{
-		addr:   laddr,
-		chain:  chain,
-		closed: make(chan struct{}),
-	}, nil
-}
-
-func (l *tcpRemoteForwardListener) Accept() (net.Conn, error) {
-	select {
-	case <-l.closed:
-		return nil, errors.New("closed")
-	default:
+	ln := &tcpRemoteForwardListener{
+		addr:     laddr,
+		chain:    chain,
+		connChan: make(chan net.Conn, 1024),
+		closed:   make(chan struct{}),
+		errChan:  make(chan error),
 	}
 
+	if !ln.isChainValid() {
+		ln.ln, err = net.Listen("tcp", ln.addr.String())
+		return ln, err
+	}
+
+	go ln.listenLoop()
+
+	if err = <-ln.errChan; err != nil {
+		ln.Close()
+	}
+
+	return ln, err
+}
+
+func (l *tcpRemoteForwardListener) isChainValid() bool {
+	lastNode := l.chain.LastNode()
+	if (lastNode.Protocol == "forward" && lastNode.Transport == "ssh") ||
+		lastNode.Protocol == "socks5" {
+		return true
+	}
+	return false
+}
+
+func (l *tcpRemoteForwardListener) listenLoop() {
 	var tempDelay time.Duration
+	var once sync.Once
+
 	for {
 		conn, err := l.accept()
+
+		once.Do(func() {
+			l.errChan <- err
+			close(l.errChan)
+		})
+
+		select {
+		case <-l.closed:
+			conn.Close()
+			return
+		default:
+		}
+
 		if err != nil {
 			if tempDelay == 0 {
 				tempDelay = 1000 * time.Millisecond
@@ -673,15 +710,37 @@ func (l *tcpRemoteForwardListener) Accept() (net.Conn, error) {
 			time.Sleep(tempDelay)
 			continue
 		}
-		return conn, nil
+
+		select {
+		case l.connChan <- conn:
+		default:
+			conn.Close()
+			log.Logf("[rtcp] %s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
+		}
 	}
+}
+
+func (l *tcpRemoteForwardListener) Accept() (conn net.Conn, err error) {
+	if l.ln != nil {
+		return l.ln.Accept()
+	}
+
+	select {
+	case conn = <-l.connChan:
+	case <-l.closed:
+		err = errors.New("closed")
+	}
+
+	return
 }
 
 func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 	lastNode := l.chain.LastNode()
 	if lastNode.Protocol == "forward" && lastNode.Transport == "ssh" {
-		conn, err = l.chain.Dial(l.addr.String())
-	} else if lastNode.Protocol == "socks5" {
+		return l.chain.Dial(l.addr.String())
+	}
+
+	if lastNode.Protocol == "socks5" {
 		if lastNode.GetBool("mbind") {
 			return l.muxAccept() // multiplexing support for binding.
 		}
@@ -694,14 +753,6 @@ func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 		if err != nil {
 			cc.Close()
 		}
-	} else {
-		if l.ln == nil {
-			l.ln, err = net.Listen("tcp", l.addr.String())
-			if err != nil {
-				return
-			}
-		}
-		conn, err = l.ln.Accept()
 	}
 	return
 }
@@ -721,8 +772,8 @@ func (l *tcpRemoteForwardListener) muxAccept() (conn net.Conn, err error) {
 }
 
 func (l *tcpRemoteForwardListener) getSession() (*muxSession, error) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
+	l.sessionMux.Lock()
+	defer l.sessionMux.Unlock()
 
 	if l.session != nil && !l.session.IsClosed() {
 		return l.session, nil
@@ -810,22 +861,40 @@ func (l *tcpRemoteForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, e
 }
 
 func (l *tcpRemoteForwardListener) Addr() net.Addr {
+	if l.ln != nil {
+		return l.ln.Addr()
+	}
 	return l.addr
 }
 
 func (l *tcpRemoteForwardListener) Close() error {
-	close(l.closed)
+	if l.ln != nil {
+		return l.ln.Close()
+	}
+
+	l.closeMux.Lock()
+	defer l.closeMux.Unlock()
+
+	select {
+	case <-l.closed:
+		return nil
+	default:
+		close(l.closed)
+	}
 	return nil
 }
 
 type udpRemoteForwardListener struct {
-	addr     *net.UDPAddr
+	addr     net.Addr
 	chain    *Chain
 	conns    map[string]*udpServerConn
 	connChan chan net.Conn
+	ln       *net.UDPConn
 	errChan  chan error
 	ttl      time.Duration
 	closed   chan struct{}
+	closeMux sync.Mutex
+	once     sync.Once
 }
 
 // UDPRemoteForwardListener creates a Listener for UDP remote port forwarding server.
@@ -844,8 +913,17 @@ func UDPRemoteForwardListener(addr string, chain *Chain, ttl time.Duration) (Lis
 		ttl:      ttl,
 		closed:   make(chan struct{}),
 	}
+
 	go ln.listenLoop()
-	return ln, nil
+
+	err = <-ln.errChan
+
+	return ln, err
+}
+
+func (l *udpRemoteForwardListener) isChainValid() bool {
+	lastNode := l.chain.LastNode()
+	return lastNode.Protocol == "socks5"
 }
 
 func (l *udpRemoteForwardListener) listenLoop() {
@@ -855,7 +933,6 @@ func (l *udpRemoteForwardListener) listenLoop() {
 			log.Logf("[rudp] %s : %s", l.Addr(), err)
 			return
 		}
-
 		defer conn.Close()
 
 		for {
@@ -911,8 +988,18 @@ func (l *udpRemoteForwardListener) connect() (conn net.PacketConn, err error) {
 				conn = &udpTunnelConn{Conn: cc}
 			}
 		} else {
-			conn, err = net.ListenUDP("udp", l.addr)
+			var uc *net.UDPConn
+			uc, err = net.ListenUDP("udp", l.addr.(*net.UDPAddr))
+			if err == nil {
+				l.addr = uc.LocalAddr()
+				conn = uc
+			}
 		}
+
+		l.once.Do(func() {
+			l.errChan <- err
+			close(l.errChan)
+		})
 
 		if err != nil {
 			if tempDelay == 0 {
@@ -932,13 +1019,10 @@ func (l *udpRemoteForwardListener) connect() (conn net.PacketConn, err error) {
 }
 
 func (l *udpRemoteForwardListener) Accept() (conn net.Conn, err error) {
-	var ok bool
 	select {
 	case conn = <-l.connChan:
-	case err, ok = <-l.errChan:
-		if !ok {
-			err = errors.New("accpet on closed listener")
-		}
+	case <-l.closed:
+		err = errors.New("accpet on closed listener")
 	}
 	return
 }
@@ -948,6 +1032,15 @@ func (l *udpRemoteForwardListener) Addr() net.Addr {
 }
 
 func (l *udpRemoteForwardListener) Close() error {
-	close(l.closed)
+	l.closeMux.Lock()
+	defer l.closeMux.Unlock()
+
+	select {
+	case <-l.closed:
+		return nil
+	default:
+		close(l.closed)
+	}
+
 	return nil
 }

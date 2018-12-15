@@ -62,10 +62,10 @@ type Transporter interface {
 	Multiplex() bool
 }
 
-type tcpTransporter struct {
-}
+// tcpTransporter is a raw TCP transporter.
+type tcpTransporter struct{}
 
-// TCPTransporter creates a transporter for TCP proxy client.
+// TCPTransporter creates a raw TCP client.
 func TCPTransporter() Transporter {
 	return &tcpTransporter{}
 }
@@ -87,6 +87,30 @@ func (tr *tcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 }
 
 func (tr *tcpTransporter) Multiplex() bool {
+	return false
+}
+
+// udpTransporter is a raw UDP transporter.
+type udpTransporter struct{}
+
+// UDPTransporter creates a raw UDP client.
+func UDPTransporter() Transporter {
+	return &udpTransporter{}
+}
+
+func (tr *udpTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
+	opts := &DialOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+	return net.DialTimeout("udp", addr, opts.Timeout)
+}
+
+func (tr *udpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	return conn, nil
+}
+
+func (tr *udpTransporter) Multiplex() bool {
 	return false
 }
 

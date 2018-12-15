@@ -22,9 +22,7 @@ type defaultSelector struct {
 }
 
 func (s *defaultSelector) Select(nodes []Node, opts ...SelectOption) (Node, error) {
-	sopts := SelectOptions{
-		Strategy: &RoundStrategy{},
-	}
+	sopts := SelectOptions{}
 	for _, opt := range opts {
 		opt(&sopts)
 	}
@@ -35,7 +33,11 @@ func (s *defaultSelector) Select(nodes []Node, opts ...SelectOption) (Node, erro
 	if len(nodes) == 0 {
 		return Node{}, ErrNoneAvailable
 	}
-	return sopts.Strategy.Apply(nodes), nil
+	strategy := sopts.Strategy
+	if strategy == nil {
+		strategy = &RoundStrategy{}
+	}
+	return strategy.Apply(nodes), nil
 }
 
 // SelectOption is the option used when making a select call.

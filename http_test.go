@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -16,23 +14,6 @@ import (
 	"testing"
 	"time"
 )
-
-func init() {
-	// SetLogger(&LogLogger{})
-	// Debug = true
-
-	cert, err := GenCertificate()
-	if err != nil {
-		panic(err)
-	}
-	DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
-}
-
-var httpTestHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	io.Copy(w, r.Body)
-})
 
 // proxyConn obtains a connection to the proxy server.
 func proxyConn(client *Client, server *Server) (net.Conn, error) {

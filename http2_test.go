@@ -484,6 +484,46 @@ func TestSNIOverH2(t *testing.T) {
 	}
 }
 
+func h2ForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := H2Listener("", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: H2Transporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestH2ForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := h2ForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func httpOverH2CRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
@@ -838,5 +878,45 @@ func TestSNIOverH2C(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func h2cForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := H2CListener("")
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: H2CTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestH2CForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := h2cForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
 	}
 }

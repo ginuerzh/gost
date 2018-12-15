@@ -172,7 +172,7 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 				return nil, err
 			}
 			if Debug {
-				log.Log("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), resp)
+				log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), resp)
 			}
 			log.Logf("[socks5] %s - %s: proxy authentication required", conn.RemoteAddr(), conn.LocalAddr())
 			return nil, gosocks5.ErrAuthFailure

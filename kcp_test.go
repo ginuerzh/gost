@@ -365,3 +365,43 @@ func TestSNIOverKCP(t *testing.T) {
 		})
 	}
 }
+
+func kcpForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := KCPListener("localhost:0", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: KCPTransporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestKCPForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := kcpForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}

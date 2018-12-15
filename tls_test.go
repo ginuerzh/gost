@@ -368,6 +368,46 @@ func TestSNIOverTLS(t *testing.T) {
 	}
 }
 
+func tlsForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := TLSListener("", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: TLSTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestTLSForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := tlsForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func httpOverMTLSRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
@@ -724,5 +764,45 @@ func TestSNIOverMTLS(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func mtlsForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := MTLSListener("", nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: MTLSTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestMTLSForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := mtlsForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
 	}
 }

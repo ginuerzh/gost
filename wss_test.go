@@ -367,6 +367,46 @@ func TestSNIOverWSS(t *testing.T) {
 	}
 }
 
+func wssForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := WSSListener("", nil, nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: WSSTransporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestWSSForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := wssForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func httpOverMWSSRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
@@ -723,5 +763,45 @@ func TestSNIOverMWSS(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func mwssForwardTunnelRoundtrip(targetURL string, data []byte) error {
+	ln, err := MWSSListener("", nil, nil)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ForwardConnector(),
+		Transporter: MWSSTransporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  TCPDirectForwardHandler(u.Host),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestMWSSForwardTunnel(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := mwssForwardTunnelRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
 	}
 }
