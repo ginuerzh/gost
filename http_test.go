@@ -77,7 +77,7 @@ func proxyRoundtrip(client *Client, server *Server, targetURL string, data []byt
 		return
 	}
 
-	conn.SetDeadline(time.Now().Add(1 * time.Second))
+	conn.SetDeadline(time.Now().Add(500 * time.Millisecond))
 	defer conn.SetDeadline(time.Time{})
 
 	conn, err = client.Connect(conn, u.Host)

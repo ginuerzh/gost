@@ -95,7 +95,7 @@ func DomainMatcher(pattern string) Matcher {
 	p := pattern
 	if strings.HasPrefix(pattern, ".") {
 		p = pattern[1:] // trim the prefix '.'
-		pattern = "*" + pattern
+		pattern = "*" + p
 	}
 	return &domainMatcher{
 		pattern: p,
@@ -143,8 +143,8 @@ func NewBypass(reversed bool, matchers ...Matcher) *Bypass {
 func NewBypassPatterns(reversed bool, patterns ...string) *Bypass {
 	var matchers []Matcher
 	for _, pattern := range patterns {
-		if pattern != "" {
-			matchers = append(matchers, NewMatcher(pattern))
+		if m := NewMatcher(pattern); m != nil {
+			matchers = append(matchers, m)
 		}
 	}
 	return NewBypass(reversed, matchers...)
@@ -152,14 +152,8 @@ func NewBypassPatterns(reversed bool, patterns ...string) *Bypass {
 
 // Contains reports whether the bypass includes addr.
 func (bp *Bypass) Contains(addr string) bool {
-	if bp == nil || addr == "" {
+	if bp == nil || len(bp.matchers) == 0 || addr == "" {
 		return false
-	}
-	// try to strip the port
-	if host, port, _ := net.SplitHostPort(addr); host != "" && port != "" {
-		if p, _ := strconv.Atoi(port); p > 0 { // port is valid
-			addr = host
-		}
 	}
 
 	bp.mux.RLock()
@@ -209,7 +203,7 @@ func (bp *Bypass) Reload(r io.Reader) error {
 	var period time.Duration
 	var reversed bool
 
-	if bp.Stopped() {
+	if r == nil || bp.Stopped() {
 		return nil
 	}
 

@@ -18,6 +18,15 @@ type Host struct {
 	Aliases  []string
 }
 
+// NewHost creates a Host.
+func NewHost(ip net.IP, hostname string, aliases ...string) Host {
+	return Host{
+		IP:       ip,
+		Hostname: hostname,
+		Aliases:  aliases,
+	}
+}
+
 // Hosts is a static table lookup for hostnames.
 // For each host a single line should be present with the following information:
 // IP_address canonical_hostname [aliases...]
@@ -30,7 +39,7 @@ type Hosts struct {
 	mux     sync.RWMutex
 }
 
-// NewHosts creates a Hosts with optional list of host
+// NewHosts creates a Hosts with optional list of hosts.
 func NewHosts(hosts ...Host) *Hosts {
 	return &Hosts{
 		hosts:   hosts,
@@ -48,7 +57,7 @@ func (h *Hosts) AddHost(host ...Host) {
 
 // Lookup searches the IP address corresponds to the given host from the host table.
 func (h *Hosts) Lookup(host string) (ip net.IP) {
-	if h == nil {
+	if h == nil || host == "" {
 		return
 	}
 
@@ -78,7 +87,7 @@ func (h *Hosts) Reload(r io.Reader) error {
 	var period time.Duration
 	var hosts []Host
 
-	if h.Stopped() {
+	if r == nil || h.Stopped() {
 		return nil
 	}
 
