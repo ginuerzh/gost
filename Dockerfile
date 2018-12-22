@@ -14,6 +14,8 @@ WORKDIR /bin/
 
 COPY --from=builder /data/cmd/gost/gost .
 
-RUN ls /bin/ && /bin/gost -h
+RUN chmod u+x gost
+
+RUN ls -l /bin/gost && /bin/gost -h
 
 ENTRYPOINT ["/bin/gost"]
