@@ -114,9 +114,9 @@ func KCPTransporter(config *KCPConfig) Transporter {
 }
 
 func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
-	uaddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return
+	opts := &DialOptions{}
+	for _, option := range options {
+		option(opts)
 	}
 
 	tr.sessionMutex.Lock()
@@ -124,7 +124,11 @@ func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Con
 
 	session, ok := tr.sessions[addr]
 	if !ok {
-		conn, err = net.DialUDP("udp", nil, uaddr)
+		timeout := opts.Timeout
+		if timeout <= 0 {
+			timeout = DialTimeout
+		}
+		conn, err = net.DialTimeout("udp", addr, timeout)
 		if err != nil {
 			return
 		}
@@ -145,6 +149,13 @@ func (tr *kcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	}
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
 
 	session, ok := tr.sessions[opts.Addr]
 	if !ok || session.session == nil {

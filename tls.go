@@ -30,7 +30,13 @@ func (tr *tlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	if opts.TLSConfig == nil {
 		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	return wrapTLSClient(conn, opts.TLSConfig, opts.Timeout)
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
+	return wrapTLSClient(conn, opts.TLSConfig, timeout)
 }
 
 type mtlsTransporter struct {
@@ -52,6 +58,11 @@ func (tr *mtlsTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
@@ -63,7 +74,7 @@ func (tr *mtlsTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 	}
 	if !ok {
 		if opts.Chain == nil {
-			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
+			conn, err = net.DialTimeout("tcp", addr, timeout)
 		} else {
 			conn, err = opts.Chain.Dial(addr)
 		}
@@ -82,8 +93,16 @@ func (tr *mtlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) 
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
 
 	session, ok := tr.sessions[opts.Addr]
 	if !ok || session.session == nil {
@@ -265,7 +284,7 @@ func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config, timeout time.Duration) 
 	}
 
 	if timeout <= 0 {
-		timeout = 10 * time.Second // default timeout
+		timeout = HandshakeTimeout // default timeout
 	}
 
 	tlsConn.SetDeadline(time.Now().Add(timeout))

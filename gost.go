@@ -51,6 +51,8 @@ var (
 	KeepAliveTime = 180 * time.Second
 	// DialTimeout is the timeout of dial.
 	DialTimeout = 5 * time.Second
+	// HandshakeTimeout is the timeout of handshake.
+	HandshakeTimeout = 5 * time.Second
 	// ReadTimeout is the timeout for reading.
 	ReadTimeout = 5 * time.Second
 	// WriteTimeout is the timeout for writing.

@@ -54,6 +54,11 @@ func QUICTransporter(config *QUICConfig) Transporter {
 }
 
 func (tr *quicTransporter) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
+	opts := &DialOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
@@ -91,6 +96,13 @@ func (tr *quicTransporter) Handshake(conn net.Conn, options ...HandshakeOption) 
 
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
 
 	session, ok := tr.sessions[opts.Addr]
 	if session != nil && session.conn != conn {

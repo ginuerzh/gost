@@ -126,6 +126,10 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 		}
 		conn.Close()
 
+		timeout := opts.Timeout
+		if timeout <= 0 {
+			timeout = DialTimeout
+		}
 		transport := http2.Transport{
 			TLSClientConfig: tr.tlsConfig,
 			DialTLS: func(network, adr string, cfg *tls.Config) (net.Conn, error) {
@@ -133,12 +137,12 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 				if err != nil {
 					return nil, err
 				}
-				return wrapTLSClient(conn, cfg, opts.Timeout)
+				return wrapTLSClient(conn, cfg, timeout)
 			},
 		}
 		client = &http.Client{
 			Transport: &transport,
-			Timeout:   opts.Timeout,
+			Timeout:   timeout,
 		}
 		tr.clients[addr] = client
 	}
@@ -190,6 +194,11 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 	tr.clientMutex.Lock()
 	client, ok := tr.clients[addr]
 	if !ok {
+		timeout := opts.Timeout
+		if timeout <= 0 {
+			timeout = DialTimeout
+		}
+
 		transport := http2.Transport{
 			TLSClientConfig: tr.tlsConfig,
 			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
@@ -200,12 +209,12 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 				if tr.tlsConfig == nil {
 					return conn, nil
 				}
-				return wrapTLSClient(conn, cfg, opts.Timeout)
+				return wrapTLSClient(conn, cfg, timeout)
 			},
 		}
 		client = &http.Client{
 			Transport: &transport,
-			Timeout:   opts.Timeout,
+			Timeout:   timeout,
 		}
 		tr.clients[addr] = client
 	}

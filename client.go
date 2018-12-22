@@ -76,8 +76,12 @@ func (tr *tcpTransporter) Dial(addr string, options ...DialOption) (net.Conn, er
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
 	if opts.Chain == nil {
-		return net.DialTimeout("tcp", addr, opts.Timeout)
+		return net.DialTimeout("tcp", addr, timeout)
 	}
 	return opts.Chain.Dial(addr)
 }
@@ -103,7 +107,13 @@ func (tr *udpTransporter) Dial(addr string, options ...DialOption) (net.Conn, er
 	for _, option := range options {
 		option(opts)
 	}
-	return net.DialTimeout("udp", addr, opts.Timeout)
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
+
+	return net.DialTimeout("udp", addr, timeout)
 }
 
 func (tr *udpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {

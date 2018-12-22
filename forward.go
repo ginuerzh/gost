@@ -662,9 +662,9 @@ func TCPRemoteForwardListener(addr string, chain *Chain) (Listener, error) {
 
 	go ln.listenLoop()
 
-	if err = <-ln.errChan; err != nil {
-		ln.Close()
-	}
+	// if err = <-ln.errChan; err != nil {
+	// 	ln.Close()
+	// }
 
 	return ln, err
 }
@@ -680,19 +680,22 @@ func (l *tcpRemoteForwardListener) isChainValid() bool {
 
 func (l *tcpRemoteForwardListener) listenLoop() {
 	var tempDelay time.Duration
-	var once sync.Once
+	// var once sync.Once
 
 	for {
 		conn, err := l.accept()
 
-		once.Do(func() {
-			l.errChan <- err
-			close(l.errChan)
-		})
+		// once.Do(func() {
+		// 	l.errChan <- err
+		// 	log.Log("once.Do error:", err)
+		// 	close(l.errChan)
+		// })
 
 		select {
 		case <-l.closed:
-			conn.Close()
+			if conn != nil {
+				conn.Close()
+			}
 			return
 		default:
 		}
@@ -706,7 +709,7 @@ func (l *tcpRemoteForwardListener) listenLoop() {
 			if max := 6 * time.Second; tempDelay > max {
 				tempDelay = max
 			}
-			log.Logf("[rtcp] Accept error: %v; retrying in %v", err, tempDelay)
+			log.Logf("[rtcp] accept error: %v; retrying in %v", err, tempDelay)
 			time.Sleep(tempDelay)
 			continue
 		}

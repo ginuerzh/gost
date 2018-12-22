@@ -126,10 +126,15 @@ func (tr *sshForwardTransporter) Dial(addr string, options ...DialOption) (conn 
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
+
 	session, ok := tr.sessions[addr]
 	if !ok || session.Closed() {
 		if opts.Chain == nil {
-			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
+			conn, err = net.DialTimeout("tcp", addr, timeout)
 		} else {
 			conn, err = opts.Chain.Dial(addr)
 		}
@@ -152,8 +157,13 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
 	config := ssh.ClientConfig{
-		Timeout:         opts.Timeout,
+		Timeout:         timeout,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	if opts.User != nil {
@@ -222,10 +232,15 @@ func (tr *sshTunnelTransporter) Dial(addr string, options ...DialOption) (conn n
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
+
 	session, ok := tr.sessions[addr]
 	if !ok || session.Closed() {
 		if opts.Chain == nil {
-			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
+			conn, err = net.DialTimeout("tcp", addr, timeout)
 		} else {
 			conn, err = opts.Chain.Dial(addr)
 		}
@@ -248,8 +263,13 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
 	config := ssh.ClientConfig{
-		Timeout:         opts.Timeout,
+		Timeout:         timeout,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	// TODO: support pubkey auth.
@@ -318,7 +338,7 @@ func (s *sshSession) Ping(interval, timeout time.Duration, retries int) {
 		return
 	}
 	if timeout <= 0 {
-		timeout = 10 * time.Second
+		timeout = PingTimeout
 	}
 
 	if retries == 0 {

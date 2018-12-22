@@ -37,11 +37,17 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 	if options == nil {
 		options = &WSOptions{}
 	}
+
+	timeout := options.HandshakeTimeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
 	dialer := websocket.Dialer{
 		ReadBufferSize:    options.ReadBufferSize,
 		WriteBufferSize:   options.WriteBufferSize,
 		TLSClientConfig:   tlsConfig,
-		HandshakeTimeout:  options.HandshakeTimeout,
+		HandshakeTimeout:  timeout,
 		EnableCompression: options.EnableCompression,
 		NetDial: func(net, addr string) (net.Conn, error) {
 			return conn, nil
@@ -154,6 +160,11 @@ func (tr *mwsTransporter) Dial(addr string, options ...DialOption) (conn net.Con
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
@@ -165,7 +176,7 @@ func (tr *mwsTransporter) Dial(addr string, options ...DialOption) (conn net.Con
 	}
 	if !ok {
 		if opts.Chain == nil {
-			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
+			conn, err = net.DialTimeout("tcp", addr, timeout)
 		} else {
 			conn, err = opts.Chain.Dial(addr)
 		}
@@ -184,8 +195,16 @@ func (tr *mwsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
 
 	session, ok := tr.sessions[opts.Addr]
 	if !ok || session.session == nil {
@@ -283,6 +302,11 @@ func (tr *mwssTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DialTimeout
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
@@ -294,7 +318,7 @@ func (tr *mwssTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 	}
 	if !ok {
 		if opts.Chain == nil {
-			conn, err = net.DialTimeout("tcp", addr, opts.Timeout)
+			conn, err = net.DialTimeout("tcp", addr, timeout)
 		} else {
 			conn, err = opts.Chain.Dial(addr)
 		}
@@ -313,8 +337,16 @@ func (tr *mwssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) 
 		option(opts)
 	}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
 
 	session, ok := tr.sessions[opts.Addr]
 	if !ok || session.session == nil {
