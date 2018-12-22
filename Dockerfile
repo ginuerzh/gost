@@ -1,4 +1,4 @@
-FROM golang:1-alpine as builder
+FROM golang:1 as builder
 
 ADD . /data
 
