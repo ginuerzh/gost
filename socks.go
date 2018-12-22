@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ginuerzh/gosocks4"
@@ -252,6 +253,131 @@ func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...Connect
 	}
 
 	return conn, nil
+}
+
+type socks5BindConnector struct {
+	User *url.Userinfo
+}
+
+// SOCKS5BindConnector creates a connector for SOCKS5 bind.
+// It accepts an optional auth info for SOCKS5 Username/Password Authentication.
+func SOCKS5BindConnector(user *url.Userinfo) Connector {
+	return &socks5BindConnector{User: user}
+}
+
+func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	cc, err := socks5Handshake(conn, c.User)
+	if err != nil {
+		return nil, err
+	}
+	conn = cc
+
+	laddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		log.Log(err)
+		return nil, err
+	}
+
+	req := gosocks5.NewRequest(gosocks5.CmdBind, &gosocks5.Addr{
+		Type: gosocks5.AddrIPv4,
+		Host: laddr.IP.String(),
+		Port: uint16(laddr.Port),
+	})
+
+	if err := req.Write(conn); err != nil {
+		return nil, err
+	}
+
+	if Debug {
+		log.Log("[socks5] bind\n", req)
+	}
+
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	reply, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		return nil, err
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	if Debug {
+		log.Log("[socks5] bind\n", reply)
+	}
+
+	if reply.Rep != gosocks5.Succeeded {
+		log.Logf("[socks5] bind on %s failure", addr)
+		return nil, fmt.Errorf("SOCKS5 bind on %s failure", addr)
+	}
+	baddr, err := net.ResolveTCPAddr("tcp", reply.Addr.String())
+	if err != nil {
+		return nil, err
+	}
+	log.Logf("[socks5] bind on %s OK", baddr)
+
+	return &socks5BindConn{Conn: conn, laddr: baddr}, nil
+}
+
+type socks5UDPConnector struct {
+	User *url.Userinfo
+}
+
+// SOCKS5UDPConnector creates a connector for SOCKS5 UDP relay.
+// It accepts an optional auth info for SOCKS5 Username/Password Authentication.
+func SOCKS5UDPConnector(user *url.Userinfo) Connector {
+	return &socks5UDPConnector{User: user}
+}
+
+func (c *socks5UDPConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	cc, err := socks5Handshake(conn, c.User)
+	if err != nil {
+		return nil, err
+	}
+	conn = cc
+
+	taddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	req := gosocks5.NewRequest(gosocks5.CmdUdp, &gosocks5.Addr{
+		Type: gosocks5.AddrIPv4,
+	})
+
+	if err := req.Write(conn); err != nil {
+		return nil, err
+	}
+
+	if Debug {
+		log.Log("[socks5] udp\n", req)
+	}
+
+	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	reply, err := gosocks5.ReadReply(conn)
+	if err != nil {
+		return nil, err
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	if Debug {
+		log.Log("[socks5] udp\n", reply)
+	}
+
+	if reply.Rep != gosocks5.Succeeded {
+		log.Logf("[socks5] udp relay failure")
+		return nil, fmt.Errorf("SOCKS5 udp relay failure")
+	}
+	baddr, err := net.ResolveUDPAddr("udp", reply.Addr.String())
+	if err != nil {
+		return nil, err
+	}
+	log.Logf("[socks5] udp associate on %s OK", baddr)
+
+	uc, err := net.DialUDP("udp", nil, baddr)
+	if err != nil {
+		return nil, err
+	}
+	log.Logf("udp laddr:%s, raddr:%s", uc.LocalAddr(), uc.RemoteAddr())
+
+	return &socks5UDPConn{UDPConn: uc, taddr: taddr}, nil
 }
 
 type socks4Connector struct{}
@@ -773,7 +899,8 @@ func (h *socks5Handler) transportUDP(relay, peer *net.UDPConn) (err error) {
 	var clientAddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, largeBufferSize)
+		b := mPool.Get().([]byte)
+		defer mPool.Put(b)
 
 		for {
 			n, laddr, err := relay.ReadFromUDP(b)
@@ -809,7 +936,8 @@ func (h *socks5Handler) transportUDP(relay, peer *net.UDPConn) (err error) {
 	}()
 
 	go func() {
-		b := make([]byte, largeBufferSize)
+		b := mPool.Get().([]byte)
+		defer mPool.Put(b)
 
 		for {
 			n, raddr, err := peer.ReadFromUDP(b)
@@ -851,7 +979,8 @@ func (h *socks5Handler) tunnelClientUDP(uc *net.UDPConn, cc net.Conn) (err error
 	var clientAddr *net.UDPAddr
 
 	go func() {
-		b := make([]byte, mediumBufferSize)
+		b := mPool.Get().([]byte)
+		defer mPool.Put(b)
 
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
@@ -990,7 +1119,8 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, uc *net.UDPConn) (err error
 	errc := make(chan error, 2)
 
 	go func() {
-		b := make([]byte, mediumBufferSize)
+		b := mPool.Get().([]byte)
+		defer mPool.Put(b)
 
 		for {
 			n, addr, err := uc.ReadFromUDP(b)
@@ -1450,6 +1580,118 @@ func (c *udpTunnelConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(addr)), b)
 	if err = dgram.Write(c.Conn); err != nil {
 		return
+	}
+	return len(b), nil
+}
+
+// socks5BindConn is a connection for SOCKS5 bind request.
+type socks5BindConn struct {
+	raddr net.Addr
+	laddr net.Addr
+	net.Conn
+	handshaked   bool
+	handshakeMux sync.Mutex
+}
+
+// Handshake waits for a peer to connect to the bind port.
+func (c *socks5BindConn) Handshake() (err error) {
+	c.handshakeMux.Lock()
+	defer c.handshakeMux.Unlock()
+
+	if c.handshaked {
+		return nil
+	}
+
+	c.handshaked = true
+
+	rep, err := gosocks5.ReadReply(c.Conn)
+	if err != nil {
+		return fmt.Errorf("bind: read reply %v", err)
+	}
+	if rep.Rep != gosocks5.Succeeded {
+		return fmt.Errorf("bind: peer connect failure")
+	}
+	c.raddr, err = net.ResolveTCPAddr("tcp", rep.Addr.String())
+	return
+}
+
+func (c *socks5BindConn) Read(b []byte) (n int, err error) {
+	if err = c.Handshake(); err != nil {
+		return
+	}
+	return c.Conn.Read(b)
+}
+
+func (c *socks5BindConn) Write(b []byte) (n int, err error) {
+	if err = c.Handshake(); err != nil {
+		return
+	}
+	return c.Conn.Write(b)
+}
+
+func (c *socks5BindConn) LocalAddr() net.Addr {
+	return c.laddr
+}
+
+func (c *socks5BindConn) RemoteAddr() net.Addr {
+	return c.raddr
+}
+
+type socks5UDPConn struct {
+	*net.UDPConn
+	taddr net.Addr
+}
+
+func (c *socks5UDPConn) Read(b []byte) (int, error) {
+	data := mPool.Get().([]byte)
+	defer mPool.Put(data)
+	
+	n, err := c.UDPConn.Read(data)
+	if err != nil {
+		return 0, err
+	}
+	dg, err := gosocks5.ReadUDPDatagram(bytes.NewReader(data[:n]))
+	if err != nil {
+		return 0, err
+	}
+
+	return copy(b, dg.Data), nil
+}
+
+func (c *socks5UDPConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+	dg, err := gosocks5.ReadUDPDatagram(c.UDPConn)
+	if err != nil {
+		return
+	}
+
+	n = copy(b, dg.Data)
+	addr, err = net.ResolveUDPAddr("udp", dg.Header.Addr.String())
+
+	return
+}
+
+func (c *socks5UDPConn) Write(b []byte) (int, error) {
+	addr, err := gosocks5.NewAddr(c.taddr.String())
+	if err != nil {
+		return 0, err
+	}
+	h := gosocks5.NewUDPHeader(0, 0, addr)
+	dg := gosocks5.NewUDPDatagram(h, b)
+	if err = dg.Write(c.UDPConn); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+func (c *socks5UDPConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	adr, err := gosocks5.NewAddr(addr.String())
+	if err != nil {
+		return 0, err
+	}
+	h := gosocks5.NewUDPHeader(0, 0, adr)
+	dg := gosocks5.NewUDPDatagram(h, b)
+	if err = dg.Write(c.UDPConn); err != nil {
+		return 0, err
 	}
 	return len(b), nil
 }

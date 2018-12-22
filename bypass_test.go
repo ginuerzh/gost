@@ -58,21 +58,21 @@ var bypassContainTests = []struct {
 	{[]string{"www.example.com"}, true, "example.com", true},
 
 	// host:port
-	{[]string{"192.168.1.1"}, false, "192.168.1.1:80", false},
-	{[]string{"192.168.1.1"}, true, "192.168.1.1:80", true},
+	{[]string{"192.168.1.1"}, false, "192.168.1.1:80", true},
+	{[]string{"192.168.1.1"}, true, "192.168.1.1:80", false},
 	{[]string{"192.168.1.1:80"}, false, "192.168.1.1", false},
 	{[]string{"192.168.1.1:80"}, true, "192.168.1.1", true},
-	{[]string{"192.168.1.1:80"}, false, "192.168.1.1:80", true},
-	{[]string{"192.168.1.1:80"}, true, "192.168.1.1:80", false},
+	{[]string{"192.168.1.1:80"}, false, "192.168.1.1:80", false},
+	{[]string{"192.168.1.1:80"}, true, "192.168.1.1:80", true},
 	{[]string{"192.168.1.1:80"}, false, "192.168.1.1:8080", false},
 	{[]string{"192.168.1.1:80"}, true, "192.168.1.1:8080", true},
 
-	{[]string{"example.com"}, false, "example.com:80", false},
-	{[]string{"example.com"}, true, "example.com:80", true},
+	{[]string{"example.com"}, false, "example.com:80", true},
+	{[]string{"example.com"}, true, "example.com:80", false},
 	{[]string{"example.com:80"}, false, "example.com", false},
 	{[]string{"example.com:80"}, true, "example.com", true},
-	{[]string{"example.com:80"}, false, "example.com:80", true},
-	{[]string{"example.com:80"}, true, "example.com:80", false},
+	{[]string{"example.com:80"}, false, "example.com:80", false},
+	{[]string{"example.com:80"}, true, "example.com:80", true},
 	{[]string{"example.com:80"}, false, "example.com:8080", false},
 	{[]string{"example.com:80"}, true, "example.com:8080", true},
 
@@ -139,18 +139,20 @@ var bypassContainTests = []struct {
 	{[]string{".example.com"}, false, "example.com", true},
 	{[]string{".example.com"}, false, "www.example.com.cn", false},
 
+	{[]string{"example.com*"}, false, "example.com", true},
 	{[]string{"example.com:*"}, false, "example.com", false},
-	{[]string{"example.com:*"}, false, "example.com:80", true},
-	{[]string{"example.com:*"}, false, "example.com:8080", true},
+	{[]string{"example.com:*"}, false, "example.com:80", false},
+	{[]string{"example.com:*"}, false, "example.com:8080", false},
 	{[]string{"example.com:*"}, false, "example.com:http", true},
 	{[]string{"example.com:*"}, false, "http://example.com:80", false},
 
-	{[]string{"*example.com:*"}, false, "example.com:80", true},
+	{[]string{"*example.com*"}, false, "example.com:80", true},
+	{[]string{"*example.com:*"}, false, "example.com:80", false},
 
 	{[]string{".example.com:*"}, false, "www.example.com", false},
 	{[]string{".example.com:*"}, false, "http://www.example.com", false},
-	{[]string{".example.com:*"}, false, "example.com:80", true},
-	{[]string{".example.com:*"}, false, "www.example.com:8080", true},
+	{[]string{".example.com:*"}, false, "example.com:80", false},
+	{[]string{".example.com:*"}, false, "www.example.com:8080", false},
 	{[]string{".example.com:*"}, false, "http://www.example.com:80", true},
 }
 

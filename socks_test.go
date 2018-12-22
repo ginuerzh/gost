@@ -2,7 +2,7 @@ package gost
 
 import (
 	"crypto/rand"
-	"crypto/tls"
+	"net"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -51,14 +51,6 @@ func socks5ProxyRoundtrip(targetURL string, data []byte, clientInfo *url.Userinf
 }
 
 func TestSOCKS5Proxy(t *testing.T) {
-	cert, err := GenCertificate()
-	if err != nil {
-		panic(err)
-	}
-	DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
-
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -84,14 +76,6 @@ func TestSOCKS5Proxy(t *testing.T) {
 }
 
 func BenchmarkSOCKS5Proxy(b *testing.B) {
-	cert, err := GenCertificate()
-	if err != nil {
-		panic(err)
-	}
-	DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
-
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -124,14 +108,6 @@ func BenchmarkSOCKS5Proxy(b *testing.B) {
 }
 
 func BenchmarkSOCKS5ProxyParallel(b *testing.B) {
-	cert, err := GenCertificate()
-	if err != nil {
-		panic(err)
-	}
-	DefaultTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
-
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -364,4 +340,103 @@ func BenchmarkSOCKS4AProxyParallel(b *testing.B) {
 			}
 		}
 	})
+}
+
+func socks5BindRoundtrip(t *testing.T, targetURL string, data []byte) (err error) {
+	ln, err := TCPListener("")
+	if err != nil {
+		return
+	}
+
+	client := &Client{
+		Connector:   SOCKS5BindConnector(url.UserPassword("admin", "123456")),
+		Transporter: TCPTransporter(),
+	}
+
+	server := &Server{
+		Handler:  SOCKS5Handler(UsersHandlerOption(url.UserPassword("admin", "123456"))),
+		Listener: ln,
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	conn, err = client.Connect(conn, "")
+	if err != nil {
+		return
+	}
+
+	cc, err := net.Dial("tcp", conn.LocalAddr().String())
+	if err != nil {
+		return
+	}
+	defer cc.Close()
+
+	if err = conn.(*socks5BindConn).Handshake(); err != nil {
+		return
+	}
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return
+	}
+	hc, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		return
+	}
+	go transport(hc, conn)
+
+	return httpRoundtrip(cc, targetURL, data)
+}
+
+func TestSOCKS5Bind(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	if err := socks5BindRoundtrip(t, httpSrv.URL, sendData); err != nil {
+		t.Errorf("got error: %v", err)
+	}
+}
+
+func socks5UDPRoundtrip(t *testing.T, host string, data []byte) (err error) {
+	ln, err := TCPListener("")
+	if err != nil {
+		return
+	}
+
+	client := &Client{
+		Connector:   SOCKS5UDPConnector(url.UserPassword("admin", "123456")),
+		Transporter: TCPTransporter(),
+	}
+
+	server := &Server{
+		Handler:  SOCKS5Handler(UsersHandlerOption(url.UserPassword("admin", "123456"))),
+		Listener: ln,
+	}
+	go server.Run()
+	defer server.Close()
+
+	return udpRoundtrip(client, server, host, data)
+}
+
+func TestSOCKS5UDP(t *testing.T) {
+	udpSrv := newUDPTestServer(udpTestHandler)
+	udpSrv.Start()
+	defer udpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	if err := socks5UDPRoundtrip(t, udpSrv.Addr(), sendData); err != nil {
+		t.Errorf("got error: %v", err)
+	}
 }

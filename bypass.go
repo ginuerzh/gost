@@ -152,12 +152,23 @@ func NewBypassPatterns(reversed bool, patterns ...string) *Bypass {
 
 // Contains reports whether the bypass includes addr.
 func (bp *Bypass) Contains(addr string) bool {
-	if bp == nil || len(bp.matchers) == 0 || addr == "" {
+	if bp == nil || addr == "" {
 		return false
+	}
+
+	// try to strip the port
+	if host, port, _ := net.SplitHostPort(addr); host != "" && port != "" {
+		if p, _ := strconv.Atoi(port); p > 0 { // port is valid
+			addr = host
+		}
 	}
 
 	bp.mux.RLock()
 	defer bp.mux.RUnlock()
+
+	if len(bp.matchers) == 0 {
+		return false
+	}
 
 	var matched bool
 	for _, matcher := range bp.matchers {

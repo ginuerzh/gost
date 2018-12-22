@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"io"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/go-log/log"
@@ -28,14 +29,32 @@ var (
 )
 
 var (
+	sPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, smallBufferSize)
+		},
+	}
+	mPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, mediumBufferSize)
+		},
+	}
+	lPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, largeBufferSize)
+		},
+	}
+)
+
+var (
 	// KeepAliveTime is the keep alive time period for TCP connection.
 	KeepAliveTime = 180 * time.Second
 	// DialTimeout is the timeout of dial.
-	DialTimeout = 30 * time.Second
+	DialTimeout = 5 * time.Second
 	// ReadTimeout is the timeout for reading.
-	ReadTimeout = 30 * time.Second
+	ReadTimeout = 5 * time.Second
 	// WriteTimeout is the timeout for writing.
-	WriteTimeout = 60 * time.Second
+	WriteTimeout = 5 * time.Second
 	// PingTimeout is the timeout for pinging.
 	PingTimeout = 30 * time.Second
 	// PingRetries is the reties of ping.

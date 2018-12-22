@@ -4,12 +4,14 @@ ADD . /data
 
 WORKDIR /data
 
-RUN cd cmd/gost && go install
+ENV GO111MODULE=on
+
+RUN cd cmd/gost && go build
 
 FROM alpine:latest
 
 WORKDIR /bin/
 
-COPY --from=builder /go/bin/gost .
+COPY --from=builder /data/cmd/gost/gost .
 
 ENTRYPOINT ["/bin/gost"]

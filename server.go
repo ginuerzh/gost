@@ -3,7 +3,6 @@ package gost
 import (
 	"io"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/go-log/log"
@@ -137,27 +136,19 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	return tc, nil
 }
 
-var (
-	trPool = sync.Pool{
-		New: func() interface{} {
-			return make([]byte, 32*1024)
-		},
-	}
-)
-
 func transport(rw1, rw2 io.ReadWriter) error {
 	errc := make(chan error, 1)
 	go func() {
-		buf := trPool.Get().([]byte)
-		defer trPool.Put(buf)
+		buf := lPool.Get().([]byte)
+		defer lPool.Put(buf)
 
 		_, err := io.CopyBuffer(rw1, rw2, buf)
 		errc <- err
 	}()
 
 	go func() {
-		buf := trPool.Get().([]byte)
-		defer trPool.Put(buf)
+		buf := lPool.Get().([]byte)
+		defer lPool.Put(buf)
 
 		_, err := io.CopyBuffer(rw2, rw1, buf)
 		errc <- err
