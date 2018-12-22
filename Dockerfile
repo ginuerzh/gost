@@ -1,4 +1,6 @@
-FROM golang:1 as builder
+FROM golang:1-alpine as builder
+
+RUN apk add --no-cache musl-dev git gcc
 
 ADD . /data
 
@@ -14,8 +16,6 @@ WORKDIR /bin/
 
 COPY --from=builder /data/cmd/gost/gost .
 
-RUN chmod u+x gost
-
-RUN ls -l /bin/gost && /bin/gost -h
+RUN /bin/gost -V
 
 ENTRYPOINT ["/bin/gost"]
