@@ -1,4 +1,4 @@
-FROM golang:1 as builder
+FROM golang:1-alpine as builder
 
 ADD . /data
 
@@ -13,5 +13,7 @@ FROM alpine:latest
 WORKDIR /bin/
 
 COPY --from=builder /data/cmd/gost/gost .
+
+RUN ls /bin/ && /bin/gost -h
 
 ENTRYPOINT ["/bin/gost"]
