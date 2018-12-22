@@ -28,6 +28,19 @@ func HTTPConnector(user *url.Userinfo) Connector {
 }
 
 func (c *httpConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	req := &http.Request{
 		Method:     http.MethodConnect,
 		URL:        &url.URL{Host: addr},

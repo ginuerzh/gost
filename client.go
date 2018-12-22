@@ -236,7 +236,8 @@ func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 
 // ConnectOptions describes the options for Connector.Connect.
 type ConnectOptions struct {
-	Addr string
+	Addr    string
+	Timeout time.Duration
 }
 
 // ConnectOption allows a common way to set ConnectOptions.
@@ -246,5 +247,12 @@ type ConnectOption func(opts *ConnectOptions)
 func AddrConnectOption(addr string) ConnectOption {
 	return func(opts *ConnectOptions) {
 		opts.Addr = addr
+	}
+}
+
+// TimeoutConnectOption specifies the timeout for connecting to target.
+func TimeoutConnectOption(timeout time.Duration) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.Timeout = timeout
 	}
 }

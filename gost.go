@@ -53,10 +53,12 @@ var (
 	DialTimeout = 5 * time.Second
 	// HandshakeTimeout is the timeout of handshake.
 	HandshakeTimeout = 5 * time.Second
+	// ConnectTimeout is the timeout for connect.
+	ConnectTimeout = 5 * time.Second
 	// ReadTimeout is the timeout for reading.
-	ReadTimeout = 5 * time.Second
+	ReadTimeout = 10 * time.Second
 	// WriteTimeout is the timeout for writing.
-	WriteTimeout = 5 * time.Second
+	WriteTimeout = 10 * time.Second
 	// PingTimeout is the timeout for pinging.
 	PingTimeout = 30 * time.Second
 	// PingRetries is the reties of ping.

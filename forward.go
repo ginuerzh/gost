@@ -714,6 +714,8 @@ func (l *tcpRemoteForwardListener) listenLoop() {
 			continue
 		}
 
+		tempDelay = 0
+
 		select {
 		case l.connChan <- conn:
 		default:
@@ -774,7 +776,7 @@ func (l *tcpRemoteForwardListener) muxAccept() (conn net.Conn, err error) {
 	return cc, nil
 }
 
-func (l *tcpRemoteForwardListener) getSession() (*muxSession, error) {
+func (l *tcpRemoteForwardListener) getSession() (s *muxSession, err error) {
 	l.sessionMux.Lock()
 	defer l.sessionMux.Unlock()
 
@@ -787,6 +789,15 @@ func (l *tcpRemoteForwardListener) getSession() (*muxSession, error) {
 		return nil, err
 	}
 
+	defer func(c net.Conn) {
+		if err != nil {
+			c.Close()
+		}
+	}(conn)
+
+	conn.SetDeadline(time.Now().Add(HandshakeTimeout))
+	defer conn.SetDeadline(time.Time{})
+
 	conn, err = socks5Handshake(conn, l.chain.LastNode().User)
 	if err != nil {
 		return nil, err
@@ -797,13 +808,11 @@ func (l *tcpRemoteForwardListener) getSession() (*muxSession, error) {
 		return nil, err
 	}
 
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	rep, err := gosocks5.ReadReply(conn)
 	if err != nil {
 		log.Log("[rtcp] SOCKS5 BIND reply: ", err)
 		return nil, err
 	}
-	conn.SetReadDeadline(time.Time{})
 	if rep.Rep != gosocks5.Succeeded {
 		log.Logf("[rtcp] bind on %s failure", l.addr)
 		return nil, fmt.Errorf("Bind on %s failure", l.addr.String())

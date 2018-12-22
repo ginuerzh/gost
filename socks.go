@@ -205,6 +205,19 @@ func SOCKS5Connector(user *url.Userinfo) Connector {
 }
 
 func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	selector := &clientSelector{
 		TLSConfig: &tls.Config{InsecureSkipVerify: true},
 		User:      c.User,
@@ -266,6 +279,19 @@ func SOCKS5BindConnector(user *url.Userinfo) Connector {
 }
 
 func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	cc, err := socks5Handshake(conn, c.User)
 	if err != nil {
 		return nil, err
@@ -292,12 +318,10 @@ func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...Con
 		log.Log("[socks5] bind\n", req)
 	}
 
-	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	reply, err := gosocks5.ReadReply(conn)
 	if err != nil {
 		return nil, err
 	}
-	conn.SetReadDeadline(time.Time{})
 
 	if Debug {
 		log.Log("[socks5] bind\n", reply)
@@ -327,6 +351,19 @@ func SOCKS5UDPConnector(user *url.Userinfo) Connector {
 }
 
 func (c *socks5UDPConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	cc, err := socks5Handshake(conn, c.User)
 	if err != nil {
 		return nil, err
@@ -388,6 +425,19 @@ func SOCKS4Connector() Connector {
 }
 
 func (c *socks4Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	taddr, err := net.ResolveTCPAddr("tcp4", addr)
 	if err != nil {
 		return nil, err
@@ -435,6 +485,19 @@ func SOCKS4AConnector() Connector {
 }
 
 func (c *socks4aConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
@@ -1645,7 +1708,7 @@ type socks5UDPConn struct {
 func (c *socks5UDPConn) Read(b []byte) (int, error) {
 	data := mPool.Get().([]byte)
 	defer mPool.Put(data)
-	
+
 	n, err := c.UDPConn.Read(data)
 	if err != nil {
 		return 0, err

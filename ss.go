@@ -68,6 +68,19 @@ func ShadowConnector(cipher *url.Userinfo) Connector {
 }
 
 func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	rawaddr, err := ss.RawAddr(addr)
 	if err != nil {
 		return nil, err

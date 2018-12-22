@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
-	"time"
 )
 
 // proxyConn obtains a connection to the proxy server.
@@ -77,8 +76,8 @@ func proxyRoundtrip(client *Client, server *Server, targetURL string, data []byt
 		return
 	}
 
-	conn.SetDeadline(time.Now().Add(500 * time.Millisecond))
-	defer conn.SetDeadline(time.Time{})
+	// conn.SetDeadline(time.Now().Add(500 * time.Millisecond))
+	// defer conn.SetDeadline(time.Time{})
 
 	conn, err = client.Connect(conn, u.Host)
 	if err != nil {
