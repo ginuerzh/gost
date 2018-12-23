@@ -14,9 +14,9 @@ import (
 func init() {
 	// SetLogger(&LogLogger{})
 	// Debug = true
-	DialTimeout = 500 * time.Millisecond
-	HandshakeTimeout = 500 * time.Millisecond
-	ConnectTimeout = 500 * time.Millisecond
+	DialTimeout = 1000 * time.Millisecond
+	HandshakeTimeout = 1000 * time.Millisecond
+	ConnectTimeout = 1000 * time.Millisecond
 
 	cert, err := GenCertificate()
 	if err != nil {
