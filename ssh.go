@@ -40,10 +40,24 @@ func SSHDirectForwardConnector() Connector {
 }
 
 func (c *sshDirectForwardConnector) Connect(conn net.Conn, raddr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
 	cc, ok := conn.(*sshNopConn) // TODO: this is an ugly type assertion, need to find a better solution.
 	if !ok {
 		return nil, errors.New("ssh: wrong connection type")
 	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	cc.session.conn.SetDeadline(time.Now().Add(timeout))
+	defer cc.session.conn.SetDeadline(time.Time{})
+
 	conn, err := cc.session.client.Dial("tcp", raddr)
 	if err != nil {
 		log.Logf("[ssh-tcp] %s -> %s : %s", cc.session.addr, raddr, err)
@@ -177,6 +191,9 @@ func (tr *sshForwardTransporter) Handshake(conn net.Conn, options ...HandshakeOp
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	session, ok := tr.sessions[opts.Addr]
 	if !ok || session.client == nil {
 		sshConn, chans, reqs, err := ssh.NewClientConn(conn, opts.Addr, &config)
@@ -269,7 +286,6 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 	}
 
 	config := ssh.ClientConfig{
-		Timeout:         timeout,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	// TODO: support pubkey auth.
@@ -283,6 +299,9 @@ func (tr *sshTunnelTransporter) Handshake(conn net.Conn, options ...HandshakeOpt
 
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
 
 	session, ok := tr.sessions[opts.Addr]
 	if !ok || session.client == nil {

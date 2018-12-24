@@ -320,6 +320,14 @@ func (tr *obfs4Transporter) Handshake(conn net.Conn, options ...HandshakeOption)
 	for _, option := range options {
 		option(opts)
 	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
 	return obfs4ClientConn(opts.Addr, conn)
 }
 

@@ -271,23 +271,14 @@ func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config, timeout time.Duration) 
 	var err error
 	var tlsConn *tls.Conn
 
-	tlsConn = tls.Client(conn, tlsConfig)
-
-	// If crypto/tls is doing verification, there's no need to do our own.
-	if tlsConfig.InsecureSkipVerify == false {
-		return tlsConn, nil
-	}
-
-	// Similarly if we use host's CA, we can do full handshake
-	if tlsConfig.RootCAs == nil {
-		return tlsConn, nil
-	}
-
 	if timeout <= 0 {
 		timeout = HandshakeTimeout // default timeout
 	}
 
-	tlsConn.SetDeadline(time.Now().Add(timeout))
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
+	tlsConn = tls.Client(conn, tlsConfig)
 
 	// Otherwise perform handshake, but don't verify the domain
 	//
@@ -298,7 +289,15 @@ func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config, timeout time.Duration) 
 		return nil, err
 	}
 
-	tlsConn.SetDeadline(time.Time{}) // clear timeout
+	// If crypto/tls is doing verification, there's no need to do our own.
+	if tlsConfig.InsecureSkipVerify == false {
+		return tlsConn, nil
+	}
+
+	// Similarly if we use host's CA, we can do full handshake
+	if tlsConfig.RootCAs == nil {
+		return tlsConn, nil
+	}
 
 	opts := x509.VerifyOptions{
 		Roots:         tlsConfig.RootCAs,
