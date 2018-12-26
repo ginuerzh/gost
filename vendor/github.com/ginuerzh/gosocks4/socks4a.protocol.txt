@@ -1,0 +1,39 @@
+	SOCKS 4A: A  Simple Extension to SOCKS 4 Protocol
+
+			Ying-Da Lee
+		yingda@best.com  or  yingda@esd.sgi.com
+
+Please read SOCKS4.protocol first for an description of the version 4
+protocol. This extension is intended to allow the use of SOCKS on hosts
+which are not capable of resolving all domain names.
+
+In version 4, the client sends the following packet to the SOCKS server
+to request a CONNECT or a BIND operation:
+
+		+----+----+----+----+----+----+----+----+----+----+....+----+
+		| VN | CD | DSTPORT |      DSTIP        | USERID       |NULL|
+		+----+----+----+----+----+----+----+----+----+----+....+----+
+ # of bytes:	   1    1      2              4           variable       1
+
+VN is the SOCKS protocol version number and should be 4. CD is the
+SOCKS command code and should be 1 for CONNECT or 2 for BIND. NULL
+is a byte of all zero bits.
+
+For version 4A, if the client cannot resolve the destination host's
+domain name to find its IP address, it should set the first three bytes
+of DSTIP to NULL and the last byte to a non-zero value. (This corresponds
+to IP address 0.0.0.x, with x nonzero. As decreed by IANA  -- The
+Internet Assigned Numbers Authority -- such an address is inadmissible
+as a destination IP address and thus should never occur if the client
+can resolve the domain name.) Following the NULL byte terminating
+USERID, the client must sends the destination domain name and termiantes
+it with another NULL byte. This is used for both CONNECT and BIND requests.
+
+A server using protocol 4A must check the DSTIP in the request packet.
+If it represent address 0.0.0.x with nonzero x, the server must read
+in the domain name that the client sends in the packet. The server
+should resolve the domain name and make connection to the destination
+host if it can. 
+
+SOCKSified sockd may pass domain names that it cannot resolve to
+the next-hop SOCKS server.
