@@ -110,6 +110,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	wsOpts.WriteBufferSize = node.GetInt("wbuf")
 	wsOpts.UserAgent = node.Get("agent")
 
+	var host string
+
 	var tr gost.Transporter
 	switch node.Transport {
 	case "tls":
@@ -160,6 +162,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "obfs4":
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
+		host = node.Get("host")
 		tr = gost.ObfsHTTPTransporter()
 	default:
 		tr = gost.TCPTransporter()
@@ -197,9 +200,12 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		gost.TimeoutDialOption(time.Duration(timeout)*time.Second),
 	)
 
+	if host == "" {
+		host = node.Host
+	}
 	handshakeOptions := []gost.HandshakeOption{
 		gost.AddrHandshakeOption(node.Addr),
-		gost.HostHandshakeOption(node.Host),
+		gost.HostHandshakeOption(host),
 		gost.UserHandshakeOption(node.User),
 		gost.TLSConfigHandshakeOption(tlsCfg),
 		gost.IntervalHandshakeOption(time.Duration(node.GetInt("ping")) * time.Second),

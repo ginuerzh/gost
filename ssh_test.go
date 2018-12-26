@@ -4,10 +4,180 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 )
+
+func sshDirectForwardRoundtrip(targetURL string, data []byte) error {
+	ln, err := TCPListener("")
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   SSHDirectForwardConnector(),
+		Transporter: SSHForwardTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SSHForwardHandler(),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestSSHDirectForward(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := sshDirectForwardRoundtrip(httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func BenchmarkSSHDirectForward(b *testing.B) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	ln, err := TCPListener("")
+	if err != nil {
+		b.Error(err)
+	}
+
+	client := &Client{
+		Connector:   SSHDirectForwardConnector(),
+		Transporter: SSHForwardTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SSHForwardHandler(),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	for i := 0; i < b.N; i++ {
+		if err := proxyRoundtrip(client, server, httpSrv.URL, sendData); err != nil {
+			b.Error(err)
+		}
+	}
+}
+
+func BenchmarkSSHDirectForwardParallel(b *testing.B) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	ln, err := TCPListener("")
+	if err != nil {
+		b.Error(err)
+	}
+
+	client := &Client{
+		Connector:   SSHDirectForwardConnector(),
+		Transporter: SSHForwardTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SSHForwardHandler(),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			if err := proxyRoundtrip(client, server, httpSrv.URL, sendData); err != nil {
+				b.Error(err)
+			}
+		}
+	})
+}
+
+func sshRemoteForwardRoundtrip(t *testing.T, targetURL string, data []byte) (err error) {
+	ln, err := TCPListener("")
+	if err != nil {
+		return
+	}
+
+	client := &Client{
+		Connector:   SSHRemoteForwardConnector(),
+		Transporter: SSHForwardTransporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  SSHForwardHandler(),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	go func() {
+		conn, err = client.Connect(conn, ":0")
+		if err != nil {
+			return
+		}
+	}()
+
+	c, err := net.Dial("tcp", conn.LocalAddr().String())
+	if err != nil {
+		return
+	}
+	defer c.Close()
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return
+	}
+
+	cc, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		return
+	}
+	defer cc.Close()
+
+	go transport(conn, cc)
+
+	t.Log("httpRoundtrip")
+	return httpRoundtrip(c, targetURL, data)
+}
+
+func _TestSSHRemoteForward(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	err := sshRemoteForwardRoundtrip(t, httpSrv.URL, sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}
 
 func httpOverSSHTunnelRoundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {

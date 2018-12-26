@@ -34,6 +34,11 @@ func HTTP2Connector(user *url.Userinfo) Connector {
 }
 
 func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
 	cc, ok := conn.(*http2ClientConn)
 	if !ok {
 		return nil, errors.New("wrong connection type")
@@ -142,7 +147,7 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 		}
 		client = &http.Client{
 			Transport: &transport,
-			Timeout:   timeout,
+			// Timeout:   timeout,
 		}
 		tr.clients[addr] = client
 	}
@@ -214,7 +219,7 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 		}
 		client = &http.Client{
 			Transport: &transport,
-			Timeout:   timeout,
+			// Timeout:   timeout,
 		}
 		tr.clients[addr] = client
 	}

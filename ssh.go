@@ -95,13 +95,15 @@ func (c *sshRemoteForwardConnector) Connect(conn net.Conn, addr string, options 
 			if err != nil {
 				return
 			}
+			log.Log("[ssh-rtcp] listening on", ln.Addr())
+
 			for {
 				rc, err := ln.Accept()
 				if err != nil {
 					log.Logf("[ssh-rtcp] %s <-> %s accpet : %s", ln.Addr(), addr, err)
 					return
 				}
-
+				// log.Log("[ssh-rtcp] accept", rc.LocalAddr(), rc.RemoteAddr())
 				select {
 				case cc.session.connChan <- rc:
 				default:
@@ -593,7 +595,6 @@ func (h *sshForwardHandler) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Reque
 		return
 	}
 
-	log.Log("[ssh-rtcp] listening on tcp", addr)
 	ln, err := net.Listen("tcp", addr) //tie to the client connection
 	if err != nil {
 		log.Log("[ssh-rtcp]", err)
@@ -601,6 +602,8 @@ func (h *sshForwardHandler) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Reque
 		return
 	}
 	defer ln.Close()
+
+	log.Log("[ssh-rtcp] listening on tcp", ln.Addr())
 
 	replyFunc := func() error {
 		if t.Port == 0 && req.WantReply { // Client sent port 0. let them know which port is actually being used
@@ -850,15 +853,15 @@ func (c *sshNopConn) RemoteAddr() net.Addr {
 }
 
 func (c *sshNopConn) SetDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+	return &net.OpError{Op: "set", Net: "ssh", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 func (c *sshNopConn) SetReadDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+	return &net.OpError{Op: "set", Net: "ssh", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 func (c *sshNopConn) SetWriteDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+	return &net.OpError{Op: "set", Net: "ssh", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 type sshConn struct {
