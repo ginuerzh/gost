@@ -10,6 +10,7 @@ reload      10s
 # ip[:port]  [protocol]  [hostname]
 
 1.1.1.1:853 tls     cloudflare-dns.com
+https://1.0.0.1/dns-query   https
 8.8.8.8
 8.8.8.8     tcp
 1.1.1.1     udp

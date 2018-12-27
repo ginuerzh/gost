@@ -207,17 +207,34 @@ func parseResolver(cfg string) gost.Resolver {
 			if s == "" {
 				continue
 			}
+			if strings.HasPrefix(s, "https") {
+				ns := gost.NameServer{
+					Addr:     s,
+					Protocol: "https",
+				}
+				if err := ns.Init(); err == nil {
+					nss = append(nss, ns)
+				}
+				continue
+			}
+
 			ss := strings.Split(s, "/")
 			if len(ss) == 1 {
-				nss = append(nss, gost.NameServer{
+				ns := gost.NameServer{
 					Addr: ss[0],
-				})
+				}
+				if err := ns.Init(); err == nil {
+					nss = append(nss, ns)
+				}
 			}
 			if len(ss) == 2 {
-				nss = append(nss, gost.NameServer{
+				ns := gost.NameServer{
 					Addr:     ss[0],
 					Protocol: ss[1],
-				})
+				}
+				if err := ns.Init(); err == nil {
+					nss = append(nss, ns)
+				}
 			}
 		}
 		return gost.NewResolver(timeout, ttl, nss...)
