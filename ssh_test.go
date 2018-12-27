@@ -166,6 +166,7 @@ func sshRemoteForwardRoundtrip(t *testing.T, targetURL string, data []byte) (err
 	return httpRoundtrip(c, targetURL, data)
 }
 
+// TODO: fix this test
 func _TestSSHRemoteForward(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()

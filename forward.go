@@ -617,15 +617,15 @@ func (c *udpServerConn) RemoteAddr() net.Addr {
 }
 
 func (c *udpServerConn) SetDeadline(t time.Time) error {
-	return nil
+	return c.conn.SetDeadline(t)
 }
 
 func (c *udpServerConn) SetReadDeadline(t time.Time) error {
-	return nil
+	return c.conn.SetReadDeadline(t)
 }
 
 func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
-	return nil
+	return c.conn.SetWriteDeadline(t)
 }
 
 type tcpRemoteForwardListener struct {

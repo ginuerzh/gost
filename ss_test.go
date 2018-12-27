@@ -5,7 +5,12 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
+
+func init() {
+	// ss.Debug = true
+}
 
 var ssTests = []struct {
 	clientCipher *url.Userinfo
@@ -288,4 +293,73 @@ func BenchmarkSSProxyParallel(b *testing.B) {
 			}
 		}
 	})
+}
+
+func shadowUDPRoundtrip(t *testing.T, host string, data []byte) error {
+	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), 0)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   ShadowUDPConnector(url.UserPassword("chacha20-ietf", "123456")),
+		Transporter: UDPTransporter(),
+	}
+
+	server := &Server{
+		Handler:  ShadowUDPdHandler(),
+		Listener: ln,
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return udpRoundtrip(client, server, host, data)
+}
+
+func TestShadowUDP(t *testing.T) {
+	udpSrv := newUDPTestServer(udpTestHandler)
+	udpSrv.Start()
+	defer udpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+	err := shadowUDPRoundtrip(t, udpSrv.Addr(), sendData)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+// TODO: fix shadowsocks UDP relay benchmark.
+func BenchmarkShadowUDP(b *testing.B) {
+	udpSrv := newUDPTestServer(udpTestHandler)
+	udpSrv.Start()
+	defer udpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), 1000*time.Millisecond)
+	if err != nil {
+		b.Error(err)
+	}
+
+	client := &Client{
+		Connector:   ShadowUDPConnector(url.UserPassword("chacha20-ietf", "123456")),
+		Transporter: UDPTransporter(),
+	}
+
+	server := &Server{
+		Handler:  ShadowUDPdHandler(),
+		Listener: ln,
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	for i := 0; i < b.N; i++ {
+		if err := udpRoundtrip(client, server, udpSrv.Addr(), sendData); err != nil {
+			b.Error(err)
+		}
+	}
 }

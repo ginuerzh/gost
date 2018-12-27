@@ -16,46 +16,6 @@ import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
-// Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
-// we wrap around it to make io.Copy happy.
-type shadowConn struct {
-	conn net.Conn
-}
-
-func (c *shadowConn) Read(b []byte) (n int, err error) {
-	return c.conn.Read(b)
-}
-
-func (c *shadowConn) Write(b []byte) (n int, err error) {
-	n = len(b) // force byte length consistent
-	_, err = c.conn.Write(b)
-	return
-}
-
-func (c *shadowConn) Close() error {
-	return c.conn.Close()
-}
-
-func (c *shadowConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *shadowConn) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
-}
-
-func (c *shadowConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *shadowConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *shadowConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
-}
-
 type shadowConnector struct {
 	Cipher *url.Userinfo
 }
@@ -102,7 +62,7 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 	if _, err := sc.Write(rawaddr); err != nil {
 		return nil, err
 	}
-	return &shadowConn{conn: sc}, nil
+	return &shadowConn{sc}, nil
 }
 
 type shadowHandler struct {
@@ -142,7 +102,7 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
-	conn = &shadowConn{conn: ss.NewConn(conn, cipher)}
+	conn = &shadowConn{ss.NewConn(conn, cipher)}
 
 	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	host, err := h.getRequest(conn)
@@ -282,6 +242,55 @@ func (h *shadowHandler) getRequest(r io.Reader) (host string, err error) {
 	port := binary.BigEndian.Uint16(buf[reqEnd-2 : reqEnd])
 	host = net.JoinHostPort(host, strconv.Itoa(int(port)))
 	return
+}
+
+type shadowUDPConnector struct {
+	Cipher *url.Userinfo
+}
+
+// ShadowUDPConnector creates a Connector for shadowsocks UDP client.
+// It accepts a cipher info for shadowsocks data encryption/decryption.
+// The cipher must not be nil.
+func ShadowUDPConnector(cipher *url.Userinfo) Connector {
+	return &shadowUDPConnector{Cipher: cipher}
+}
+
+func (c *shadowUDPConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+	opts := &ConnectOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = ConnectTimeout
+	}
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
+	rawaddr, err := ss.RawAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	var method, password string
+	if c.Cipher != nil {
+		method = c.Cipher.Username()
+		password, _ = c.Cipher.Password()
+	}
+
+	cipher, err := ss.NewCipher(method, password)
+	if err != nil {
+		return nil, err
+	}
+
+	sc := ss.NewSecurePacketConn(&shadowPacketConn{conn}, cipher, false)
+	return &shadowUDPConn{
+		PacketConn: sc,
+		raddr:      conn.RemoteAddr(),
+		header:     rawaddr,
+	}, nil
 }
 
 type shadowUDPListener struct {
@@ -434,7 +443,9 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 	errc := make(chan error, 1)
 	go func() {
 		for {
-			b := make([]byte, mediumBufferSize)
+			b := mPool.Get().([]byte)
+			defer mPool.Put(b)
+
 			n, err := sc.Read(b[3:]) // add rsv and frag fields to make it the standard SOCKS5 UDP datagram
 			if err != nil {
 				// log.Logf("[ssu] %s - %s : %s", sc.RemoteAddr(), sc.LocalAddr(), err)
@@ -468,7 +479,9 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 
 	go func() {
 		for {
-			b := make([]byte, mediumBufferSize)
+			b := mPool.Get().([]byte)
+			defer mPool.Put(b)
+
 			n, addr, err := cc.ReadFrom(b)
 			if err != nil {
 				errc <- err
@@ -500,4 +513,66 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 		err = nil
 	}
 	return err
+}
+
+// Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
+// we wrap around it to make io.Copy happy.
+type shadowConn struct {
+	net.Conn
+}
+
+func (c *shadowConn) Write(b []byte) (n int, err error) {
+	n = len(b) // force byte length consistent
+	_, err = c.Conn.Write(b)
+	return
+}
+
+type shadowUDPConn struct {
+	net.PacketConn
+	raddr  net.Addr
+	header []byte
+}
+
+func (c *shadowUDPConn) Write(b []byte) (n int, err error) {
+	n = len(b) // force byte length consistent
+	if len(c.header) > 0 {
+		b = append(c.header, b...)
+	}
+	_, err = c.PacketConn.WriteTo(b, c.raddr)
+	return
+}
+
+func (c *shadowUDPConn) Read(b []byte) (n int, err error) {
+	buf := mPool.Get().([]byte)
+	defer mPool.Put(buf)
+
+	n, _, err = c.PacketConn.ReadFrom(buf[3:])
+	if err != nil {
+		return
+	}
+
+	dgram, err := gosocks5.ReadUDPDatagram(bytes.NewReader(buf[:n+3]))
+	if err != nil {
+		return
+	}
+	n = copy(b, dgram.Data)
+	return
+}
+
+func (c *shadowUDPConn) RemoteAddr() net.Addr {
+	return c.raddr
+}
+
+type shadowPacketConn struct {
+	net.Conn
+}
+
+func (c *shadowPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+	n, err = c.Conn.Read(b)
+	addr = c.Conn.RemoteAddr()
+	return
+}
+
+func (c *shadowPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+	return c.Conn.Write(b)
 }
