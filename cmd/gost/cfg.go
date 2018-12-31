@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/ginuerzh/gost"
 )
@@ -196,8 +195,6 @@ func parseResolver(cfg string) gost.Resolver {
 	if cfg == "" {
 		return nil
 	}
-	timeout := 30 * time.Second
-	ttl := 60 * time.Second
 	var nss []gost.NameServer
 
 	f, err := os.Open(cfg)
@@ -237,11 +234,11 @@ func parseResolver(cfg string) gost.Resolver {
 				}
 			}
 		}
-		return gost.NewResolver(timeout, ttl, nss...)
+		return gost.NewResolver(0, nss...)
 	}
 	defer f.Close()
 
-	resolver := gost.NewResolver(timeout, ttl)
+	resolver := gost.NewResolver(0)
 	resolver.Reload(f)
 
 	go gost.PeriodReload(resolver, cfg)

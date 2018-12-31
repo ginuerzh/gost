@@ -46,7 +46,7 @@ func TestDNSResolver(t *testing.T) {
 				t.Error(err)
 			}
 			t.Log(ns)
-			r := NewResolver(0, 0, ns)
+			r := NewResolver(0, ns)
 			err := dnsResolverRoundtrip(t, r, tc.host)
 			if err != nil {
 				if tc.pass {
@@ -103,13 +103,12 @@ var resolverReloadTests = []struct {
 	{
 		r: bytes.NewBufferString("1.1.1.1"),
 		ns: &NameServer{
-			Addr:    "1.1.1.1",
-			Timeout: DefaultResolverTimeout,
+			Addr: "1.1.1.1",
 		},
 		stopped: true,
 	},
 	{
-		r: bytes.NewBufferString("timeout 10s\nsearch\nnameserver  \nnameserver 1.1.1.1 udp"),
+		r: bytes.NewBufferString("\n# comment\ntimeout 10s\nsearch\nnameserver  \nnameserver 1.1.1.1 udp"),
 		ns: &NameServer{
 			Protocol: "udp",
 			Addr:     "1.1.1.1",
@@ -123,7 +122,6 @@ var resolverReloadTests = []struct {
 		ns: &NameServer{
 			Addr:     "1.1.1.1",
 			Protocol: "tcp",
-			Timeout:  DefaultResolverTimeout,
 		},
 		stopped: true,
 	},
@@ -133,7 +131,6 @@ var resolverReloadTests = []struct {
 			Addr:     "1.1.1.1:853",
 			Protocol: "tls",
 			Hostname: "cloudflare-dns.com",
-			Timeout:  DefaultResolverTimeout,
 		},
 		stopped: true,
 	},
@@ -142,7 +139,6 @@ var resolverReloadTests = []struct {
 		ns: &NameServer{
 			Addr:     "1.1.1.1:853",
 			Protocol: "tls",
-			Timeout:  DefaultResolverTimeout,
 		},
 		stopped: true,
 	},
@@ -151,11 +147,10 @@ var resolverReloadTests = []struct {
 		stopped: true,
 	},
 	{
-		r: bytes.NewBufferString("https://1.0.0.1/dns-query https"),
+		r: bytes.NewBufferString("https://1.0.0.1/dns-query"),
 		ns: &NameServer{
 			Addr:     "https://1.0.0.1/dns-query",
 			Protocol: "https",
-			Timeout:  DefaultResolverTimeout,
 		},
 		stopped: true,
 	},
@@ -164,15 +159,11 @@ var resolverReloadTests = []struct {
 func TestResolverReload(t *testing.T) {
 	for i, tc := range resolverReloadTests {
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			r := newResolver(0, 0)
+			r := newResolver(0)
 			if err := r.Reload(tc.r); err != nil {
 				t.Error(err)
 			}
 			t.Log(r.String())
-			if r.Timeout != tc.timeout {
-				t.Errorf("timeout value should be %v, got %v",
-					tc.timeout, r.Timeout)
-			}
 			if r.TTL != tc.ttl {
 				t.Errorf("ttl value should be %v, got %v",
 					tc.ttl, r.TTL)
@@ -198,6 +189,9 @@ func TestResolverReload(t *testing.T) {
 
 			if tc.stopped {
 				r.Stop()
+				if r.Period() >= 0 {
+					t.Errorf("period of the stopped reloader should be minus value")
+				}
 			}
 			if r.Stopped() != tc.stopped {
 				t.Errorf("stopped value should be %v, got %v",

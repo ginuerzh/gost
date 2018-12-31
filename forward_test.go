@@ -1,13 +1,10 @@
 package gost
 
 import (
-	"bytes"
 	"crypto/rand"
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
-	"time"
 )
 
 func tcpDirectForwardRoundtrip(targetURL string, data []byte) error {
@@ -120,37 +117,6 @@ func BenchmarkTCPDirectForwardParallel(b *testing.B) {
 			}
 		}
 	})
-}
-
-func udpRoundtrip(client *Client, server *Server, host string, data []byte) (err error) {
-	conn, err := proxyConn(client, server)
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-
-	conn.SetDeadline(time.Now().Add(1 * time.Second))
-	defer conn.SetDeadline(time.Time{})
-
-	conn, err = client.Connect(conn, host)
-	if err != nil {
-		return
-	}
-
-	if _, err = conn.Write(data); err != nil {
-		return
-	}
-
-	recv := make([]byte, len(data))
-	if _, err = conn.Read(recv); err != nil {
-		return
-	}
-
-	if !bytes.Equal(data, recv) {
-		return fmt.Errorf("data not equal")
-	}
-
-	return
 }
 
 func udpDirectForwardRoundtrip(host string, data []byte) error {

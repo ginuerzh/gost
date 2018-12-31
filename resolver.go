@@ -23,8 +23,6 @@ import (
 var (
 	// DefaultResolverTimeout is the default timeout for name resolution.
 	DefaultResolverTimeout = 5 * time.Second
-	// DefaultResolverTTL is the default cache TTL for name resolution.
-	DefaultResolverTTL = 1 * time.Hour
 )
 
 // Resolver is a name resolver for domain name.
@@ -53,13 +51,18 @@ type NameServer struct {
 
 // Init initializes the name server.
 func (ns *NameServer) Init() error {
+	timeout := ns.Timeout
+	if timeout <= 0 {
+		timeout = DefaultResolverTimeout
+	}
+
 	switch strings.ToLower(ns.Protocol) {
 	case "tcp":
 		ns.exchanger = &dnsExchanger{
 			endpoint: ns.Addr,
 			client: &dns.Client{
 				Net:     "tcp",
-				Timeout: ns.Timeout,
+				Timeout: timeout,
 			},
 		}
 	case "tls":
@@ -74,7 +77,7 @@ func (ns *NameServer) Init() error {
 			endpoint: ns.Addr,
 			client: &dns.Client{
 				Net:       "tcp-tls",
-				Timeout:   ns.Timeout,
+				Timeout:   timeout,
 				TLSConfig: cfg,
 			},
 		}
@@ -95,7 +98,7 @@ func (ns *NameServer) Init() error {
 			endpoint: u,
 			client: &http.Client{
 				Transport: transport,
-				Timeout:   ns.Timeout,
+				Timeout:   timeout,
 			},
 		}
 	case "udp":
@@ -105,7 +108,7 @@ func (ns *NameServer) Init() error {
 			endpoint: ns.Addr,
 			client: &dns.Client{
 				Net:     "udp",
-				Timeout: ns.Timeout,
+				Timeout: timeout,
 			},
 		}
 	}
@@ -125,15 +128,9 @@ func (ns NameServer) String() string {
 	return fmt.Sprintf("%s/%s", addr, prot)
 }
 
-type resolverCacheItem struct {
-	IPs []net.IP
-	ts  int64
-}
-
 type resolver struct {
 	Servers []NameServer
 	mCache  *sync.Map
-	Timeout time.Duration
 	TTL     time.Duration
 	period  time.Duration
 	domain  string
@@ -142,22 +139,14 @@ type resolver struct {
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
-func NewResolver(timeout, ttl time.Duration, servers ...NameServer) ReloadResolver {
-	r := newResolver(timeout, ttl, servers...)
-
-	if r.Timeout <= 0 {
-		r.Timeout = DefaultResolverTimeout
-	}
-	if r.TTL == 0 {
-		r.TTL = DefaultResolverTTL
-	}
+func NewResolver(ttl time.Duration, servers ...NameServer) ReloadResolver {
+	r := newResolver(ttl, servers...)
 	return r
 }
 
-func newResolver(timeout, ttl time.Duration, servers ...NameServer) *resolver {
+func newResolver(ttl time.Duration, servers ...NameServer) *resolver {
 	return &resolver{
 		Servers: servers,
-		Timeout: timeout,
 		TTL:     ttl,
 		mCache:  &sync.Map{},
 		stopped: make(chan struct{}),
@@ -204,25 +193,25 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 	}
 
 	for _, ns := range servers {
-		ips, err = r.resolve(ns.exchanger, host)
+		ips, ttl, err = r.resolve(ns.exchanger, host)
 		if err != nil {
 			log.Logf("[resolver] %s via %s : %s", host, ns, err)
 			continue
 		}
 
 		if Debug {
-			log.Logf("[resolver] %s via %s %v", host, ns, ips)
+			log.Logf("[resolver] %s via %s %v(ttl: %v)", host, ns, ips, ttl)
 		}
 		if len(ips) > 0 {
 			break
 		}
 	}
 
-	r.storeCache(host, ips)
+	r.storeCache(host, ips, ttl)
 	return
 }
 
-func (*resolver) resolve(ex Exchanger, host string) (ips []net.IP, err error) {
+func (*resolver) resolve(ex Exchanger, host string) (ips []net.IP, ttl time.Duration, err error) {
 	if ex == nil {
 		return
 	}
@@ -236,9 +225,16 @@ func (*resolver) resolve(ex Exchanger, host string) (ips []net.IP, err error) {
 	for _, ans := range mr.Answer {
 		if ar, _ := ans.(*dns.A); ar != nil {
 			ips = append(ips, ar.A)
+			ttl = time.Duration(ar.Header().Ttl) * time.Second
 		}
 	}
 	return
+}
+
+type resolverCacheItem struct {
+	IPs []net.IP
+	ts  int64
+	ttl time.Duration
 }
 
 func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
@@ -248,6 +244,10 @@ func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
 
 	if v, ok := r.mCache.Load(name); ok {
 		item, _ := v.(*resolverCacheItem)
+		if ttl == 0 {
+			ttl = item.ttl
+		}
+
 		if item == nil || time.Since(time.Unix(item.ts, 0)) > ttl {
 			return nil
 		}
@@ -257,13 +257,14 @@ func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
 	return nil
 }
 
-func (r *resolver) storeCache(name string, ips []net.IP) {
+func (r *resolver) storeCache(name string, ips []net.IP, ttl time.Duration) {
 	if name == "" || len(ips) == 0 {
 		return
 	}
 	r.mCache.Store(name, &resolverCacheItem{
 		IPs: ips,
 		ts:  time.Now().Unix(),
+		ttl: ttl,
 	})
 }
 
@@ -343,10 +344,10 @@ func (r *resolver) Reload(rd io.Reader) error {
 				ns.Hostname = ss[2]
 			}
 
-			ns.Timeout = timeout
-			if timeout <= 0 {
-				ns.Timeout = DefaultResolverTimeout
+			if strings.HasPrefix(ns.Addr, "https") {
+				ns.Protocol = "https"
 			}
+			ns.Timeout = timeout
 
 			if err := ns.Init(); err == nil {
 				nss = append(nss, ns)
@@ -359,7 +360,6 @@ func (r *resolver) Reload(rd io.Reader) error {
 	}
 
 	r.mux.Lock()
-	r.Timeout = timeout
 	r.TTL = ttl
 	r.domain = domain
 	r.period = period
@@ -408,9 +408,9 @@ func (r *resolver) String() string {
 	defer r.mux.RUnlock()
 
 	b := &bytes.Buffer{}
-	fmt.Fprintf(b, "Timeout %v\n", r.Timeout)
 	fmt.Fprintf(b, "TTL %v\n", r.TTL)
 	fmt.Fprintf(b, "Reload %v\n", r.period)
+	fmt.Fprintf(b, "Domain %v\n", r.domain)
 	for i := range r.Servers {
 		fmt.Fprintln(b, r.Servers[i])
 	}

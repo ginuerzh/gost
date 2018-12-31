@@ -123,6 +123,11 @@ func (tr *kcpTransporter) Dial(addr string, options ...DialOption) (conn net.Con
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
+	if session != nil && session.session != nil && session.session.IsClosed() {
+		session.Close()
+		delete(tr.sessions, addr) // session is dead
+		ok = false
+	}
 	if !ok {
 		timeout := opts.Timeout
 		if timeout <= 0 {

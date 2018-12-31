@@ -569,12 +569,13 @@ func HTTP2Listener(addr string, config *tls.Config) (Listener, error) {
 	}
 	l.server = server
 
-	ln, err := tls.Listen("tcp", addr, config)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 	l.addr = ln.Addr()
 
+	ln = tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	go func() {
 		err := server.Serve(ln)
 		if err != nil {
@@ -875,40 +876,9 @@ func (c *http2ServerConn) SetWriteDeadline(t time.Time) error {
 
 // a dummy HTTP2 client conn used by HTTP2 client connector
 type http2ClientConn struct {
+	nopConn
 	addr   string
 	client *http.Client
-}
-
-func (c *http2ClientConn) Read(b []byte) (n int, err error) {
-	return 0, &net.OpError{Op: "read", Net: "http2", Source: nil, Addr: nil, Err: errors.New("read not supported")}
-}
-
-func (c *http2ClientConn) Write(b []byte) (n int, err error) {
-	return 0, &net.OpError{Op: "write", Net: "http2", Source: nil, Addr: nil, Err: errors.New("write not supported")}
-}
-
-func (c *http2ClientConn) Close() error {
-	return nil
-}
-
-func (c *http2ClientConn) LocalAddr() net.Addr {
-	return nil
-}
-
-func (c *http2ClientConn) RemoteAddr() net.Addr {
-	return nil
-}
-
-func (c *http2ClientConn) SetDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
-}
-
-func (c *http2ClientConn) SetReadDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
-}
-
-func (c *http2ClientConn) SetWriteDeadline(t time.Time) error {
-	return &net.OpError{Op: "set", Net: "http2", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
 type flushWriter struct {

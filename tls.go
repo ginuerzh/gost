@@ -58,21 +58,20 @@ func (tr *mtlsTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 		option(opts)
 	}
 
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = DialTimeout
-	}
-
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
-	if session != nil && session.session != nil && session.session.IsClosed() {
-		session.Close()
+	if session != nil && session.IsClosed() {
 		delete(tr.sessions, addr)
-		ok = false
+		ok = false // session is dead
 	}
 	if !ok {
+		timeout := opts.Timeout
+		if timeout <= 0 {
+			timeout = DialTimeout
+		}
+
 		if opts.Chain == nil {
 			conn, err = net.DialTimeout("tcp", addr, timeout)
 		} else {
@@ -159,10 +158,12 @@ func TLSListener(addr string, config *tls.Config) (Listener, error) {
 	if config == nil {
 		config = DefaultTLSConfig
 	}
-	ln, err := tls.Listen("tcp", addr, config)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
+
+	ln = tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	return &tlsListener{ln}, nil
 }
 
@@ -177,13 +178,13 @@ func MTLSListener(addr string, config *tls.Config) (Listener, error) {
 	if config == nil {
 		config = DefaultTLSConfig
 	}
-	ln, err := tls.Listen("tcp", addr, config)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
 	l := &mtlsListener{
-		ln:       ln,
+		ln:       tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config),
 		connChan: make(chan net.Conn, 1024),
 		errChan:  make(chan error, 1),
 	}

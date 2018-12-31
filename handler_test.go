@@ -18,7 +18,6 @@ func autoHTTPProxyRoundtrip(targetURL string, data []byte, clientInfo *url.Useri
 		Connector:   HTTPConnector(clientInfo),
 		Transporter: TCPTransporter(),
 	}
-
 	server := &Server{
 		Listener: ln,
 		Handler: AutoHandler(
@@ -111,7 +110,7 @@ func TestAutoSOCKS5Proxy(t *testing.T) {
 	}
 }
 
-func autoSOCKS4ProxyRoundtrip(targetURL string, data []byte) error {
+func autoSOCKS4ProxyRoundtrip(targetURL string, data []byte, options ...HandlerOption) error {
 	ln, err := TCPListener("")
 	if err != nil {
 		return err
@@ -124,7 +123,7 @@ func autoSOCKS4ProxyRoundtrip(targetURL string, data []byte) error {
 
 	server := &Server{
 		Listener: ln,
-		Handler:  AutoHandler(),
+		Handler:  AutoHandler(options...),
 	}
 	go server.Run()
 	defer server.Close()
@@ -139,14 +138,17 @@ func TestAutoSOCKS4Proxy(t *testing.T) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := autoSOCKS4ProxyRoundtrip(httpSrv.URL, sendData)
-	// t.Logf("#%d %v", i, err)
-	if err != nil {
+	if err := autoSOCKS4ProxyRoundtrip(httpSrv.URL, sendData); err != nil {
 		t.Errorf("got error: %v", err)
+	}
+
+	if err := autoSOCKS4ProxyRoundtrip(httpSrv.URL, sendData,
+		UsersHandlerOption(url.UserPassword("admin", "123456"))); err == nil {
+		t.Errorf("authentication required auto handler for SOCKS4 should failed")
 	}
 }
 
-func autoSocks4aProxyRoundtrip(targetURL string, data []byte) error {
+func autoSocks4aProxyRoundtrip(targetURL string, data []byte, options ...HandlerOption) error {
 	ln, err := TCPListener("")
 	if err != nil {
 		return err
@@ -159,7 +161,7 @@ func autoSocks4aProxyRoundtrip(targetURL string, data []byte) error {
 
 	server := &Server{
 		Listener: ln,
-		Handler:  AutoHandler(),
+		Handler:  AutoHandler(options...),
 	}
 
 	go server.Run()
@@ -175,10 +177,13 @@ func TestAutoSOCKS4AProxy(t *testing.T) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	err := autoSocks4aProxyRoundtrip(httpSrv.URL, sendData)
-	// t.Logf("#%d %v", i, err)
-	if err != nil {
+	if err := autoSocks4aProxyRoundtrip(httpSrv.URL, sendData); err != nil {
 		t.Errorf("got error: %v", err)
+	}
+
+	if err := autoSocks4aProxyRoundtrip(httpSrv.URL, sendData,
+		UsersHandlerOption(url.UserPassword("admin", "123456"))); err == nil {
+		t.Errorf("authentication required auto handler for SOCKS4A should failed")
 	}
 }
 

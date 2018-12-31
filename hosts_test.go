@@ -28,7 +28,8 @@ var hostsLookupTests = []struct {
 
 func TestHostsLookup(t *testing.T) {
 	for i, tc := range hostsLookupTests {
-		hosts := NewHosts(tc.hosts...)
+		hosts := NewHosts()
+		hosts.AddHost(tc.hosts...)
 		ip := hosts.Lookup(tc.host)
 		if !ip.Equal(tc.ip) {
 			t.Errorf("#%d test failed: lookup should be %s, got %s", i, tc.ip, ip)
@@ -59,6 +60,11 @@ var HostsReloadTests = []struct {
 		r:      bytes.NewBufferString("reload 10s"),
 		period: 10 * time.Second,
 		host:   "example.com",
+		ip:     nil,
+	},
+	{
+		r:      bytes.NewBufferString("#reload 10s\ninvalid.ip.addr example.com"),
+		period: 0,
 		ip:     nil,
 	},
 	{
@@ -112,6 +118,9 @@ func TestHostsReload(t *testing.T) {
 		}
 		if tc.stopped {
 			hosts.Stop()
+			if hosts.Period() >= 0 {
+				t.Errorf("period of the stopped reloader should be minus value")
+			}
 		}
 		if hosts.Stopped() != tc.stopped {
 			t.Errorf("#%d test failed: stopped value should be %v, got %v",

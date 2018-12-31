@@ -331,7 +331,7 @@ func Obfs4Listener(addr string) (Listener, error) {
 	}
 	l := &obfs4Listener{
 		addr:     addr,
-		Listener: ln,
+		Listener: tcpKeepAliveListener{ln.(*net.TCPListener)},
 	}
 	return l, nil
 }

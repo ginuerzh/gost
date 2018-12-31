@@ -2,6 +2,7 @@ package gost
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -158,10 +159,13 @@ var bypassContainTests = []struct {
 
 func TestBypassContains(t *testing.T) {
 	for i, tc := range bypassContainTests {
-		bp := NewBypassPatterns(tc.reversed, tc.patterns...)
-		if bp.Contains(tc.addr) != tc.bypassed {
-			t.Errorf("#%d test failed: %v, %s", i, tc.patterns, tc.addr)
-		}
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			bp := NewBypassPatterns(tc.reversed, tc.patterns...)
+			if bp.Contains(tc.addr) != tc.bypassed {
+				t.Errorf("#%d test failed: %v, %s", i, tc.patterns, tc.addr)
+			}
+		})
 	}
 }
 
@@ -244,6 +248,9 @@ func TestByapssReload(t *testing.T) {
 		}
 		if tc.stopped {
 			bp.Stop()
+			if bp.Period() >= 0 {
+				t.Errorf("period of the stopped reloader should be minus value")
+			}
 		}
 		if bp.Stopped() != tc.stopped {
 			t.Errorf("#%d test failed: stopped value should be %v, got %v",

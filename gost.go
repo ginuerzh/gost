@@ -7,8 +7,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
+	"net"
 	"sync"
 	"time"
 
@@ -136,4 +138,49 @@ func (rw *readWriter) Read(p []byte) (n int, err error) {
 
 func (rw *readWriter) Write(p []byte) (n int, err error) {
 	return rw.w.Write(p)
+}
+
+var (
+	nopClientConn = &nopConn{}
+)
+
+// a nop connection implements net.Conn,
+// it does nothing.
+type nopConn struct{}
+
+func (c *nopConn) Read(b []byte) (n int, err error) {
+	return 0, &net.OpError{Op: "read", Net: "nop", Source: nil, Addr: nil, Err: errors.New("read not supported")}
+}
+
+func (c *nopConn) Write(b []byte) (n int, err error) {
+	return 0, &net.OpError{Op: "write", Net: "nop", Source: nil, Addr: nil, Err: errors.New("write not supported")}
+}
+
+func (c *nopConn) Close() error {
+	return nil
+}
+
+func (c *nopConn) LocalAddr() net.Addr {
+	return nil
+}
+
+func (c *nopConn) RemoteAddr() net.Addr {
+	return nil
+}
+
+func (c *nopConn) SetDeadline(t time.Time) error {
+	return &net.OpError{Op: "set", Net: "nop", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+}
+
+func (c *nopConn) SetReadDeadline(t time.Time) error {
+	return &net.OpError{Op: "set", Net: "nop", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+}
+
+func (c *nopConn) SetWriteDeadline(t time.Time) error {
+	return &net.OpError{Op: "set", Net: "nop", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+}
+
+// Accepter represents a network endpoint that can accept connection from peer.
+type Accepter interface {
+	Accept() (net.Conn, error)
 }

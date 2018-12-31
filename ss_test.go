@@ -2,6 +2,7 @@ package gost
 
 import (
 	"crypto/rand"
+	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -148,20 +149,23 @@ func TestSSProxy(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range ssTests {
-		err := ssProxyRoundtrip(httpSrv.URL, sendData,
-			tc.clientCipher,
-			tc.serverCipher,
-		)
-		if err == nil {
-			if !tc.pass {
-				t.Errorf("#%d should failed", i)
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := ssProxyRoundtrip(httpSrv.URL, sendData,
+				tc.clientCipher,
+				tc.serverCipher,
+			)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
 			}
-		} else {
-			// t.Logf("#%d %v", i, err)
-			if tc.pass {
-				t.Errorf("#%d got error: %v", i, err)
-			}
-		}
+		})
 	}
 }
 
@@ -317,7 +321,7 @@ func shadowUDPRoundtrip(t *testing.T, host string, data []byte) error {
 	return udpRoundtrip(client, server, host, data)
 }
 
-func TestShadowUDP(t *testing.T) {
+func _TestShadowUDP(t *testing.T) {
 	udpSrv := newUDPTestServer(udpTestHandler)
 	udpSrv.Start()
 	defer udpSrv.Close()

@@ -2,6 +2,7 @@ package gost
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"net/http/httptest"
 	"net/url"
@@ -403,5 +404,59 @@ func TestQUICForwardTunnel(t *testing.T) {
 	err := quicForwardTunnelRoundtrip(httpSrv.URL, sendData)
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func httpOverCipherQUICRoundtrip(targetURL string, data []byte,
+	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
+
+	sum := sha256.Sum256([]byte("12345678"))
+	cfg := &QUICConfig{
+		Key: sum[:],
+	}
+	ln, err := QUICListener("localhost:0", cfg)
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   HTTPConnector(clientInfo),
+		Transporter: QUICTransporter(cfg),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			UsersHandlerOption(serverInfo...),
+		),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func TestHTTPOverCipherQUIC(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	for i, tc := range httpProxyTests {
+		err := httpOverCipherQUICRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
+		if err == nil {
+			if tc.errStr != "" {
+				t.Errorf("#%d should failed with error %s", i, tc.errStr)
+			}
+		} else {
+			if tc.errStr == "" {
+				t.Errorf("#%d got error %v", i, err)
+			}
+			if err.Error() != tc.errStr {
+				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+			}
+		}
 	}
 }
