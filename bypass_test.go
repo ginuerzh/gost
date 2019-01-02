@@ -212,6 +212,22 @@ var bypassReloadTests = []struct {
 		stopped:  false,
 	},
 	{
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\n192.168.0.0/16"),
+		reversed: false,
+		period:   0,
+		addr:     "192.168.10.2",
+		bypassed: true,
+		stopped:  true,
+	},
+	{
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\n192.168.1.0/24"),
+		reversed: false,
+		period:   0,
+		addr:     "192.168.10.2",
+		bypassed: false,
+		stopped:  true,
+	},
+	{
 		r:        bytes.NewBufferString("reverse false\nreload 10s\n192.168.1.1\n#example.com"),
 		reversed: false,
 		period:   10 * time.Second,
@@ -227,6 +243,30 @@ var bypassReloadTests = []struct {
 		bypassed: true,
 		stopped:  true,
 	},
+	{
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\nexample.com"),
+		reversed: false,
+		period:   0,
+		addr:     "example.com",
+		bypassed: true,
+		stopped:  true,
+	},
+	{
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\n.example.com"),
+		reversed: false,
+		period:   0,
+		addr:     "example.com",
+		bypassed: true,
+		stopped:  true,
+	},
+	{
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\n*.example.com"),
+		reversed: false,
+		period:   0,
+		addr:     "example.com",
+		bypassed: false,
+		stopped:  true,
+	},
 }
 
 func TestByapssReload(t *testing.T) {
@@ -235,6 +275,8 @@ func TestByapssReload(t *testing.T) {
 		if err := bp.Reload(tc.r); err != nil {
 			t.Error(err)
 		}
+		t.Log(bp.String())
+
 		if bp.Reversed() != tc.reversed {
 			t.Errorf("#%d test failed: reversed value should be %v, got %v",
 				i, tc.reversed, bp.reversed)
@@ -251,6 +293,7 @@ func TestByapssReload(t *testing.T) {
 			if bp.Period() >= 0 {
 				t.Errorf("period of the stopped reloader should be minus value")
 			}
+			bp.Stop()
 		}
 		if bp.Stopped() != tc.stopped {
 			t.Errorf("#%d test failed: stopped value should be %v, got %v",

@@ -1,7 +1,11 @@
 package gost
 
 import (
+	"bytes"
 	"crypto/rand"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -59,19 +63,22 @@ func TestHTTPProxy(t *testing.T) {
 	rand.Read(sendData)
 
 	for i, tc := range httpProxyTests {
-		err := httpProxyRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
-		if err == nil {
-			if tc.errStr != "" {
-				t.Errorf("#%d should failed with error %s", i, tc.errStr)
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := httpProxyRoundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
+			if err == nil {
+				if tc.errStr != "" {
+					t.Errorf("#%d should failed with error %s", i, tc.errStr)
+				}
+			} else {
+				if tc.errStr == "" {
+					t.Errorf("#%d got error %v", i, err)
+				}
+				if err.Error() != tc.errStr {
+					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+				}
 			}
-		} else {
-			if tc.errStr == "" {
-				t.Errorf("#%d got error %v", i, err)
-			}
-			if err.Error() != tc.errStr {
-				t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
-			}
-		}
+		})
 	}
 }
 
@@ -141,4 +148,153 @@ func BenchmarkHTTPProxyParallel(b *testing.B) {
 			}
 		}
 	})
+}
+
+func TestHTTPProxyWithCodeProbeResist(t *testing.T) {
+	ln, err := TCPListener("")
+	if err != nil {
+		t.Error(err)
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("code:400"),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	resp, err := http.Get("http://" + ln.Addr().String())
+	if err != nil {
+		t.Error(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 400 {
+		t.Error("should failed with status code 400, got", resp.Status)
+	}
+}
+
+func TestHTTPProxyWithWebProbeResist(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	ln, err := TCPListener("")
+	if err != nil {
+		t.Error(err)
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("web:"+httpSrv.URL),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	r, err := http.NewRequest("GET", "http://"+ln.Addr().String(), nil)
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Error(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Error("got status:", resp.Status)
+	}
+
+	recv, _ := ioutil.ReadAll(resp.Body)
+	if !bytes.Equal(recv, []byte("Hello World!")) {
+		t.Error("data not equal")
+	}
+}
+
+func TestHTTPProxyWithHostProbeResist(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	ln, err := TCPListener("")
+	if err != nil {
+		t.Error(err)
+	}
+
+	u, err := url.Parse(httpSrv.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("host:"+u.Host),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	r, err := http.NewRequest("GET", "http://"+ln.Addr().String(), bytes.NewReader(sendData))
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Error(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Error("got status:", resp.Status)
+	}
+
+	recv, _ := ioutil.ReadAll(resp.Body)
+	if !bytes.Equal(sendData, recv) {
+		t.Error("data not equal")
+	}
+}
+
+func TestHTTPProxyWithFileProbeResist(t *testing.T) {
+	ln, err := TCPListener("")
+	if err != nil {
+		t.Error(err)
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("file:.testdata/probe_resist.txt"),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	r, err := http.NewRequest("GET", "http://"+ln.Addr().String(), nil)
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Error(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Error("got status:", resp.Status)
+	}
+
+	recv, _ := ioutil.ReadAll(resp.Body)
+	if !bytes.Equal(recv, []byte("Hello World!")) {
+		t.Error("data not equal, got:", string(recv))
+	}
 }

@@ -1,9 +1,12 @@
 package gost
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -918,5 +921,186 @@ func TestH2CForwardTunnel(t *testing.T) {
 	err := h2cForwardTunnelRoundtrip(httpSrv.URL, sendData)
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func TestHTTP2ProxyWithCodeProbeResist(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	ln, err := HTTP2Listener("", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	client := &Client{
+		Connector:   HTTP2Connector(nil),
+		Transporter: HTTP2Transporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTP2Handler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("code:400"),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	err = proxyRoundtrip(client, server, httpSrv.URL, nil)
+	if err == nil {
+		t.Error("should failed with status code 400")
+	} else if err.Error() != "400 Bad Request" {
+		t.Error("should failed with status code 400, got", err.Error())
+	}
+}
+
+func TestHTTP2ProxyWithWebProbeResist(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	ln, err := HTTP2Listener("", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	client := &Client{
+		Connector:   HTTP2Connector(nil),
+		Transporter: HTTP2Transporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTP2Handler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("web:"+httpSrv.URL),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		t.Error(err)
+	}
+	defer conn.Close()
+
+	conn, err = client.Connect(conn, "github.com:443")
+	if err != nil {
+		t.Error(err)
+	}
+	recv, _ := ioutil.ReadAll(conn)
+	if !bytes.Equal(recv, []byte("Hello World!")) {
+		t.Error("data not equal")
+	}
+}
+
+func TestHTTP2ProxyWithHostProbeResist(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	ln, err := HTTP2Listener("", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	client := &Client{
+		Connector:   HTTP2Connector(nil),
+		Transporter: HTTP2Transporter(nil),
+	}
+
+	u, err := url.Parse(httpSrv.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTP2Handler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("host:"+u.Host),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		t.Error(err)
+	}
+	defer conn.Close()
+
+	cc, ok := conn.(*http2ClientConn)
+	if !ok {
+		t.Error("wrong connection type")
+	}
+
+	req := &http.Request{
+		Method:        http.MethodConnect,
+		URL:           &url.URL{Scheme: "https", Host: ln.Addr().String()},
+		Header:        make(http.Header),
+		Proto:         "HTTP/2.0",
+		ProtoMajor:    2,
+		ProtoMinor:    0,
+		Body:          ioutil.NopCloser(bytes.NewReader(sendData)),
+		Host:          cc.addr,
+		ContentLength: -1,
+	}
+	req.Header.Set("Gost-Target", "github.com:443")
+
+	resp, err := cc.client.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Error("got non-200 status:", resp.Status)
+	}
+
+	recv, _ := ioutil.ReadAll(resp.Body)
+	if !bytes.Equal(sendData, recv) {
+		t.Error("data not equal")
+	}
+}
+
+func TestHTTP2ProxyWithFileProbeResist(t *testing.T) {
+	ln, err := HTTP2Listener("", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	client := &Client{
+		Connector:   HTTP2Connector(nil),
+		Transporter: HTTP2Transporter(nil),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTP2Handler(
+			UsersHandlerOption(url.UserPassword("admin", "123456")),
+			ProbeResistHandlerOption("file:.testdata/probe_resist.txt"),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		t.Error(err)
+	}
+	defer conn.Close()
+
+	conn, err = client.Connect(conn, "github.com:443")
+	if err != nil {
+		t.Error(err)
+	}
+	recv, _ := ioutil.ReadAll(conn)
+	if !bytes.Equal(recv, []byte("Hello World!")) {
+		t.Error("data not equal")
 	}
 }

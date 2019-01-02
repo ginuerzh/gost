@@ -16,8 +16,8 @@ import (
 )
 
 func init() {
-	// SetLogger(&LogLogger{})
-	// Debug = true
+	SetLogger(&NopLogger{})
+	Debug = true
 	DialTimeout = 1000 * time.Millisecond
 	HandshakeTimeout = 1000 * time.Millisecond
 	ConnectTimeout = 1000 * time.Millisecond
@@ -33,7 +33,11 @@ func init() {
 
 var (
 	httpTestHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(w, r.Body)
+		data, _ := ioutil.ReadAll(r.Body)
+		if len(data) == 0 {
+			data = []byte("Hello World!")
+		}
+		io.Copy(w, bytes.NewReader(data))
 	})
 
 	udpTestHandler = udpHandlerFunc(func(w io.Writer, r *udpRequest) {
