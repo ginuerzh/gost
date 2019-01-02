@@ -970,11 +970,15 @@ func TestHTTP2ProxyWithWebProbeResist(t *testing.T) {
 		Transporter: HTTP2Transporter(nil),
 	}
 
+	u, err := url.Parse(httpSrv.URL)
+	if err != nil {
+		t.Error(err)
+	}
 	server := &Server{
 		Listener: ln,
 		Handler: HTTP2Handler(
 			UsersHandlerOption(url.UserPassword("admin", "123456")),
-			ProbeResistHandlerOption("web:"+httpSrv.URL),
+			ProbeResistHandlerOption("web:"+u.Host),
 		),
 	}
 	go server.Run()

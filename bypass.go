@@ -147,7 +147,9 @@ func NewBypassPatterns(reversed bool, patterns ...string) *Bypass {
 			matchers = append(matchers, m)
 		}
 	}
-	return NewBypass(reversed, matchers...)
+	bp := NewBypass(reversed)
+	bp.AddMatchers(matchers...)
+	return bp
 }
 
 // Contains reports whether the bypass includes addr.
@@ -307,13 +309,10 @@ func (bp *Bypass) Stopped() bool {
 }
 
 func (bp *Bypass) String() string {
-	bp.mux.RLock()
-	defer bp.mux.RUnlock()
-
 	b := &bytes.Buffer{}
-	fmt.Fprintf(b, "reversed: %v\n", bp.reversed)
-	fmt.Fprintf(b, "reload: %v\n", bp.period)
-	for _, m := range bp.matchers {
+	fmt.Fprintf(b, "reversed: %v\n", bp.Reversed())
+	fmt.Fprintf(b, "reload: %v\n", bp.Period())
+	for _, m := range bp.Matchers() {
 		b.WriteString(m.String())
 		b.WriteByte('\n')
 	}
