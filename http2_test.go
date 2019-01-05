@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,7 +37,7 @@ func http2ProxyRoundtrip(targetURL string, data []byte, clientInfo *url.Userinfo
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestHTTP2Proxy(t *testing.T) {
+func TestHTTP2ProxyAuth(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -1106,5 +1107,44 @@ func TestHTTP2ProxyWithFileProbeResist(t *testing.T) {
 	recv, _ := ioutil.ReadAll(conn)
 	if !bytes.Equal(recv, []byte("Hello World!")) {
 		t.Error("data not equal")
+	}
+}
+
+func TestHTTP2ProxyWithBypass(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	u, err := url.Parse(httpSrv.URL)
+	if err != nil {
+		t.Error(err)
+	}
+	ln, err := HTTP2Listener("", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	client := &Client{
+		Connector:   HTTP2Connector(nil),
+		Transporter: HTTP2Transporter(nil),
+	}
+
+	host := u.Host
+	if h, _, _ := net.SplitHostPort(u.Host); h != "" {
+		host = h
+	}
+	server := &Server{
+		Listener: ln,
+		Handler: HTTP2Handler(
+			BypassHandlerOption(NewBypassPatterns(false, host)),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	if err = proxyRoundtrip(client, server, httpSrv.URL, sendData); err == nil {
+		t.Error("should failed")
 	}
 }

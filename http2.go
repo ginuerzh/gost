@@ -58,9 +58,15 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 	}
 	// TODO: use the standard CONNECT method.
 	req.Header.Set("Gost-Target", addr)
-	if c.User != nil {
-		u := c.User.Username()
-		p, _ := c.User.Password()
+
+	user := opts.User
+	if user == nil {
+		user = c.User
+	}
+
+	if user != nil {
+		u := user.Username()
+		p, _ := user.Password()
 		req.Header.Set("Proxy-Authorization",
 			"Basic "+base64.StdEncoding.EncodeToString([]byte(u+":"+p)))
 	}

@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/go-log/log"
 )
 
 func init() {
@@ -95,7 +97,7 @@ func httpRoundtrip(conn net.Conn, targetURL string, data []byte) (err error) {
 	return
 }
 
-func udpRoundtrip(client *Client, server *Server, host string, data []byte) (err error) {
+func udpRoundtrip(logger log.Logger, client *Client, server *Server, host string, data []byte) (err error) {
 	conn, err := proxyConn(client, server)
 	if err != nil {
 		return
@@ -107,15 +109,17 @@ func udpRoundtrip(client *Client, server *Server, host string, data []byte) (err
 		return
 	}
 
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	conn.SetDeadline(time.Now().Add(1 * time.Second))
 	defer conn.SetDeadline(time.Time{})
 
 	if _, err = conn.Write(data); err != nil {
+		logger.Logf("write to %s via %s: %s", host, server.Addr(), err)
 		return
 	}
 
 	recv := make([]byte, len(data))
 	if _, err = conn.Read(recv); err != nil {
+		logger.Logf("read from %s via %s: %s", host, server.Addr(), err)
 		return
 	}
 
@@ -143,7 +147,7 @@ func proxyRoundtrip(client *Client, server *Server, targetURL string, data []byt
 		return
 	}
 
-	conn.SetDeadline(time.Now().Add(500 * time.Millisecond))
+	conn.SetDeadline(time.Now().Add(1000 * time.Millisecond))
 	defer conn.SetDeadline(time.Time{})
 
 	return httpRoundtrip(conn, targetURL, data)
@@ -167,12 +171,13 @@ type udpHandlerFunc func(w io.Writer, r *udpRequest)
 
 // udpTestServer is a UDP server for test.
 type udpTestServer struct {
-	ln       net.PacketConn
-	handler  udpHandlerFunc
-	wg       sync.WaitGroup
-	mu       sync.Mutex // guards closed and conns
-	closed   bool
-	exitChan chan struct{}
+	ln        net.PacketConn
+	handler   udpHandlerFunc
+	wg        sync.WaitGroup
+	mu        sync.Mutex // guards closed and conns
+	closed    bool
+	startChan chan struct{}
+	exitChan  chan struct{}
 }
 
 func newUDPTestServer(handler udpHandlerFunc) *udpTestServer {
@@ -181,23 +186,30 @@ func newUDPTestServer(handler udpHandlerFunc) *udpTestServer {
 	if err != nil {
 		panic(fmt.Sprintf("udptest: failed to listen on a port: %v", err))
 	}
-	ln.SetReadBuffer(1024 * 1024)
-	ln.SetWriteBuffer(1024 * 1024)
 
 	return &udpTestServer{
-		ln:       ln,
-		handler:  handler,
-		exitChan: make(chan struct{}),
+		ln:        ln,
+		handler:   handler,
+		startChan: make(chan struct{}),
+		exitChan:  make(chan struct{}),
 	}
 }
 
 func (s *udpTestServer) Start() {
 	go s.serve()
+	<-s.startChan
 }
 
 func (s *udpTestServer) serve() {
+	select {
+	case <-s.startChan:
+		return
+	default:
+		close(s.startChan)
+	}
+
 	for {
-		data := make([]byte, 1024)
+		data := make([]byte, 32*1024)
 		n, raddr, err := s.ln.ReadFrom(data)
 		if err != nil {
 			break

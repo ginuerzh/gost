@@ -52,9 +52,14 @@ func (c *httpConnector) Connect(conn net.Conn, addr string, options ...ConnectOp
 	req.Header.Set("User-Agent", DefaultUserAgent)
 	req.Header.Set("Proxy-Connection", "keep-alive")
 
-	if c.User != nil {
-		u := c.User.Username()
-		p, _ := c.User.Password()
+	user := opts.User
+	if user == nil {
+		user = c.User
+	}
+
+	if user != nil {
+		u := user.Username()
+		p, _ := user.Password()
 		req.Header.Set("Proxy-Authorization",
 			"Basic "+base64.StdEncoding.EncodeToString([]byte(u+":"+p)))
 	}

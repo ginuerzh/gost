@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -55,7 +56,7 @@ func httpProxyRoundtrip(targetURL string, data []byte, clientInfo *url.Userinfo,
 	return proxyRoundtrip(client, server, targetURL, data)
 }
 
-func TestHTTPProxy(t *testing.T) {
+func TestHTTPProxyAuth(t *testing.T) {
 	httpSrv := httptest.NewServer(httpTestHandler)
 	defer httpSrv.Close()
 
@@ -79,6 +80,40 @@ func TestHTTPProxy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHTTPProxyWithInvalidRequest(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	ln, err := TCPListener("")
+	if err != nil {
+		t.Error(err)
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler:  HTTPHandler(),
+	}
+	go server.Run()
+	defer server.Close()
+
+	r, err := http.NewRequest("GET", "http://"+ln.Addr().String(), bytes.NewReader(sendData))
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Error(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Error("got status:", resp.Status)
 	}
 }
 
@@ -300,5 +335,44 @@ func TestHTTPProxyWithFileProbeResist(t *testing.T) {
 	recv, _ := ioutil.ReadAll(resp.Body)
 	if !bytes.Equal(recv, []byte("Hello World!")) {
 		t.Error("data not equal, got:", string(recv))
+	}
+}
+
+func TestHTTPProxyWithBypass(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	u, err := url.Parse(httpSrv.URL)
+	if err != nil {
+		t.Error(err)
+	}
+	ln, err := TCPListener("")
+	if err != nil {
+		t.Error(err)
+	}
+
+	client := &Client{
+		Connector:   HTTPConnector(nil),
+		Transporter: TCPTransporter(),
+	}
+
+	host := u.Host
+	if h, _, _ := net.SplitHostPort(u.Host); h != "" {
+		host = h
+	}
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			BypassHandlerOption(NewBypassPatterns(false, host)),
+		),
+	}
+	go server.Run()
+	defer server.Close()
+
+	if err = proxyRoundtrip(client, server, httpSrv.URL, sendData); err == nil {
+		t.Error("should failed")
 	}
 }

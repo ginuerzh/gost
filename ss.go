@@ -47,9 +47,13 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 	}
 
 	var method, password string
-	if c.Cipher != nil {
-		method = c.Cipher.Username()
-		password, _ = c.Cipher.Password()
+	cp := opts.User
+	if cp == nil {
+		cp = c.Cipher
+	}
+	if cp != nil {
+		method = cp.Username()
+		password, _ = cp.Password()
 	}
 
 	cipher, err := ss.NewCipher(method, password)
@@ -446,6 +450,10 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 			b := mPool.Get().([]byte)
 			defer mPool.Put(b)
 
+			b[0] = 0
+			b[1] = 0
+			b[2] = 0
+
 			n, err := sc.Read(b[3:]) // add rsv and frag fields to make it the standard SOCKS5 UDP datagram
 			if err != nil {
 				// log.Logf("[ssu] %s - %s : %s", sc.RemoteAddr(), sc.LocalAddr(), err)
@@ -535,16 +543,24 @@ type shadowUDPConn struct {
 
 func (c *shadowUDPConn) Write(b []byte) (n int, err error) {
 	n = len(b) // force byte length consistent
-	if len(c.header) > 0 {
-		b = append(c.header, b...)
+	buf := bytes.Buffer{}
+	if _, err = buf.Write(c.header); err != nil {
+		return
 	}
-	_, err = c.PacketConn.WriteTo(b, c.raddr)
+	if _, err = buf.Write(b); err != nil {
+		return
+	}
+	_, err = c.PacketConn.WriteTo(buf.Bytes(), c.raddr)
 	return
 }
 
 func (c *shadowUDPConn) Read(b []byte) (n int, err error) {
 	buf := mPool.Get().([]byte)
 	defer mPool.Put(buf)
+
+	buf[0] = 0
+	buf[1] = 0
+	buf[2] = 0
 
 	n, _, err = c.PacketConn.ReadFrom(buf[3:])
 	if err != nil {

@@ -550,7 +550,7 @@ func socks5UDPRoundtrip(t *testing.T, host string, data []byte) (err error) {
 	go server.Run()
 	defer server.Close()
 
-	return udpRoundtrip(client, server, host, data)
+	return udpRoundtrip(t, client, server, host, data)
 }
 
 func TestSOCKS5UDP(t *testing.T) {
@@ -593,7 +593,7 @@ func BenchmarkSOCKS5UDP(b *testing.B) {
 	defer server.Close()
 
 	for i := 0; i < b.N; i++ {
-		if err := udpRoundtrip(client, server, udpSrv.Addr(), sendData); err != nil {
+		if err := udpRoundtrip(b, client, server, udpSrv.Addr(), sendData); err != nil {
 			b.Error(err)
 		}
 	}
@@ -679,7 +679,7 @@ func socks5UDPTunRoundtrip(t *testing.T, host string, data []byte) (err error) {
 	go server.Run()
 	defer server.Close()
 
-	return udpRoundtrip(client, server, host, data)
+	return udpRoundtrip(t, client, server, host, data)
 }
 
 func TestSOCKS5UDPTun(t *testing.T) {
@@ -721,7 +721,7 @@ func BenchmarkSOCKS5UDPTun(b *testing.B) {
 	defer server.Close()
 
 	for i := 0; i < b.N; i++ {
-		if err := udpRoundtrip(client, server, udpSrv.Addr(), sendData); err != nil {
+		if err := udpRoundtrip(b, client, server, udpSrv.Addr(), sendData); err != nil {
 			b.Error(err)
 		}
 	}

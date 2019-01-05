@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"net/http/httptest"
@@ -299,14 +300,15 @@ func BenchmarkSSProxyParallel(b *testing.B) {
 	})
 }
 
-func shadowUDPRoundtrip(t *testing.T, host string, data []byte) error {
-	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), 0)
+func shadowUDPRoundtrip(t *testing.T, host string, data []byte,
+	clientInfo *url.Userinfo, serverInfo *url.Userinfo) error {
+	ln, err := ShadowUDPListener("localhost:0", serverInfo, 0)
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
-		Connector:   ShadowUDPConnector(url.UserPassword("chacha20-ietf", "123456")),
+		Connector:   ShadowUDPConnector(clientInfo),
 		Transporter: UDPTransporter(),
 	}
 
@@ -318,19 +320,35 @@ func shadowUDPRoundtrip(t *testing.T, host string, data []byte) error {
 	go server.Run()
 	defer server.Close()
 
-	return udpRoundtrip(client, server, host, data)
+	return udpRoundtrip(t, client, server, host, data)
 }
 
-func _TestShadowUDP(t *testing.T) {
-	udpSrv := newUDPTestServer(udpTestHandler)
-	udpSrv.Start()
-	defer udpSrv.Close()
-
+func TestShadowUDP(t *testing.T) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
-	err := shadowUDPRoundtrip(t, udpSrv.Addr(), sendData)
-	if err != nil {
-		t.Error(err)
+
+	for i, tc := range ssTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			udpSrv := newUDPTestServer(udpTestHandler)
+			udpSrv.Start()
+			defer udpSrv.Close()
+
+			err := shadowUDPRoundtrip(t, udpSrv.Addr(), sendData,
+				tc.clientCipher,
+				tc.serverCipher,
+			)
+			if err == nil {
+				if !tc.pass {
+					t.Errorf("#%d should failed", i)
+				}
+			} else {
+				// t.Logf("#%d %v", i, err)
+				if tc.pass {
+					t.Errorf("#%d got error: %v", i, err)
+				}
+			}
+		})
 	}
 }
 
@@ -343,7 +361,7 @@ func BenchmarkShadowUDP(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), 1000*time.Millisecond)
+	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), 0)
 	if err != nil {
 		b.Error(err)
 	}
@@ -361,9 +379,32 @@ func BenchmarkShadowUDP(b *testing.B) {
 	go server.Run()
 	defer server.Close()
 
+	conn, err := proxyConn(client, server)
+	if err != nil {
+		b.Error(err)
+	}
+	defer conn.Close()
+
+	conn, err = client.Connect(conn, udpSrv.Addr())
+	if err != nil {
+		return
+	}
+
 	for i := 0; i < b.N; i++ {
-		if err := udpRoundtrip(client, server, udpSrv.Addr(), sendData); err != nil {
+		conn.SetDeadline(time.Now().Add(1 * time.Second))
+		defer conn.SetDeadline(time.Time{})
+
+		if _, err = conn.Write(sendData); err != nil {
 			b.Error(err)
+		}
+
+		recv := make([]byte, len(sendData))
+		if _, err = conn.Read(recv); err != nil {
+			b.Error(err)
+		}
+
+		if !bytes.Equal(sendData, recv) {
+			b.Error("data not equal")
 		}
 	}
 }

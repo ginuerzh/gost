@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/url"
 	"time"
+
+	"github.com/ginuerzh/gosocks5"
 )
 
 // Client is a proxy client.
@@ -236,8 +238,10 @@ func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 
 // ConnectOptions describes the options for Connector.Connect.
 type ConnectOptions struct {
-	Addr    string
-	Timeout time.Duration
+	Addr     string
+	Timeout  time.Duration
+	User     *url.Userinfo
+	Selector gosocks5.Selector
 }
 
 // ConnectOption allows a common way to set ConnectOptions.
@@ -254,5 +258,19 @@ func AddrConnectOption(addr string) ConnectOption {
 func TimeoutConnectOption(timeout time.Duration) ConnectOption {
 	return func(opts *ConnectOptions) {
 		opts.Timeout = timeout
+	}
+}
+
+// UserConnectOption specifies the user info for authentication.
+func UserConnectOption(user *url.Userinfo) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.User = user
+	}
+}
+
+// SelectorConnectOption specifies the SOCKS5 client selector.
+func SelectorConnectOption(s gosocks5.Selector) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.Selector = s
 	}
 }

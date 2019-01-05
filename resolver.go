@@ -238,7 +238,7 @@ type resolverCacheItem struct {
 }
 
 func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
-	if ttl < 0 {
+	if name == "" || ttl < 0 {
 		return nil
 	}
 
@@ -248,7 +248,8 @@ func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
 			ttl = item.ttl
 		}
 
-		if item == nil || time.Since(time.Unix(item.ts, 0)) > ttl {
+		if time.Since(time.Unix(item.ts, 0)) > ttl {
+			r.mCache.Delete(name)
 			return nil
 		}
 		return item.IPs
@@ -258,7 +259,7 @@ func (r *resolver) loadCache(name string, ttl time.Duration) []net.IP {
 }
 
 func (r *resolver) storeCache(name string, ips []net.IP, ttl time.Duration) {
-	if name == "" || len(ips) == 0 {
+	if name == "" || len(ips) == 0 || ttl < 0 {
 		return
 	}
 	r.mCache.Store(name, &resolverCacheItem{

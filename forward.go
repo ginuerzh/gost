@@ -787,7 +787,7 @@ func (l *tcpRemoteForwardListener) getSession() (s *muxSession, err error) {
 	conn.SetDeadline(time.Now().Add(HandshakeTimeout))
 	defer conn.SetDeadline(time.Time{})
 
-	conn, err = socks5Handshake(conn, l.chain.LastNode().User)
+	conn, err = socks5Handshake(conn, nil, l.chain.LastNode().User)
 	if err != nil {
 		return nil, err
 	}
@@ -822,7 +822,7 @@ func (l *tcpRemoteForwardListener) getSession() (s *muxSession, err error) {
 }
 
 func (l *tcpRemoteForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, error) {
-	conn, err := socks5Handshake(conn, l.chain.LastNode().User)
+	conn, err := socks5Handshake(conn, nil, l.chain.LastNode().User)
 	if err != nil {
 		return nil, err
 	}

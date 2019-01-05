@@ -369,3 +369,56 @@ func TestSNIOverObfsHTTP(t *testing.T) {
 		})
 	}
 }
+
+func httpOverObfs4Roundtrip(targetURL string, data []byte,
+	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
+
+	ln, err := Obfs4Listener("")
+	if err != nil {
+		return err
+	}
+
+	client := &Client{
+		Connector:   HTTPConnector(clientInfo),
+		Transporter: Obfs4Transporter(),
+	}
+
+	server := &Server{
+		Listener: ln,
+		Handler: HTTPHandler(
+			UsersHandlerOption(serverInfo...),
+		),
+	}
+
+	go server.Run()
+	defer server.Close()
+
+	return proxyRoundtrip(client, server, targetURL, data)
+}
+
+func _TestHTTPOverObfs4(t *testing.T) {
+	httpSrv := httptest.NewServer(httpTestHandler)
+	defer httpSrv.Close()
+
+	sendData := make([]byte, 128)
+	rand.Read(sendData)
+
+	for i, tc := range httpProxyTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			err := httpOverObfs4Roundtrip(httpSrv.URL, sendData, tc.cliUser, tc.srvUsers)
+			if err == nil {
+				if tc.errStr != "" {
+					t.Errorf("#%d should failed with error %s", i, tc.errStr)
+				}
+			} else {
+				if tc.errStr == "" {
+					t.Errorf("#%d got error %v", i, err)
+				}
+				if err.Error() != tc.errStr {
+					t.Errorf("#%d got error %v, want %v", i, err, tc.errStr)
+				}
+			}
+		})
+	}
+}

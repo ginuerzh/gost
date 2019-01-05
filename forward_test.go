@@ -119,7 +119,7 @@ func BenchmarkTCPDirectForwardParallel(b *testing.B) {
 	})
 }
 
-func udpDirectForwardRoundtrip(host string, data []byte) error {
+func udpDirectForwardRoundtrip(t *testing.T, host string, data []byte) error {
 	ln, err := UDPDirectForwardListener("localhost:0", 0)
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ func udpDirectForwardRoundtrip(host string, data []byte) error {
 	go server.Run()
 	defer server.Close()
 
-	return udpRoundtrip(client, server, host, data)
+	return udpRoundtrip(t, client, server, host, data)
 }
 
 func TestUDPDirectForward(t *testing.T) {
@@ -148,7 +148,7 @@ func TestUDPDirectForward(t *testing.T) {
 
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
-	err := udpDirectForwardRoundtrip(udpSrv.Addr(), sendData)
+	err := udpDirectForwardRoundtrip(t, udpSrv.Addr(), sendData)
 	if err != nil {
 		t.Error(err)
 	}
@@ -181,7 +181,7 @@ func BenchmarkUDPDirectForward(b *testing.B) {
 	defer server.Close()
 
 	for i := 0; i < b.N; i++ {
-		if err := udpRoundtrip(client, server, udpSrv.Addr(), sendData); err != nil {
+		if err := udpRoundtrip(b, client, server, udpSrv.Addr(), sendData); err != nil {
 			b.Error(err)
 		}
 	}
@@ -215,7 +215,7 @@ func BenchmarkUDPDirectForwardParallel(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if err := udpRoundtrip(client, server, udpSrv.Addr(), sendData); err != nil {
+			if err := udpRoundtrip(b, client, server, udpSrv.Addr(), sendData); err != nil {
 				b.Error(err)
 			}
 		}
@@ -281,7 +281,7 @@ func udpRemoteForwardRoundtrip(t *testing.T, host string, data []byte) error {
 	go server.Run()
 	defer server.Close()
 
-	return udpRoundtrip(client, server, host, data)
+	return udpRoundtrip(t, client, server, host, data)
 }
 
 func TestUDPRemoteForward(t *testing.T) {

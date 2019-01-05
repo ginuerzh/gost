@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"testing"
 	"time"
 )
@@ -13,6 +14,8 @@ var dnsTests = []struct {
 	host string
 	pass bool
 }{
+	{NameServer{Addr: "1.1.1.1"}, "192.168.1.1", true},
+	{NameServer{Addr: "1.1.1.1"}, "github", true},
 	{NameServer{Addr: "1.1.1.1"}, "github.com", true},
 	{NameServer{Addr: "1.1.1.1:53"}, "github.com", true},
 	{NameServer{Addr: "1.1.1.1:53", Protocol: "tcp"}, "github.com", true},
@@ -47,6 +50,8 @@ func TestDNSResolver(t *testing.T) {
 			}
 			t.Log(ns)
 			r := NewResolver(0, ns)
+			resolv := r.(*resolver)
+			resolv.domain = "com"
 			err := dnsResolverRoundtrip(t, r, tc.host)
 			if err != nil {
 				if tc.pass {
@@ -56,6 +61,56 @@ func TestDNSResolver(t *testing.T) {
 				if !tc.pass {
 					t.Error("should failed")
 				}
+			}
+		})
+	}
+}
+
+var resolverCacheTests = []struct {
+	name   string
+	ips    []net.IP
+	ttl    time.Duration
+	result []net.IP
+}{
+	{"", nil, 0, nil},
+	{"", []net.IP{net.IPv4(192, 168, 1, 1)}, 0, nil},
+	{"", []net.IP{net.IPv4(192, 168, 1, 1)}, 10 * time.Second, nil},
+	{"example.com", nil, 10 * time.Second, nil},
+	{"example.com", []net.IP{}, 10 * time.Second, nil},
+	{"example.com", []net.IP{net.IPv4(192, 168, 1, 1)}, 0, nil},
+	{"example.com", []net.IP{net.IPv4(192, 168, 1, 1)}, -1, nil},
+	{"example.com", []net.IP{net.IPv4(192, 168, 1, 1)}, 10 * time.Second,
+		[]net.IP{net.IPv4(192, 168, 1, 1)}},
+	{"example.com", []net.IP{net.IPv4(192, 168, 1, 1), net.IPv4(192, 168, 1, 2)}, 10 * time.Second,
+		[]net.IP{net.IPv4(192, 168, 1, 1), net.IPv4(192, 168, 1, 2)}},
+}
+
+func TestResolverCache(t *testing.T) {
+	isEqual := func(a, b []net.IP) bool {
+		if a == nil && b == nil {
+			return true
+		}
+
+		if a == nil || b == nil || len(a) != len(b) {
+			return false
+		}
+
+		for i := range a {
+			if !a[i].Equal(b[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	for i, tc := range resolverCacheTests {
+		tc := tc
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			r := newResolver(tc.ttl)
+			r.storeCache(tc.name, tc.ips, tc.ttl)
+			ips := r.loadCache(tc.name, tc.ttl)
+
+			if !isEqual(tc.result, ips) {
+				t.Error("unexpected cache value:", tc.name, ips, tc.ttl)
 			}
 		})
 	}
