@@ -1,0 +1,28 @@
+{
+    "Retries": 1,
+    "Debug": false,
+    "ServeNodes": [
+        ":12345"
+    ],
+    "ChainNodes": [
+        "http://:8080"
+    ],
+
+    "Routes": [
+        {
+            "Retries": 1,
+            "ServeNodes": [
+                "ws://:1443"
+            ],
+            "ChainNodes": [
+                "socks://:192.168.1.1:1080"
+            ]
+        },
+        {
+            "Retries": 3,
+            "ServeNodes": [
+                "quic://:443"
+            ]
+        }
+    ]
+}
