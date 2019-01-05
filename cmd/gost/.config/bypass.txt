@@ -5,9 +5,9 @@ reload      10s
  reverse     true
 
 *.example.com
+
+# this will match example.org and *.example.org
 .example.org
-
-
 
 # From IANA IPv4 Special-Purpose Address Registry
 # http://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
