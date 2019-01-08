@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -45,7 +46,7 @@ func init() {
 			os.Exit(1)
 		}
 	}
-	if flag.NFlag() == 0 || !baseCfg.IsValid() {
+	if flag.NFlag() == 0 {
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
@@ -97,6 +98,9 @@ func start() error {
 		routers = append(routers, rts...)
 	}
 
+	if len(routers) == 0 {
+		return errors.New("invalid config")
+	}
 	for i := range routers {
 		go routers[i].Serve()
 	}

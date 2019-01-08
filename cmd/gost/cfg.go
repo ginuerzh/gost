@@ -38,10 +38,6 @@ func parseBaseConfig(s string) (*baseConfig, error) {
 	return baseCfg, nil
 }
 
-func (cfg *baseConfig) IsValid() bool {
-	return len(cfg.route.ServeNodes) > 0
-}
-
 var (
 	defaultCertFile = "cert.pem"
 	defaultKeyFile  = "key.pem"
