@@ -96,9 +96,10 @@ func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 }
 
 type serverSelector struct {
-	methods   []uint8
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
+	methods []uint8
+	// Users     []*url.Userinfo
+	Authenticator Authenticator
+	TLSConfig     *tls.Config
 }
 
 func (selector *serverSelector) Methods() []uint8 {
@@ -121,8 +122,8 @@ func (selector *serverSelector) Select(methods ...uint8) (method uint8) {
 		}
 	}
 
-	// when user/pass is set, auth is mandatory
-	if len(selector.Users) > 0 {
+	// when Authenticator is set, auth is mandatory
+	if selector.Authenticator != nil {
 		if method == gosocks5.MethodNoAuth {
 			method = gosocks5.MethodUserPass
 		}
@@ -155,18 +156,8 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 		if Debug {
 			log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), req.String())
 		}
-		valid := false
-		for _, user := range selector.Users {
-			username := user.Username()
-			password, _ := user.Password()
-			if (req.Username == username && req.Password == password) ||
-				(req.Username == username && password == "") ||
-				(username == "" && req.Password == password) {
-				valid = true
-				break
-			}
-		}
-		if len(selector.Users) > 0 && !valid {
+
+		if selector.Authenticator != nil && !selector.Authenticator.Authenticate(req.Username, req.Password) {
 			resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Failure)
 			if err := resp.Write(conn); err != nil {
 				log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
@@ -788,8 +779,9 @@ func (h *socks5Handler) Init(options ...HandlerOption) {
 		tlsConfig = DefaultTLSConfig
 	}
 	h.selector = &serverSelector{ // socks5 server selector
-		Users:     h.options.Users,
-		TLSConfig: tlsConfig,
+		// Users:     h.options.Users,
+		Authenticator: h.options.Authenticator,
+		TLSConfig:     tlsConfig,
 	}
 	// methods that socks5 server supported
 	h.selector.AddMethod(

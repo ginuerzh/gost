@@ -8,6 +8,11 @@ import (
 	"github.com/go-log/log"
 )
 
+// Accepter represents a network endpoint that can accept connection from peer.
+type Accepter interface {
+	Accept() (net.Conn, error)
+}
+
 // Server is a proxy server.
 type Server struct {
 	Listener Listener

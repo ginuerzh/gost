@@ -19,6 +19,7 @@ gost - GO Simple Tunnel
 * 多端口监听
 * 可设置转发代理，支持多级转发(代理链)
 * 支持标准HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5代理协议
+* Web代理支持[探测防御](https://docs.ginuerzh.xyz/gost/probe_resist/)
 * [支持多种隧道类型](https://docs.ginuerzh.xyz/gost/configuration/)
 * [SOCKS5代理支持TLS协商加密](https://docs.ginuerzh.xyz/gost/socks/)
 * [Tunnel UDP over TCP](https://docs.ginuerzh.xyz/gost/socks/)

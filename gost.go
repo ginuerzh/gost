@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.7"
+const Version = "2.7.1"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -180,7 +181,22 @@ func (c *nopConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "nop", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
-// Accepter represents a network endpoint that can accept connection from peer.
-type Accepter interface {
-	Accept() (net.Conn, error)
+// splitLine splits a line text by white space, mainly used by config parser.
+func splitLine(line string) []string {
+	if line == "" {
+		return nil
+	}
+	if n := strings.IndexByte(line, '#'); n >= 0 {
+		line = line[:n]
+	}
+	line = strings.Replace(line, "\t", " ", -1)
+	line = strings.TrimSpace(line)
+
+	var ss []string
+	for _, s := range strings.Split(line, " ") {
+		if s = strings.TrimSpace(s); s != "" {
+			ss = append(ss, s)
+		}
+	}
+	return ss
 }

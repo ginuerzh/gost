@@ -1088,7 +1088,7 @@ func TestHTTP2ProxyWithFileProbeResist(t *testing.T) {
 		Listener: ln,
 		Handler: HTTP2Handler(
 			UsersHandlerOption(url.UserPassword("admin", "123456")),
-			ProbeResistHandlerOption("file:.testdata/probe_resist.txt"),
+			ProbeResistHandlerOption("file:.config/probe_resist.txt"),
 		),
 	}
 	go server.Run()

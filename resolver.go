@@ -278,29 +278,10 @@ func (r *resolver) Reload(rd io.Reader) error {
 		return nil
 	}
 
-	split := func(line string) []string {
-		if line == "" {
-			return nil
-		}
-		if n := strings.IndexByte(line, '#'); n >= 0 {
-			line = line[:n]
-		}
-		line = strings.Replace(line, "\t", " ", -1)
-		line = strings.TrimSpace(line)
-
-		var ss []string
-		for _, s := range strings.Split(line, " ") {
-			if s = strings.TrimSpace(s); s != "" {
-				ss = append(ss, s)
-			}
-		}
-		return ss
-	}
-
 	scanner := bufio.NewScanner(rd)
 	for scanner.Scan() {
 		line := scanner.Text()
-		ss := split(line)
+		ss := splitLine(line)
 		if len(ss) == 0 {
 			continue
 		}

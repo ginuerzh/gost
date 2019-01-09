@@ -299,7 +299,7 @@ func (h *httpHandler) authenticate(conn net.Conn, req *http.Request, resp *http.
 		log.Logf("[http] %s -> %s : Authorization '%s' '%s'",
 			conn.RemoteAddr(), conn.LocalAddr(), u, p)
 	}
-	if authenticate(u, p, h.options.Users...) {
+	if h.options.Authenticator == nil || h.options.Authenticator.Authenticate(u, p) {
 		return true
 	}
 
@@ -422,21 +422,4 @@ func basicProxyAuth(proxyAuth string) (username, password string, ok bool) {
 	}
 
 	return cs[:s], cs[s+1:], true
-}
-
-func authenticate(username, password string, users ...*url.Userinfo) bool {
-	if len(users) == 0 {
-		return true
-	}
-
-	for _, user := range users {
-		u := user.Username()
-		p, _ := user.Password()
-		if (u == username && p == password) ||
-			(u == username && p == "") ||
-			(u == "" && p == password) {
-			return true
-		}
-	}
-	return false
 }

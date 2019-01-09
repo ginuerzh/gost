@@ -220,7 +220,7 @@ var bypassReloadTests = []struct {
 		stopped:  true,
 	},
 	{
-		r:        bytes.NewBufferString("#reverse true\n#reload 10s\n192.168.1.0/24"),
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\n192.168.1.0/24 #comment"),
 		reversed: false,
 		period:   0,
 		addr:     "192.168.10.2",
@@ -244,7 +244,7 @@ var bypassReloadTests = []struct {
 		stopped:  true,
 	},
 	{
-		r:        bytes.NewBufferString("#reverse true\n#reload 10s\nexample.com"),
+		r:        bytes.NewBufferString("#reverse true\n#reload 10s\nexample.com #comment"),
 		reversed: false,
 		period:   0,
 		addr:     "example.com",

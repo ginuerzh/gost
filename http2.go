@@ -457,9 +457,10 @@ func (h *http2Handler) authenticate(w http.ResponseWriter, r *http.Request, resp
 	if Debug && (u != "" || p != "") {
 		log.Logf("[http2] %s - %s : Authorization '%s' '%s'", r.RemoteAddr, laddr, u, p)
 	}
-	if authenticate(u, p, h.options.Users...) {
+	if h.options.Authenticator == nil || h.options.Authenticator.Authenticate(u, p) {
 		return true
 	}
+
 	// probing resistance is enabled
 	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
 		switch ss[0] {

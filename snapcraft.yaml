@@ -14,7 +14,7 @@ apps:
 
 parts:
   go:
-    source-tag: go1.11
+    source-tag: go1.10
   gost:
     after: [go]
     source: .

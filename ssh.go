@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -466,8 +465,8 @@ func (h *sshForwardHandler) Init(options ...HandlerOption) {
 	}
 	h.config = &ssh.ServerConfig{}
 
-	h.config.PasswordCallback = defaultSSHPasswordCallback(h.options.Users...)
-	if len(h.options.Users) == 0 {
+	h.config.PasswordCallback = defaultSSHPasswordCallback(h.options.Authenticator)
+	if h.options.Authenticator == nil {
 		h.config.NoClientAuth = true
 	}
 	tlsConfig := h.options.TLSConfig
@@ -665,8 +664,8 @@ func (h *sshForwardHandler) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Reque
 
 // SSHConfig holds the SSH tunnel server config
 type SSHConfig struct {
-	Users     []*url.Userinfo
-	TLSConfig *tls.Config
+	Authenticator Authenticator
+	TLSConfig     *tls.Config
 }
 
 type sshTunnelListener struct {
@@ -688,8 +687,8 @@ func SSHTunnelListener(addr string, config *SSHConfig) (Listener, error) {
 	}
 
 	sshConfig := &ssh.ServerConfig{}
-	sshConfig.PasswordCallback = defaultSSHPasswordCallback(config.Users...)
-	if len(config.Users) == 0 {
+	sshConfig.PasswordCallback = defaultSSHPasswordCallback(config.Authenticator)
+	if config.Authenticator == nil {
 		sshConfig.NoClientAuth = true
 	}
 	tlsConfig := config.TLSConfig
@@ -808,14 +807,10 @@ func getHostPortFromAddr(addr net.Addr) (host string, port int, err error) {
 // PasswordCallbackFunc is a callback function used by SSH server.
 type PasswordCallbackFunc func(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error)
 
-func defaultSSHPasswordCallback(users ...*url.Userinfo) PasswordCallbackFunc {
+func defaultSSHPasswordCallback(au Authenticator) PasswordCallbackFunc {
 	return func(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
-		for _, user := range users {
-			u := user.Username()
-			p, _ := user.Password()
-			if u == conn.User() && p == string(password) {
-				return nil, nil
-			}
+		if au.Authenticate(conn.User(), string(password)) {
+			return nil, nil
 		}
 		log.Logf("[ssh] %s -> %s : password rejected for %s", conn.RemoteAddr(), conn.LocalAddr(), conn.User())
 		return nil, fmt.Errorf("password rejected for %s", conn.User())

@@ -223,44 +223,22 @@ func (bp *Bypass) Reload(r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if n := strings.IndexByte(line, '#'); n >= 0 {
-			line = line[:n]
-		}
-		line = strings.Replace(line, "\t", " ", -1)
-		line = strings.TrimSpace(line)
-		if line == "" {
+		ss := splitLine(line)
+		if len(ss) == 0 {
 			continue
 		}
-
-		// reload option
-		if strings.HasPrefix(line, "reload ") {
-			var ss []string
-			for _, s := range strings.Split(line, " ") {
-				if s = strings.TrimSpace(s); s != "" {
-					ss = append(ss, s)
-				}
-			}
-			if len(ss) == 2 {
+		switch ss[0] {
+		case "reload": // reload option
+			if len(ss) > 1 {
 				period, _ = time.ParseDuration(ss[1])
-				continue
 			}
-		}
-
-		// reverse option
-		if strings.HasPrefix(line, "reverse ") {
-			var ss []string
-			for _, s := range strings.Split(line, " ") {
-				if s = strings.TrimSpace(s); s != "" {
-					ss = append(ss, s)
-				}
-			}
-			if len(ss) == 2 {
+		case "reverse": // reverse option
+			if len(ss) > 1 {
 				reversed, _ = strconv.ParseBool(ss[1])
-				continue
 			}
+		default:
+			matchers = append(matchers, NewMatcher(ss[0]))
 		}
-
-		matchers = append(matchers, NewMatcher(line))
 	}
 
 	if err := scanner.Err(); err != nil {

@@ -25,7 +25,7 @@ var socks5ProxyTests = []struct {
 	{url.User("admin"), []*url.Userinfo{url.UserPassword("admin", "")}, true},
 	{url.UserPassword("admin", "123456"), nil, true},
 	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.User("admin")}, true},
-	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, true},
+	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, false},
 	{url.UserPassword("", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, true},
 	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("admin", "123456")}, true},
 	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("user", "pass"), url.UserPassword("admin", "123456")}, true},

@@ -118,6 +118,24 @@ func parseUsers(authFile string) (users []*url.Userinfo, err error) {
 	return
 }
 
+func parseAuthenticator(s string) (gost.Authenticator, error) {
+	if s == "" {
+		return nil, nil
+	}
+	f, err := os.Open(s)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	au := gost.NewLocalAuthenticator(nil)
+	au.Reload(f)
+
+	go gost.PeriodReload(au, s)
+
+	return au, nil
+}
+
 func parseIP(s string, port string) (ips []string) {
 	if s == "" {
 		return

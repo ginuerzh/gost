@@ -26,7 +26,7 @@ var httpProxyTests = []struct {
 	{url.User("admin"), []*url.Userinfo{url.UserPassword("admin", "")}, ""},
 	{url.UserPassword("admin", "123456"), nil, ""},
 	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.User("admin")}, ""},
-	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, ""},
+	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, "407 Proxy Authentication Required"},
 	{url.UserPassword("", "123456"), []*url.Userinfo{url.UserPassword("", "123456")}, ""},
 	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("admin", "123456")}, ""},
 	{url.UserPassword("admin", "123456"), []*url.Userinfo{url.UserPassword("user", "pass"), url.UserPassword("admin", "123456")}, ""},
@@ -312,7 +312,7 @@ func TestHTTPProxyWithFileProbeResist(t *testing.T) {
 		Listener: ln,
 		Handler: HTTPHandler(
 			UsersHandlerOption(url.UserPassword("admin", "123456")),
-			ProbeResistHandlerOption("file:.testdata/probe_resist.txt"),
+			ProbeResistHandlerOption("file:.config/probe_resist.txt"),
 		),
 	}
 	go server.Run()

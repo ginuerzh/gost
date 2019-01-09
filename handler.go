@@ -20,21 +20,22 @@ type Handler interface {
 
 // HandlerOptions describes the options for Handler.
 type HandlerOptions struct {
-	Addr        string
-	Chain       *Chain
-	Users       []*url.Userinfo
-	TLSConfig   *tls.Config
-	Whitelist   *Permissions
-	Blacklist   *Permissions
-	Strategy    Strategy
-	Bypass      *Bypass
-	Retries     int
-	Timeout     time.Duration
-	Resolver    Resolver
-	Hosts       *Hosts
-	ProbeResist string
-	Node        Node
-	Host        string
+	Addr          string
+	Chain         *Chain
+	Users         []*url.Userinfo
+	Authenticator Authenticator
+	TLSConfig     *tls.Config
+	Whitelist     *Permissions
+	Blacklist     *Permissions
+	Strategy      Strategy
+	Bypass        *Bypass
+	Retries       int
+	Timeout       time.Duration
+	Resolver      Resolver
+	Hosts         *Hosts
+	ProbeResist   string
+	Node          Node
+	Host          string
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -58,6 +59,23 @@ func ChainHandlerOption(chain *Chain) HandlerOption {
 func UsersHandlerOption(users ...*url.Userinfo) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Users = users
+
+		kvs := make(map[string]string)
+		for _, u := range users {
+			if u != nil {
+				kvs[u.Username()], _ = u.Password()
+			}
+		}
+		if len(kvs) > 0 {
+			opts.Authenticator = NewLocalAuthenticator(kvs)
+		}
+	}
+}
+
+// AuthenticatorHandlerOption sets the Authenticator option of HandlerOptions.
+func AuthenticatorHandlerOption(au Authenticator) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.Authenticator = au
 	}
 }
 

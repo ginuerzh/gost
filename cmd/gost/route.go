@@ -257,12 +257,14 @@ func (r *route) GenRouters() ([]router, error) {
 		if err != nil {
 			return nil, err
 		}
-		users, err := parseUsers(node.Get("secrets"))
+		authenticator, err := parseAuthenticator(node.Get("secrets"))
 		if err != nil {
 			return nil, err
 		}
-		if node.User != nil {
-			users = append(users, node.User)
+		if authenticator == nil && node.User != nil {
+			kvs := make(map[string]string)
+			kvs[node.User.Username()], _ = node.User.Password()
+			authenticator = gost.NewLocalAuthenticator(kvs)
 		}
 		certFile, keyFile := node.Get("cert"), node.Get("key")
 		tlsCfg, err := tlsConfig(certFile, keyFile)
@@ -298,8 +300,8 @@ func (r *route) GenRouters() ([]router, error) {
 			ln, err = gost.KCPListener(node.Addr, config)
 		case "ssh":
 			config := &gost.SSHConfig{
-				Users:     users,
-				TLSConfig: tlsCfg,
+				Authenticator: authenticator,
+				TLSConfig:     tlsCfg,
 			}
 			if node.Protocol == "forward" {
 				ln, err = gost.TCPListener(node.Addr)
@@ -416,7 +418,7 @@ func (r *route) GenRouters() ([]router, error) {
 			// gost.AddrHandlerOption(node.Addr),
 			gost.AddrHandlerOption(ln.Addr().String()),
 			gost.ChainHandlerOption(chain),
-			gost.UsersHandlerOption(users...),
+			gost.AuthenticatorHandlerOption(authenticator),
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),

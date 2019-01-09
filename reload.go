@@ -17,26 +17,7 @@ type Reloader interface {
 // Stoppable is the interface that indicates a Reloader can be stopped.
 type Stoppable interface {
 	Stop()
-}
-
-//StopReloader is the interface that adds Stop method to the Reloader.
-type StopReloader interface {
-	Reloader
-	Stoppable
-}
-
-type nopStoppable struct {
-	Reloader
-}
-
-func (nopStoppable) Stop() {
-	return
-}
-
-// NopStoppable returns a StopReloader with a no-op Stop method,
-// wrapping the provided Reloader r.
-func NopStoppable(r Reloader) StopReloader {
-	return nopStoppable{r}
+	Stopped() bool
 }
 
 // PeriodReload reloads the config configFile periodically according to the period of the Reloader r.

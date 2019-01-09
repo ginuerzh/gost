@@ -16,6 +16,7 @@ Features
 * Listening on multiple ports
 * Multi-level forward proxy - proxy chain
 * Standard HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5 proxy protocols support
+* [Probing resistance](https://docs.ginuerzh.xyz/gost/en/probe_resist/) support for web proxy
 * [Support multiple tunnel types](https://docs.ginuerzh.xyz/gost/en/configuration/)
 * [TLS encryption via negotiation support for SOCKS5 proxy](https://docs.ginuerzh.xyz/gost/en/socks/)
 * [Tunnel UDP over TCP](https://docs.ginuerzh.xyz/gost/en/socks/)
