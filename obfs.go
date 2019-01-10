@@ -6,7 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -67,7 +67,8 @@ func (l *obfsHTTPListener) Accept() (net.Conn, error) {
 type obfsHTTPConn struct {
 	net.Conn
 	host           string
-	buf            []byte
+	rbuf           bytes.Buffer
+	wbuf           bytes.Buffer
 	isServer       bool
 	handshaked     bool
 	handshakeMutex sync.Mutex
@@ -106,11 +107,14 @@ func (c *obfsHTTPConn) serverHandshake() (err error) {
 	}
 
 	if r.ContentLength > 0 {
-		c.buf, err = ioutil.ReadAll(r.Body)
+		_, err = io.Copy(&c.rbuf, r.Body)
 	} else {
-		c.buf, err = br.Peek(br.Buffered())
+		var b []byte
+		b, err = br.Peek(br.Buffered())
+		if len(b) > 0 {
+			_, err = c.rbuf.Write(b)
+		}
 	}
-
 	if err != nil {
 		log.Logf("[ohttp] %s -> %s : %v", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), err)
 		return
@@ -138,6 +142,12 @@ func (c *obfsHTTPConn) serverHandshake() (err error) {
 	if Debug {
 		log.Logf("[ohttp] %s <- %s\n%s", c.Conn.RemoteAddr(), c.Conn.LocalAddr(), b.String())
 	}
+
+	if c.rbuf.Len() > 0 {
+		c.wbuf = b // cache the response header if there are extra data in the request body.
+		return
+	}
+
 	_, err = b.WriteTo(c.Conn)
 	return
 }
@@ -182,16 +192,21 @@ func (c *obfsHTTPConn) Read(b []byte) (n int, err error) {
 	if err = c.Handshake(); err != nil {
 		return
 	}
-	if len(c.buf) > 0 {
-		n = copy(b, c.buf)
-		c.buf = c.buf[n:]
-		return
+	if c.rbuf.Len() > 0 {
+		return c.rbuf.Read(b)
 	}
 	return c.Conn.Read(b)
 }
 
 func (c *obfsHTTPConn) Write(b []byte) (n int, err error) {
 	if err = c.Handshake(); err != nil {
+		return
+	}
+
+	if c.wbuf.Len() > 0 {
+		c.wbuf.Write(b) // append the data to the cached header
+		_, err = c.wbuf.WriteTo(c.Conn)
+		n = len(b) // exclude the header length
 		return
 	}
 	return c.Conn.Write(b)
