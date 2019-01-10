@@ -59,16 +59,6 @@ func ChainHandlerOption(chain *Chain) HandlerOption {
 func UsersHandlerOption(users ...*url.Userinfo) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Users = users
-
-		kvs := make(map[string]string)
-		for _, u := range users {
-			if u != nil {
-				kvs[u.Username()], _ = u.Password()
-			}
-		}
-		if len(kvs) > 0 {
-			opts.Authenticator = NewLocalAuthenticator(kvs)
-		}
 	}
 }
 

@@ -418,6 +418,7 @@ func (r *route) GenRouters() ([]router, error) {
 			// gost.AddrHandlerOption(node.Addr),
 			gost.AddrHandlerOption(ln.Addr().String()),
 			gost.ChainHandlerOption(chain),
+			gost.UsersHandlerOption(node.User),
 			gost.AuthenticatorHandlerOption(authenticator),
 			gost.TLSConfigHandlerOption(tlsCfg),
 			gost.WhitelistHandlerOption(whitelist),
