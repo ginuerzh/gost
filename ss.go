@@ -61,12 +61,12 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 		return nil, err
 	}
 
-	sc := ss.NewConn(conn, cipher)
-	// sc, err := ss.DialWithRawAddrConn(rawaddr, conn, cipher)
-	if _, err := sc.Write(rawaddr); err != nil {
-		return nil, err
+	sc := &shadowConn{
+		Conn: ss.NewConn(conn, cipher),
 	}
-	return &shadowConn{sc}, nil
+	sc.wbuf.Write(rawaddr) // cache the header
+
+	return sc, nil
 }
 
 type shadowHandler struct {
@@ -106,7 +106,7 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
-	conn = &shadowConn{ss.NewConn(conn, cipher)}
+	conn = &shadowConn{Conn: ss.NewConn(conn, cipher)}
 
 	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	host, err := h.getRequest(conn)
@@ -526,11 +526,19 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 // Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
 // we wrap around it to make io.Copy happy.
 type shadowConn struct {
+	wbuf bytes.Buffer
 	net.Conn
 }
 
 func (c *shadowConn) Write(b []byte) (n int, err error) {
 	n = len(b) // force byte length consistent
+
+	if c.wbuf.Len() > 0 {
+		c.wbuf.Write(b) // append the data to the cached header
+		_, err = c.Conn.Write(c.wbuf.Bytes())
+		c.wbuf.Reset()
+		return
+	}
 	_, err = c.Conn.Write(b)
 	return
 }
