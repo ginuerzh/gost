@@ -109,6 +109,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	wsOpts.ReadBufferSize = node.GetInt("rbuf")
 	wsOpts.WriteBufferSize = node.GetInt("wbuf")
 	wsOpts.UserAgent = node.Get("agent")
+	wsOpts.Path = node.Get("path")
 
 	var host string
 
@@ -276,6 +277,7 @@ func (r *route) GenRouters() ([]router, error) {
 		wsOpts.EnableCompression = node.GetBool("compression")
 		wsOpts.ReadBufferSize = node.GetInt("rbuf")
 		wsOpts.WriteBufferSize = node.GetInt("wbuf")
+		wsOpts.Path = node.Get("path")
 
 		var ln gost.Listener
 		switch node.Transport {
@@ -284,7 +286,6 @@ func (r *route) GenRouters() ([]router, error) {
 		case "mtls":
 			ln, err = gost.MTLSListener(node.Addr, tlsCfg)
 		case "ws":
-			wsOpts.WriteBufferSize = node.GetInt("wbuf")
 			ln, err = gost.WSListener(node.Addr, wsOpts)
 		case "mws":
 			ln, err = gost.MWSListener(node.Addr, wsOpts)

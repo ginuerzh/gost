@@ -19,6 +19,10 @@ import (
 	smux "gopkg.in/xtaci/smux.v1"
 )
 
+const (
+	defaultWSPath = "/ws"
+)
+
 // WSOptions describes the options for websocket.
 type WSOptions struct {
 	ReadBufferSize    int
@@ -26,6 +30,7 @@ type WSOptions struct {
 	HandshakeTimeout  time.Duration
 	EnableCompression bool
 	UserAgent         string
+	Path              string
 }
 
 type wsTransporter struct {
@@ -49,7 +54,15 @@ func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (n
 	if opts.WSOptions != nil {
 		wsOptions = opts.WSOptions
 	}
-	url := url.URL{Scheme: "ws", Host: opts.Host, Path: "/ws"}
+	if wsOptions == nil {
+		wsOptions = &WSOptions{}
+	}
+
+	path := wsOptions.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+	url := url.URL{Scheme: "ws", Host: opts.Host, Path: path}
 	return websocketClientConn(url.String(), conn, nil, wsOptions)
 }
 
@@ -148,7 +161,15 @@ func (tr *mwsTransporter) initSession(addr string, conn net.Conn, opts *Handshak
 	if opts.WSOptions != nil {
 		wsOptions = opts.WSOptions
 	}
-	url := url.URL{Scheme: "ws", Host: opts.Host, Path: "/ws"}
+	if wsOptions == nil {
+		wsOptions = &WSOptions{}
+	}
+
+	path := wsOptions.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+	url := url.URL{Scheme: "ws", Host: opts.Host, Path: path}
 	conn, err := websocketClientConn(url.String(), conn, nil, wsOptions)
 	if err != nil {
 		return nil, err
@@ -187,10 +208,18 @@ func (tr *wssTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (
 	if opts.WSOptions != nil {
 		wsOptions = opts.WSOptions
 	}
+	if wsOptions == nil {
+		wsOptions = &WSOptions{}
+	}
+
 	if opts.TLSConfig == nil {
 		opts.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	url := url.URL{Scheme: "wss", Host: opts.Host, Path: "/ws"}
+	path := wsOptions.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+	url := url.URL{Scheme: "wss", Host: opts.Host, Path: path}
 	return websocketClientConn(url.String(), conn, opts.TLSConfig, wsOptions)
 }
 
@@ -288,11 +317,19 @@ func (tr *mwssTransporter) initSession(addr string, conn net.Conn, opts *Handsha
 	if opts.WSOptions != nil {
 		wsOptions = opts.WSOptions
 	}
+	if wsOptions == nil {
+		wsOptions = &WSOptions{}
+	}
+
 	tlsConfig := opts.TLSConfig
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	url := url.URL{Scheme: "wss", Host: opts.Host, Path: "/ws"}
+	path := wsOptions.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+	url := url.URL{Scheme: "wss", Host: opts.Host, Path: path}
 	conn, err := websocketClientConn(url.String(), conn, tlsConfig, wsOptions)
 	if err != nil {
 		return nil, err
@@ -338,8 +375,12 @@ func WSListener(addr string, options *WSOptions) (Listener, error) {
 		errChan:  make(chan error, 1),
 	}
 
+	path := options.Path
+	if path == "" {
+		path = defaultWSPath
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/ws", http.HandlerFunc(l.upgrade))
+	mux.Handle(path, http.HandlerFunc(l.upgrade))
 	l.srv = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -431,8 +472,13 @@ func MWSListener(addr string, options *WSOptions) (Listener, error) {
 		errChan:  make(chan error, 1),
 	}
 
+	path := options.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/ws", http.HandlerFunc(l.upgrade))
+	mux.Handle(path, http.HandlerFunc(l.upgrade))
 	l.srv = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -551,8 +597,13 @@ func WSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Listen
 		tlsConfig = DefaultTLSConfig
 	}
 
+	path := options.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/ws", http.HandlerFunc(l.upgrade))
+	mux.Handle(path, http.HandlerFunc(l.upgrade))
 	l.srv = &http.Server{
 		Addr:              addr,
 		TLSConfig:         tlsConfig,
@@ -612,8 +663,13 @@ func MWSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Liste
 		tlsConfig = DefaultTLSConfig
 	}
 
+	path := options.Path
+	if path == "" {
+		path = defaultWSPath
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/ws", http.HandlerFunc(l.upgrade))
+	mux.Handle(path, http.HandlerFunc(l.upgrade))
 	l.srv = &http.Server{
 		Addr:              addr,
 		TLSConfig:         tlsConfig,
