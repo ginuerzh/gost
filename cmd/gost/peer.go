@@ -19,9 +19,9 @@ const (
 )
 
 type peerConfig struct {
-	Strategy    string        `json:"strategy"`
-	MaxFails    int           `json:"max_fails"`
-	FailTimeout time.Duration `json:"fail_timeout"`
+	Strategy    string `json:"strategy"`
+	MaxFails    int    `json:"max_fails"`
+	FailTimeout time.Duration
 	period      time.Duration // the period for live reloading
 	Nodes       []string      `json:"nodes"`
 	group       *gost.NodeGroup

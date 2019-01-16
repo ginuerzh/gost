@@ -59,9 +59,12 @@ func (r *route) parseChain() (*gost.Chain, error) {
 			gost.WithStrategy(gost.NewStrategy(nodes[0].Get("strategy"))),
 		)
 
-		cfg := nodes[0].Get("peer")
-		f, err := os.Open(cfg)
-		if err == nil {
+		if cfg := nodes[0].Get("peer"); cfg != "" {
+			f, err := os.Open(cfg)
+			if err != nil {
+				return nil, err
+			}
+
 			peerCfg := newPeerConfig()
 			peerCfg.group = ngroup
 			peerCfg.baseNodes = nodes

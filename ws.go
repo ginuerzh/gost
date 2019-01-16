@@ -716,6 +716,9 @@ func generateChallengeKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(p), nil
 }
 
+// TODO: due to the concurrency control in the websocket.Conn,
+// a data race may be met when using with multiplexing.
+// See: https://godoc.org/gopkg.in/gorilla/websocket.v1#hdr-Concurrency
 type websocketConn struct {
 	conn *websocket.Conn
 	rb   []byte
