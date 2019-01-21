@@ -174,7 +174,10 @@ func (f *FailFilter) Filter(nodes []Node) []Node {
 	}
 	nl := []Node{}
 	for i := range nodes {
-		marker := nodes[i].marker.Clone()
+		marker := &failMarker{}
+		if nil != nodes[i].marker {
+			marker = nodes[i].marker.Clone()
+		}
 		// log.Logf("%s: %d/%d %v/%v", nodes[i], marker.failCount, f.MaxFails, marker.failTime, f.FailTimeout)
 		if marker.failCount < uint32(f.MaxFails) ||
 			time.Since(time.Unix(marker.failTime, 0)) >= f.FailTimeout {
