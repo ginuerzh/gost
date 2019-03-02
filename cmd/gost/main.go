@@ -28,7 +28,7 @@ func init() {
 
 	flag.Var(&baseCfg.route.ChainNodes, "F", "forward address, can make a forward chain")
 	flag.Var(&baseCfg.route.ServeNodes, "L", "listen address, can listen on multiple ports")
-	flag.StringVar(&configureFile, "C", "", "configure file")
+	flag.StringVar(&configureFile, "C", "gost.json", "configure file")
 	flag.BoolVar(&baseCfg.Debug, "D", false, "enable debug log")
 	flag.BoolVar(&printVersion, "V", false, "print version")
 	flag.Parse()
@@ -39,16 +39,20 @@ func init() {
 		os.Exit(0)
 	}
 
-	if configureFile != "" {
+	_, err := os.Stat(configureFile);
+	if  err == nil {
 		_, err := parseBaseConfig(configureFile)
 		if err != nil {
 			log.Log(err)
 			os.Exit(1)
 		}
-	}
-	if flag.NFlag() == 0 {
-		flag.PrintDefaults()
-		os.Exit(0)
+	} else {
+		if os.IsNotExist(err) {
+			if flag.NFlag() == 0 {
+				flag.PrintDefaults()
+				os.Exit(0)
+			}
+		}
 	}
 }
 
