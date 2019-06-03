@@ -463,6 +463,9 @@ func (h *http2Handler) authenticate(w http.ResponseWriter, r *http.Request, resp
 
 	// probing resistance is enabled
 	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
+		resp.StatusCode = http.StatusServiceUnavailable // default status code
+		w.Header().Del("Proxy-Agent")
+
 		switch ss[0] {
 		case "code":
 			resp.StatusCode, _ = strconv.Atoi(ss[1])
@@ -502,7 +505,6 @@ func (h *http2Handler) authenticate(w http.ResponseWriter, r *http.Request, resp
 		resp.StatusCode = http.StatusProxyAuthRequired
 		resp.Header.Add("Proxy-Authenticate", "Basic realm=\"gost\"")
 	} else {
-		w.Header().Del("Proxy-Agent")
 		resp.Header = http.Header{}
 		resp.Header.Set("Server", "nginx/1.14.1")
 		resp.Header.Set("Date", time.Now().Format(http.TimeFormat))

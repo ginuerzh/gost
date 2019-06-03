@@ -56,7 +56,7 @@ func (au *LocalAuthenticator) Add(k, v string) {
 	au.kvs[k] = v
 }
 
-// Reload parses config from r, then live reloads the bypass.
+// Reload parses config from r, then live reloads the Authenticator.
 func (au *LocalAuthenticator) Reload(r io.Reader) error {
 	var period time.Duration
 	kvs := make(map[string]string)
