@@ -36,6 +36,7 @@ type HandlerOptions struct {
 	ProbeResist   string
 	Node          Node
 	Host          string
+	IPs           []string
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -160,6 +161,13 @@ func NodeHandlerOption(node Node) HandlerOption {
 func HostHandlerOption(host string) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Host = host
+	}
+}
+
+// IPsHandlerOption sets the ip list for port forward.
+func IPsHandlerOption(ips []string) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.IPs = ips
 	}
 }
 

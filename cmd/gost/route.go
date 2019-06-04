@@ -417,9 +417,9 @@ func (r *route) GenRouters() ([]router, error) {
 		node.Bypass = parseBypass(node.Get("bypass"))
 		resolver := parseResolver(node.Get("dns"))
 		hosts := parseHosts(node.Get("hosts"))
+		ips := parseIP(node.Get("ip"), "")
 
 		handler.Init(
-			// gost.AddrHandlerOption(node.Addr),
 			gost.AddrHandlerOption(ln.Addr().String()),
 			gost.ChainHandlerOption(chain),
 			gost.UsersHandlerOption(node.User),
@@ -435,6 +435,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
 			gost.ProbeResistHandlerOption(node.Get("probe_resist")),
 			gost.NodeHandlerOption(node),
+			gost.IPsHandlerOption(ips),
 		)
 
 		rt := router{

@@ -174,13 +174,10 @@ func (f *FailFilter) Filter(nodes []Node) []Node {
 	}
 	nl := []Node{}
 	for i := range nodes {
-		marker := &failMarker{}
-		if nil != nodes[i].marker {
-			marker = nodes[i].marker.Clone()
-		}
-		// log.Logf("%s: %d/%d %v/%v", nodes[i], marker.failCount, f.MaxFails, marker.failTime, f.FailTimeout)
-		if marker.failCount < uint32(f.MaxFails) ||
-			time.Since(time.Unix(marker.failTime, 0)) >= f.FailTimeout {
+		marker := nodes[i].marker.Clone()
+		// log.Logf("%s: %d/%d %v/%v", nodes[i], marker.FailCount(), f.MaxFails, marker.FailTime(), f.FailTimeout)
+		if marker.FailCount() < uint32(f.MaxFails) ||
+			time.Since(time.Unix(marker.FailTime(), 0)) >= f.FailTimeout {
 			nl = append(nl, nodes[i])
 		}
 	}
@@ -197,7 +194,33 @@ type failMarker struct {
 	mux       sync.RWMutex
 }
 
+func (m *failMarker) FailTime() int64 {
+	if m == nil {
+		return 0
+	}
+
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	return m.failTime
+}
+
+func (m *failMarker) FailCount() uint32 {
+	if m == nil {
+		return 0
+	}
+
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	return m.failCount
+}
+
 func (m *failMarker) Mark() {
+	if m == nil {
+		return
+	}
+
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
@@ -206,6 +229,10 @@ func (m *failMarker) Mark() {
 }
 
 func (m *failMarker) Reset() {
+	if m == nil {
+		return
+	}
+
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
@@ -214,6 +241,10 @@ func (m *failMarker) Reset() {
 }
 
 func (m *failMarker) Clone() *failMarker {
+	if m == nil {
+		return nil
+	}
+
 	m.mux.RLock()
 	defer m.mux.RUnlock()
 

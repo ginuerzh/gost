@@ -148,6 +148,7 @@ func parseIP(s string, port string) (ips []string) {
 		for _, s := range ss {
 			s = strings.TrimSpace(s)
 			if s != "" {
+				// TODO: support IPv6
 				if !strings.Contains(s, ":") {
 					s = s + ":" + port
 				}

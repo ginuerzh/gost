@@ -23,9 +23,11 @@ func tcpDirectForwardRoundtrip(targetURL string, data []byte) error {
 		Transporter: TCPTransporter(),
 	}
 
+	h := TCPDirectForwardHandler(u.Host)
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  TCPDirectForwardHandler(u.Host),
+		Handler:  h,
 	}
 
 	go server.Run()
@@ -68,9 +70,12 @@ func BenchmarkTCPDirectForward(b *testing.B) {
 	if err != nil {
 		b.Error(err)
 	}
+
+	h := TCPDirectForwardHandler(u.Host)
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  TCPDirectForwardHandler(u.Host),
+		Handler:  h,
 	}
 	go server.Run()
 	defer server.Close()
@@ -103,9 +108,12 @@ func BenchmarkTCPDirectForwardParallel(b *testing.B) {
 	if err != nil {
 		b.Error(err)
 	}
+
+	h := TCPDirectForwardHandler(u.Host)
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  TCPDirectForwardHandler(u.Host),
+		Handler:  h,
 	}
 	go server.Run()
 	defer server.Close()
@@ -130,9 +138,11 @@ func udpDirectForwardRoundtrip(t *testing.T, host string, data []byte) error {
 		Transporter: UDPTransporter(),
 	}
 
+	h := UDPDirectForwardHandler(host)
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  UDPDirectForwardHandler(host),
+		Handler:  h,
 	}
 
 	go server.Run()
@@ -172,9 +182,11 @@ func BenchmarkUDPDirectForward(b *testing.B) {
 		Transporter: UDPTransporter(),
 	}
 
+	h := UDPDirectForwardHandler(udpSrv.Addr())
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  UDPDirectForwardHandler(udpSrv.Addr()),
+		Handler:  h,
 	}
 
 	go server.Run()
@@ -205,9 +217,11 @@ func BenchmarkUDPDirectForwardParallel(b *testing.B) {
 		Transporter: UDPTransporter(),
 	}
 
+	h := UDPDirectForwardHandler(udpSrv.Addr())
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  UDPDirectForwardHandler(udpSrv.Addr()),
+		Handler:  h,
 	}
 
 	go server.Run()
@@ -238,9 +252,11 @@ func tcpRemoteForwardRoundtrip(t *testing.T, targetURL string, data []byte) erro
 		Transporter: TCPTransporter(),
 	}
 
+	h := TCPRemoteForwardHandler(u.Host) // forward to u.Host
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  TCPRemoteForwardHandler(u.Host), // forward to u.Host
+		Handler:  h,
 	}
 
 	go server.Run()
@@ -273,9 +289,11 @@ func udpRemoteForwardRoundtrip(t *testing.T, host string, data []byte) error {
 		Transporter: UDPTransporter(),
 	}
 
+	h := UDPRemoteForwardHandler(host)
+	h.Init()
 	server := &Server{
 		Listener: ln,
-		Handler:  UDPRemoteForwardHandler(host),
+		Handler:  h,
 	}
 
 	go server.Run()
