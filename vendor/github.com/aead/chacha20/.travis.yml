@@ -1,0 +1,25 @@
+language: go
+
+go:
+  - "1.8.x"
+  - "1.9.x"
+  - "1.10.x"
+
+env:
+   - TRAVIS_GOARCH=amd64
+   - TRAVIS_GOARCH=386 
+ 
+before_install:
+- export GOARCH=$TRAVIS_GOARCH
+
+branches:
+  only:
+  - master
+
+before_script:
+- go get -u github.com/klauspost/asmfmt/cmd/asmfmt
+
+script:
+- diff -au <(gofmt -d .) <(printf "")
+- diff -au <(asmfmt -d .) <(printf "")
+- go test -v ./...
