@@ -85,7 +85,7 @@ func ParseNode(s string) (node Node, err error) {
 	}
 
 	switch node.Protocol {
-	case "http", "http2", "socks4", "socks4a", "ss", "ssu", "sni":
+	case "http", "http2", "socks4", "socks4a", "ss", "ss2", "ssu", "sni":
 	case "socks", "socks5":
 		node.Protocol = "socks5"
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
