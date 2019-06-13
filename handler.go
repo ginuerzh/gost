@@ -34,6 +34,7 @@ type HandlerOptions struct {
 	Resolver      Resolver
 	Hosts         *Hosts
 	ProbeResist   string
+	KnockingHost  string
 	Node          Node
 	Host          string
 	IPs           []string
@@ -147,6 +148,13 @@ func HostsHandlerOption(hosts *Hosts) HandlerOption {
 func ProbeResistHandlerOption(pr string) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.ProbeResist = pr
+	}
+}
+
+// KnockingHandlerOption adds the knocking host for probe resistance.
+func KnockingHandlerOption(host string) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.KnockingHost = host
 	}
 }
 

@@ -302,8 +302,9 @@ func (h *httpHandler) authenticate(conn net.Conn, req *http.Request, resp *http.
 		return true
 	}
 
-	// probing resistance is enabled
-	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
+	// probing resistance is enabled, and knocking host is mismatch.
+	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 &&
+		(h.options.KnockingHost == "" || !strings.EqualFold(req.URL.Hostname(), h.options.KnockingHost)) {
 		resp.StatusCode = http.StatusServiceUnavailable // default status code
 
 		switch ss[0] {

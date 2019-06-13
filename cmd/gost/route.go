@@ -438,6 +438,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.RetryHandlerOption(node.GetInt("retry")), // override the global retry option.
 			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
 			gost.ProbeResistHandlerOption(node.Get("probe_resist")),
+			gost.KnockingHandlerOption(node.Get("knock")),
 			gost.NodeHandlerOption(node),
 			gost.IPsHandlerOption(ips),
 		)

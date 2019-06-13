@@ -461,8 +461,9 @@ func (h *http2Handler) authenticate(w http.ResponseWriter, r *http.Request, resp
 		return true
 	}
 
-	// probing resistance is enabled
-	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 {
+	// probing resistance is enabled, and knocking host is mismatch.
+	if ss := strings.SplitN(h.options.ProbeResist, ":", 2); len(ss) == 2 &&
+		(h.options.KnockingHost == "" || !strings.EqualFold(r.URL.Hostname(), h.options.KnockingHost)) {
 		resp.StatusCode = http.StatusServiceUnavailable // default status code
 		w.Header().Del("Proxy-Agent")
 
