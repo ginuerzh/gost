@@ -1,5 +1,5 @@
 name: gost
-version: '2.7'
+version: '2.8'
 summary: GO Simple Tunnel
 description: |
   A simple tunnel written in golang
@@ -14,7 +14,7 @@ apps:
 
 parts:
   go:
-    source-tag: go1.10
+    source-tag: go1.12
   gost:
     after: [go]
     source: .
