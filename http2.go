@@ -53,11 +53,11 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 		ProtoMajor:    2,
 		ProtoMinor:    0,
 		Body:          pr,
-		Host:          cc.addr,
+		Host:          addr,
 		ContentLength: -1,
 	}
-	// TODO: use the standard CONNECT method.
-	req.Header.Set("Gost-Target", addr)
+	// DEPRECATED
+	//req.Header.Set("Gost-Target", addr)
 
 	user := opts.User
 	if user == nil {
