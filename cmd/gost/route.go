@@ -52,10 +52,13 @@ func (r *route) parseChain() (*gost.Chain, error) {
 		ngroup.AddNode(nodes...)
 
 		ngroup.SetSelector(nil,
-			gost.WithFilter(&gost.FailFilter{
-				MaxFails:    defaultMaxFails,
-				FailTimeout: defaultFailTimeout,
-			}),
+			gost.WithFilter(
+				&gost.FailFilter{
+					MaxFails:    defaultMaxFails,
+					FailTimeout: defaultFailTimeout,
+				},
+				&gost.InvalidFilter{},
+			),
 			gost.WithStrategy(gost.NewStrategy(nodes[0].Get("strategy"))),
 		)
 

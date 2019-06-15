@@ -3,6 +3,8 @@ package gost
 import (
 	"errors"
 	"math/rand"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -167,7 +169,7 @@ type FailFilter struct {
 	FailTimeout time.Duration
 }
 
-// Filter filters nodes.
+// Filter filters dead nodes.
 func (f *FailFilter) Filter(nodes []Node) []Node {
 	if len(nodes) <= 1 || f.MaxFails <= 0 {
 		return nodes
@@ -186,6 +188,26 @@ func (f *FailFilter) Filter(nodes []Node) []Node {
 
 func (f *FailFilter) String() string {
 	return "fail"
+}
+
+// InvalidFilter filters the invalid node.
+// A node is invalid if its port is invalid (negative or zero value).
+type InvalidFilter struct{}
+
+// Filter filters invalid nodes.
+func (f *InvalidFilter) Filter(nodes []Node) []Node {
+	nl := []Node{}
+	for i := range nodes {
+		_, sport, _ := net.SplitHostPort(nodes[i].Addr)
+		if port, _ := strconv.Atoi(sport); port > 0 {
+			nl = append(nl, nodes[i])
+		}
+	}
+	return nl
+}
+
+func (f *InvalidFilter) String() string {
+	return "invalid"
 }
 
 type failMarker struct {

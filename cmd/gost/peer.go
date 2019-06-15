@@ -57,10 +57,13 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 	group := cfg.group
 	group.SetSelector(
 		nil,
-		gost.WithFilter(&gost.FailFilter{
-			MaxFails:    cfg.MaxFails,
-			FailTimeout: cfg.FailTimeout,
-		}),
+		gost.WithFilter(
+			&gost.FailFilter{
+				MaxFails:    cfg.MaxFails,
+				FailTimeout: cfg.FailTimeout,
+			},
+			&gost.InvalidFilter{},
+		),
 		gost.WithStrategy(gost.NewStrategy(cfg.Strategy)),
 	)
 
