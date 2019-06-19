@@ -51,11 +51,20 @@ func (r *route) parseChain() (*gost.Chain, error) {
 		}
 		ngroup.AddNode(nodes...)
 
+		maxFails := nodes[0].GetInt("max_fails")
+		if maxFails == 0 {
+			maxFails = defaultMaxFails
+		}
+		failTimeout := nodes[0].GetDuration("fail_timeout")
+		if failTimeout == 0 {
+			failTimeout = defaultFailTimeout
+		}
+
 		ngroup.SetSelector(nil,
 			gost.WithFilter(
 				&gost.FailFilter{
-					MaxFails:    defaultMaxFails,
-					FailTimeout: defaultFailTimeout,
+					MaxFails:    maxFails,
+					FailTimeout: failTimeout,
 				},
 				&gost.InvalidFilter{},
 			),

@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	// MethodTLS is an extended SOCKS5 method for TLS.
+	// MethodTLS is an extended SOCKS5 method with tls encryption support.
 	MethodTLS uint8 = 0x80
-	// MethodTLSAuth is an extended SOCKS5 method for TLS+AUTH.
+	// MethodTLSAuth is an extended SOCKS5 method with tls encryption and authentication support.
 	MethodTLSAuth uint8 = 0x82
 	// MethodMux is an extended SOCKS5 method for stream multiplexing.
 	MethodMux = 0x88

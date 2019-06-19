@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -140,12 +141,21 @@ func (node *Node) GetInt(key string) int {
 	return n
 }
 
+func (node *Node) GetDuration(key string) time.Duration {
+	d, _ := time.ParseDuration(node.Values.Get(key))
+	return d
+}
+
 func (node Node) String() string {
-	if node.url == nil {
-		return fmt.Sprintf("%s+%s://%s",
-			node.Protocol, node.Transport, node.Addr)
+	var scheme string
+	if node.url != nil {
+		scheme = node.url.Scheme
 	}
-	return node.url.String()
+	if scheme == "" {
+		scheme = fmt.Sprintf("%s+%s", node.Protocol, node.Transport)
+	}
+	return fmt.Sprintf("%s://%s",
+		scheme, node.Addr)
 }
 
 // NodeGroup is a group of nodes.
