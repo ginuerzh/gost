@@ -28,6 +28,8 @@ type HandlerOptions struct {
 	Whitelist     *Permissions
 	Blacklist     *Permissions
 	Strategy      Strategy
+	MaxFails      int
+	FailTimeout   time.Duration
 	Bypass        *Bypass
 	Retries       int
 	Timeout       time.Duration
@@ -113,6 +115,20 @@ func BypassHandlerOption(bypass *Bypass) HandlerOption {
 func StrategyHandlerOption(strategy Strategy) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Strategy = strategy
+	}
+}
+
+// MaxFailsHandlerOption sets the max_fails option of HandlerOptions.
+func MaxFailsHandlerOption(n int) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.MaxFails = n
+	}
+}
+
+// FailTimeoutHandlerOption sets the fail_timeout option of HandlerOptions.
+func FailTimeoutHandlerOption(d time.Duration) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.FailTimeout = d
 	}
 }
 

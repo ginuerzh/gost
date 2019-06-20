@@ -13,11 +13,6 @@ import (
 	"github.com/ginuerzh/gost"
 )
 
-const (
-	defaultMaxFails    = 1
-	defaultFailTimeout = 30 * time.Second
-)
-
 type peerConfig struct {
 	Strategy    string `json:"strategy"`
 	MaxFails    int    `json:"max_fails"`
@@ -36,12 +31,6 @@ func newPeerConfig() *peerConfig {
 }
 
 func (cfg *peerConfig) Validate() {
-	if cfg.MaxFails <= 0 {
-		cfg.MaxFails = defaultMaxFails
-	}
-	if cfg.FailTimeout <= 0 {
-		cfg.FailTimeout = defaultFailTimeout // seconds
-	}
 }
 
 func (cfg *peerConfig) Reload(r io.Reader) error {

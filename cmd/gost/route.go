@@ -51,20 +51,11 @@ func (r *route) parseChain() (*gost.Chain, error) {
 		}
 		ngroup.AddNode(nodes...)
 
-		maxFails := nodes[0].GetInt("max_fails")
-		if maxFails == 0 {
-			maxFails = defaultMaxFails
-		}
-		failTimeout := nodes[0].GetDuration("fail_timeout")
-		if failTimeout == 0 {
-			failTimeout = defaultFailTimeout
-		}
-
 		ngroup.SetSelector(nil,
 			gost.WithFilter(
 				&gost.FailFilter{
-					MaxFails:    maxFails,
-					FailTimeout: failTimeout,
+					MaxFails:    nodes[0].GetInt("max_fails"),
+					FailTimeout: nodes[0].GetDuration("fail_timeout"),
 				},
 				&gost.InvalidFilter{},
 			),
@@ -444,6 +435,8 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.WhitelistHandlerOption(whitelist),
 			gost.BlacklistHandlerOption(blacklist),
 			gost.StrategyHandlerOption(gost.NewStrategy(node.Get("strategy"))),
+			gost.MaxFailsHandlerOption(node.GetInt("max_fails")),
+			gost.FailTimeoutHandlerOption(node.GetDuration("fail_timeout")),
 			gost.BypassHandlerOption(node.Bypass),
 			gost.ResolverHandlerOption(resolver),
 			gost.HostsHandlerOption(hosts),

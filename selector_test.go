@@ -97,13 +97,14 @@ func TestFailFilter(t *testing.T) {
 		t.Error("unexpected node", v)
 	}
 
-	filter.MaxFails = 1
+	filter.MaxFails = -1
+	nodes[0].MarkDead()
 	if v := filter.Filter(nodes); !isEqual(v, nodes) {
 		t.Error("unexpected node", v)
 	}
 
-	nodes[0].MarkDead()
-	if v := filter.Filter(nodes); !isEqual(v, nodes) {
+	filter.MaxFails = 0
+	if v := filter.Filter(nodes); isEqual(v, nodes) {
 		t.Error("unexpected node", v)
 	}
 

@@ -46,8 +46,8 @@ func (h *baseForwardHandler) Init(options ...HandlerOption) {
 	h.group.SetSelector(&defaultSelector{},
 		WithStrategy(h.options.Strategy),
 		WithFilter(&FailFilter{
-			MaxFails:    1,
-			FailTimeout: 30 * time.Second,
+			MaxFails:    h.options.MaxFails,
+			FailTimeout: h.options.FailTimeout,
 		}),
 	)
 

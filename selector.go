@@ -162,6 +162,12 @@ type Filter interface {
 	String() string
 }
 
+// default options for FailFilter
+const (
+	DefaultMaxFails    = 1
+	DefaultFailTimeout = 30 * time.Second
+)
+
 // FailFilter filters the dead node.
 // A node is marked as dead if its failed count is greater than MaxFails.
 type FailFilter struct {
@@ -171,15 +177,24 @@ type FailFilter struct {
 
 // Filter filters dead nodes.
 func (f *FailFilter) Filter(nodes []Node) []Node {
-	if len(nodes) <= 1 || f.MaxFails <= 0 {
+	maxFails := f.MaxFails
+	if maxFails == 0 {
+		maxFails = DefaultMaxFails
+	}
+	failTimeout := f.FailTimeout
+	if failTimeout == 0 {
+		failTimeout = DefaultFailTimeout
+	}
+
+	if len(nodes) <= 1 || maxFails < 0 {
 		return nodes
 	}
 	nl := []Node{}
 	for i := range nodes {
 		marker := nodes[i].marker.Clone()
 		// log.Logf("%s: %d/%d %v/%v", nodes[i], marker.FailCount(), f.MaxFails, marker.FailTime(), f.FailTimeout)
-		if marker.FailCount() < uint32(f.MaxFails) ||
-			time.Since(time.Unix(marker.FailTime(), 0)) >= f.FailTimeout {
+		if marker.FailCount() < uint32(maxFails) ||
+			time.Since(time.Unix(marker.FailTime(), 0)) >= failTimeout {
 			nl = append(nl, nodes[i])
 		}
 	}
