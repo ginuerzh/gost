@@ -150,7 +150,8 @@ func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, e
 		return nil, err
 	}
 
-	cc, err := route.LastNode().Client.Connect(conn, ipAddr, AddrConnectOption(addr))
+	cOpts := append([]ConnectOption{AddrConnectOption(addr)}, route.LastNode().ConnectOptions...)
+	cc, err := route.LastNode().Client.Connect(conn, ipAddr, cOpts...)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -233,7 +234,7 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 	preNode := node
 	for _, node := range nodes[1:] {
 		var cc net.Conn
-		cc, err = preNode.Client.Connect(cn, node.Addr)
+		cc, err = preNode.Client.Connect(cn, node.Addr, preNode.ConnectOptions...)
 		if err != nil {
 			cn.Close()
 			node.MarkDead()

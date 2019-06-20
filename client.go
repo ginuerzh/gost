@@ -238,10 +238,11 @@ func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 
 // ConnectOptions describes the options for Connector.Connect.
 type ConnectOptions struct {
-	Addr     string
-	Timeout  time.Duration
-	User     *url.Userinfo
-	Selector gosocks5.Selector
+	Addr      string
+	Timeout   time.Duration
+	User      *url.Userinfo
+	Selector  gosocks5.Selector
+	UserAgent string
 }
 
 // ConnectOption allows a common way to set ConnectOptions.
@@ -272,5 +273,12 @@ func UserConnectOption(user *url.Userinfo) ConnectOption {
 func SelectorConnectOption(s gosocks5.Selector) ConnectOption {
 	return func(opts *ConnectOptions) {
 		opts.Selector = s
+	}
+}
+
+// UserAgentConnectOption specifies the HTTP user-agent header.
+func UserAgentConnectOption(ua string) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.UserAgent = ua
 	}
 }

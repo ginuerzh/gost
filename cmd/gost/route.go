@@ -209,6 +209,10 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		gost.TimeoutDialOption(time.Duration(timeout)*time.Second),
 	)
 
+	node.ConnectOptions = []gost.ConnectOption{
+		gost.UserAgentConnectOption(node.Get("agent")),
+	}
+
 	if host == "" {
 		host = node.Host
 	}

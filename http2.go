@@ -38,6 +38,10 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 	for _, option := range options {
 		option(opts)
 	}
+	ua := opts.UserAgent
+	if ua == "" {
+		ua = DefaultUserAgent
+	}
 
 	cc, ok := conn.(*http2ClientConn)
 	if !ok {
@@ -56,8 +60,7 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 		Host:          addr,
 		ContentLength: -1,
 	}
-	// DEPRECATED
-	//req.Header.Set("Gost-Target", addr)
+	req.Header.Set("User-Agent", ua)
 
 	user := opts.User
 	if user == nil {

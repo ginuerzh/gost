@@ -37,6 +37,10 @@ func (c *httpConnector) Connect(conn net.Conn, addr string, options ...ConnectOp
 	if timeout <= 0 {
 		timeout = ConnectTimeout
 	}
+	ua := opts.UserAgent
+	if ua == "" {
+		ua = DefaultUserAgent
+	}
 
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
@@ -49,7 +53,7 @@ func (c *httpConnector) Connect(conn net.Conn, addr string, options ...ConnectOp
 		ProtoMinor: 1,
 		Header:     make(http.Header),
 	}
-	req.Header.Set("User-Agent", DefaultUserAgent)
+	req.Header.Set("User-Agent", ua)
 	req.Header.Set("Proxy-Connection", "keep-alive")
 
 	user := opts.User

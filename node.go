@@ -28,6 +28,7 @@ type Node struct {
 	Values           url.Values
 	DialOptions      []DialOption
 	HandshakeOptions []HandshakeOption
+	ConnectOptions   []ConnectOption
 	Client           *Client
 	marker           *failMarker
 	Bypass           *Bypass
@@ -129,18 +130,19 @@ func (node *Node) Get(key string) string {
 	return node.Values.Get(key)
 }
 
-// GetBool likes Get, but convert parameter value to bool.
+// GetBool converts node parameter value to bool.
 func (node *Node) GetBool(key string) bool {
 	b, _ := strconv.ParseBool(node.Values.Get(key))
 	return b
 }
 
-// GetInt likes Get, but convert parameter value to int.
+// GetInt converts node parameter value to int.
 func (node *Node) GetInt(key string) int {
 	n, _ := strconv.Atoi(node.Values.Get(key))
 	return n
 }
 
+// GetDuration converts node parameter value to time.Duration.
 func (node *Node) GetDuration(key string) time.Duration {
 	d, _ := time.ParseDuration(node.Values.Get(key))
 	return d
