@@ -508,6 +508,7 @@ func h2ForwardTunnelRoundtrip(targetURL string, data []byte) error {
 		Listener: ln,
 		Handler:  TCPDirectForwardHandler(u.Host),
 	}
+	server.Handler.Init()
 
 	go server.Run()
 	defer server.Close()
@@ -905,6 +906,7 @@ func h2cForwardTunnelRoundtrip(targetURL string, data []byte) error {
 		Listener: ln,
 		Handler:  TCPDirectForwardHandler(u.Host),
 	}
+	server.Handler.Init()
 
 	go server.Run()
 	defer server.Close()
@@ -1046,16 +1048,15 @@ func TestHTTP2ProxyWithHostProbeResist(t *testing.T) {
 
 	req := &http.Request{
 		Method:        http.MethodConnect,
-		URL:           &url.URL{Scheme: "https", Host: ln.Addr().String()},
+		URL:           &url.URL{Scheme: "https", Host: cc.addr},
 		Header:        make(http.Header),
 		Proto:         "HTTP/2.0",
 		ProtoMajor:    2,
 		ProtoMinor:    0,
 		Body:          ioutil.NopCloser(bytes.NewReader(sendData)),
-		Host:          cc.addr,
-		ContentLength: -1,
+		Host:          "github.com:443",
+		ContentLength: int64(len(sendData)),
 	}
-	req.Header.Set("Gost-Target", "github.com:443")
 
 	resp, err := cc.client.Do(req)
 	if err != nil {

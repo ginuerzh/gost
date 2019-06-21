@@ -386,6 +386,7 @@ func kcpForwardTunnelRoundtrip(targetURL string, data []byte) error {
 		Listener: ln,
 		Handler:  TCPDirectForwardHandler(u.Host),
 	}
+	server.Handler.Init()
 
 	go server.Run()
 	defer server.Close()

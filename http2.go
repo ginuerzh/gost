@@ -135,7 +135,6 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 		// So we should try to connect the server.
 		conn, err := opts.Chain.Dial(addr)
 		if err != nil {
-
 			return nil, err
 		}
 		conn.Close()
