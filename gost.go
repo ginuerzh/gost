@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.8.0"
+const Version = "2.8.1"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -199,4 +200,12 @@ func splitLine(line string) []string {
 		}
 	}
 	return ss
+}
+
+func connStateCallback(conn net.Conn, cs http.ConnState) {
+	switch cs {
+	case http.StateNew:
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	default:
+	}
 }
