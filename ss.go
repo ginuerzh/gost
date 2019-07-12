@@ -64,9 +64,8 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 	sc := &shadowConn{
 		Conn: ss.NewConn(conn, cipher),
 	}
-	sc.wbuf.Write(rawaddr) // cache the header
-
-	return sc, nil
+	_, err = sc.Write(rawaddr)
+	return sc, err
 }
 
 type shadowHandler struct {
