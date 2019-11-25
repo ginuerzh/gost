@@ -172,9 +172,8 @@ var bypassContainTests = []struct {
 	{[]string{".example.com:*"}, false, "www.example.com:8080", false},
 	{[]string{".example.com:*"}, false, "http://www.example.com:80", true},
 
-	{CNIP, false, "http://www.baidu.com", true},
+	// CN website maybe block
 	{CNIP, false, "http://www.google.com", false},
-	{CNIP, true, "www.jd.com", false},
 	{CNIP, true, "www.facebook.com", true},
 }
 
