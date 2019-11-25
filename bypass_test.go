@@ -174,8 +174,8 @@ var bypassContainTests = []struct {
 
 	{CNIP, false, "http://www.baidu.com", true},
 	{CNIP, false, "http://www.google.com", false},
-	{CNIP, true, "http://www.jd.com", false},
-	{CNIP, true, "http://www.facebook.com", true},
+	{CNIP, true, "www.jd.com", false},
+	{CNIP, true, "www.facebook.com", true},
 }
 
 func TestBypassContains(t *testing.T) {

@@ -179,10 +179,16 @@ func (bp *Bypass) Contains(addr string) bool {
 	if ip == nil {
 		// avoid long time lookupIP
 		// invalid domain when CI
-		if u, err := url.ParseRequestURI(addr); err == nil {
-			if ipArr, err := net.LookupIP(u.Hostname()); err == nil {
-				for _, ip := range ipArr {
-					ips = append(ips, fmt.Sprintf("%v", ip))
+		if _, _, ok := net.ParseCIDR(addr); ok != nil {
+			newAddr := addr
+			if strings.Index(addr, "http://") == -1 && strings.Index(addr, "https://") == -1 {
+				newAddr = "http://" + addr
+			}
+			if u, err := url.Parse(newAddr); err == nil {
+				if ipArr, err := net.LookupIP(u.Hostname()); err == nil {
+					for _, ip := range ipArr {
+						ips = append(ips, fmt.Sprintf("%v", ip))
+					}
 				}
 			}
 		}
