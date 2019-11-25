@@ -4,9 +4,25 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
+	"strings"
 	"testing"
 	"time"
 )
+
+func loadCNIP() []string {
+	bs, err := ioutil.ReadFile(".config/CN_IP.txt")
+	if err != nil {
+		log.Fatalln(err)
+		return nil
+	}
+	s := string(bs)
+	return strings.Split(s, "\n")
+}
+
+// Cinese IP
+var CNIP = loadCNIP()
 
 var bypassContainTests = []struct {
 	patterns []string
@@ -155,6 +171,11 @@ var bypassContainTests = []struct {
 	{[]string{".example.com:*"}, false, "example.com:80", false},
 	{[]string{".example.com:*"}, false, "www.example.com:8080", false},
 	{[]string{".example.com:*"}, false, "http://www.example.com:80", true},
+
+	{CNIP, false, "http://www.baidu.com", true},
+	{CNIP, false, "http://www.google.com", false},
+	{CNIP, true, "http://www.jd.com", false},
+	{CNIP, true, "http://www.facebook.com", true},
 }
 
 func TestBypassContains(t *testing.T) {

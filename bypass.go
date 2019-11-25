@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -172,13 +173,45 @@ func (bp *Bypass) Contains(addr string) bool {
 		return false
 	}
 
+	// lookup ip if parse ip is nil
+	ip := net.ParseIP(addr)
+	var ips []string
+	if ip == nil {
+		// avoid long time lookupIP
+		// invalid domain when CI
+		if u, err := url.ParseRequestURI(addr); err == nil {
+			if ipArr, err := net.LookupIP(u.Hostname()); err == nil {
+				for _, ip := range ipArr {
+					ips = append(ips, fmt.Sprintf("%v", ip))
+				}
+			}
+		}
+	} else {
+		ips = append(ips, fmt.Sprintf("%v", ip))
+	}
+
 	var matched bool
 	for _, matcher := range bp.matchers {
 		if matcher == nil {
 			continue
 		}
-		if matcher.Match(addr) {
-			matched = true
+
+		// only to apply cidrMatcher
+		if _, ok := matcher.(*cidrMatcher); ok {
+			for _, ip := range ips {
+				if matcher.Match(ip) {
+					matched = true
+					break
+				}
+			}
+		} else {
+			if matcher.Match(addr) {
+				matched = true
+				break
+			}
+		}
+
+		if matched {
 			break
 		}
 	}
