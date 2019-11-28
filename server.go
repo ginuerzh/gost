@@ -144,24 +144,24 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 func transport(rw1, rw2 io.ReadWriter) error {
 	errc := make(chan error, 1)
 	go func() {
-		buf := lPool.Get().([]byte)
-		defer lPool.Put(buf)
-
-		_, err := io.CopyBuffer(rw1, rw2, buf)
-		errc <- err
+		errc <- copyBuffer(rw1, rw2)
 	}()
 
 	go func() {
-		buf := lPool.Get().([]byte)
-		defer lPool.Put(buf)
-
-		_, err := io.CopyBuffer(rw2, rw1, buf)
-		errc <- err
+		errc <- copyBuffer(rw2, rw1)
 	}()
 
 	err := <-errc
 	if err != nil && err == io.EOF {
 		err = nil
 	}
+	return err
+}
+
+func copyBuffer(dst io.Writer, src io.Reader) error {
+	buf := lPool.Get().([]byte)
+	defer lPool.Put(buf)
+
+	_, err := io.CopyBuffer(dst, src, buf)
 	return err
 }

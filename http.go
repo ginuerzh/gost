@@ -376,7 +376,17 @@ func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Ch
 	if route.IsEmpty() {
 		return nil
 	}
-	lastNode := route.LastNode()
+
+	host := req.Host
+	var userpass string
+
+	if user := route.LastNode().User; user != nil {
+		s := user.String()
+		if _, set := user.Password(); !set {
+			s += ":"
+		}
+		userpass = base64.StdEncoding.EncodeToString([]byte(s))
+	}
 
 	cc, err := route.Conn()
 	if err != nil {
@@ -384,28 +394,47 @@ func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Ch
 	}
 	defer cc.Close()
 
-	if lastNode.User != nil {
-		s := lastNode.User.String()
-		if _, set := lastNode.User.Password(); !set {
-			s += ":"
+	errc := make(chan error, 1)
+	go func() {
+		errc <- copyBuffer(conn, cc)
+	}()
+
+	go func() {
+		for {
+			if userpass != "" {
+				req.Header.Set("Proxy-Authorization", "Basic "+userpass)
+			}
+
+			cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
+			if !req.URL.IsAbs() {
+				req.URL.Scheme = "http" // make sure that the URL is absolute
+			}
+			err := req.WriteProxy(cc)
+			if err != nil {
+				log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+				errc <- err
+				return
+			}
+			cc.SetWriteDeadline(time.Time{})
+
+			req, err = http.ReadRequest(bufio.NewReader(conn))
+			if err != nil {
+				errc <- err
+				return
+			}
+
+			if Debug {
+				dump, _ := httputil.DumpRequest(req, false)
+				log.Logf("[http] %s -> %s\n%s",
+					conn.RemoteAddr(), conn.LocalAddr(), string(dump))
+			}
 		}
-		req.Header.Set("Proxy-Authorization",
-			"Basic "+base64.StdEncoding.EncodeToString([]byte(s)))
-	}
+	}()
 
-	cc.SetWriteDeadline(time.Now().Add(WriteTimeout))
-	if !req.URL.IsAbs() {
-		req.URL.Scheme = "http" // make sure that the URL is absolute
-	}
-	if err = req.WriteProxy(cc); err != nil {
-		log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
-		return nil
-	}
-	cc.SetWriteDeadline(time.Time{})
+	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), host)
+	<-errc
+	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), host)
 
-	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), req.Host)
-	transport(conn, cc)
-	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), req.Host)
 	return nil
 }
 
