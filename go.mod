@@ -1,5 +1,7 @@
 module github.com/ginuerzh/gost
 
+go 1.13
+
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v0.0.0-20180321061416-7d56ec4f381e
 	git.torproject.org/pluggable-transports/obfs4.git v0.0.0-20181103133120-08f4d470188e

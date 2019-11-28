@@ -20,7 +20,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.8.1"
+const Version = "2.8.2-dev"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -76,7 +76,7 @@ var (
 	DefaultTLSConfig *tls.Config
 
 	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket.
-	DefaultUserAgent = "Chrome/60.0.3112.90"
+	DefaultUserAgent = "Chrome/78.0.3904.106"
 )
 
 // SetLogger sets a new logger for internal log system.

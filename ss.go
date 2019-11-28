@@ -525,19 +525,11 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 // Due to in/out byte length is inconsistent of the shadowsocks.Conn.Write,
 // we wrap around it to make io.Copy happy.
 type shadowConn struct {
-	wbuf bytes.Buffer
 	net.Conn
 }
 
 func (c *shadowConn) Write(b []byte) (n int, err error) {
 	n = len(b) // force byte length consistent
-
-	if c.wbuf.Len() > 0 {
-		c.wbuf.Write(b) // append the data to the cached header
-		_, err = c.Conn.Write(c.wbuf.Bytes())
-		c.wbuf.Reset()
-		return
-	}
 	_, err = c.Conn.Write(b)
 	return
 }

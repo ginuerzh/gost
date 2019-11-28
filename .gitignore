@@ -8,6 +8,7 @@ _obj
 _test
 release
 debian
+bin
 
 # Architecture specific extensions/prefixes
 *.[568vq]
