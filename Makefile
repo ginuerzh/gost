@@ -1,7 +1,7 @@
 NAME=gost
 BINDIR=bin
 VERSION=$(shell cat gost.go | grep 'Version =' | sed 's/.*\"\(.*\)\".*/\1/g')
-GOBUILD=CGO_ENABLED=0 go build
+GOBUILD=CGO_ENABLED=0 go build --ldflags="-s -w" -v -x -a
 GOFILES=cmd/gost/*
 
 PLATFORM_LIST = \
