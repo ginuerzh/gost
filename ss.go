@@ -298,10 +298,10 @@ func (c *shadowUDPConnector) Connect(conn net.Conn, addr string, options ...Conn
 
 type shadowUDPListener struct {
 	ln       net.PacketConn
-	conns    map[string]*udpServerConn
 	connChan chan net.Conn
 	errChan  chan error
 	ttl      time.Duration
+	connMap  udpConnMap
 }
 
 // ShadowUDPListener creates a Listener for shadowsocks UDP relay server.
@@ -325,10 +325,10 @@ func ShadowUDPListener(addr string, cipher *url.Userinfo, ttl time.Duration) (Li
 		ln.Close()
 		return nil, err
 	}
+
 	l := &shadowUDPListener{
 		ln:       ss.NewSecurePacketConn(ln, cp, false),
-		conns:    make(map[string]*udpServerConn),
-		connChan: make(chan net.Conn, 1024),
+		connChan: make(chan net.Conn, 128),
 		errChan:  make(chan error, 1),
 		ttl:      ttl,
 	}
@@ -347,17 +347,19 @@ func (l *shadowUDPListener) listenLoop() {
 			close(l.errChan)
 			return
 		}
-		if Debug {
-			log.Logf("[ssu] %s >>> %s : length %d", raddr, l.Addr(), n)
-		}
 
-		conn, ok := l.conns[raddr.String()]
-		if !ok || conn.Closed() {
+		conn, ok := l.connMap.Get(raddr)
+		if !ok {
 			conn = newUDPServerConn(l.ln, raddr, l.ttl)
-			l.conns[raddr.String()] = conn
+			conn.onClose = func() {
+				l.connMap.Delete(raddr)
+				log.Logf("[ssu] %s closed (%d)", raddr, l.connMap.Size())
+			}
 
 			select {
 			case l.connChan <- conn:
+				l.connMap.Set(raddr, conn)
+				log.Logf("[ssu] %s -> %s (%d)", raddr, l.Addr(), l.connMap.Size())
 			default:
 				conn.Close()
 				log.Logf("[ssu] %s - %s: connection queue is full", raddr, l.Addr())
@@ -366,6 +368,9 @@ func (l *shadowUDPListener) listenLoop() {
 
 		select {
 		case conn.rChan <- b[:n]: // we keep the addr info so that the handler can identify the destination.
+			if Debug {
+				log.Logf("[ssu] %s >>> %s : length %d", raddr, l.Addr(), n)
+			}
 		default:
 			log.Logf("[ssu] %s -> %s : read queue is full", raddr, l.Addr())
 		}
@@ -389,7 +394,13 @@ func (l *shadowUDPListener) Addr() net.Addr {
 }
 
 func (l *shadowUDPListener) Close() error {
-	return l.ln.Close()
+	err := l.ln.Close()
+	l.connMap.Range(func(k interface{}, v *udpServerConn) bool {
+		v.Close()
+		return true
+	})
+
+	return err
 }
 
 type shadowUDPdHandler struct {
@@ -474,7 +485,7 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 				return
 			}
 			if h.options.Bypass.Contains(addr.String()) {
-				log.Log("[ssu] [bypass] write to", addr)
+				log.Log("[ssu] bypass", addr)
 				continue // bypass
 			}
 			if _, err := cc.WriteTo(dgram.Data, addr); err != nil {
@@ -498,7 +509,7 @@ func (h *shadowUDPdHandler) transportUDP(sc net.Conn, cc net.PacketConn) error {
 				log.Logf("[ssu] %s <<< %s length: %d", sc.RemoteAddr(), addr, n)
 			}
 			if h.options.Bypass.Contains(addr.String()) {
-				log.Log("[ssu] [bypass] read from", addr)
+				log.Log("[ssu] bypass", addr)
 				continue // bypass
 			}
 			dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(0, 0, toSocksAddr(addr)), b[:n])

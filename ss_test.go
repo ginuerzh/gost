@@ -391,8 +391,7 @@ func BenchmarkShadowUDP(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		conn.SetDeadline(time.Now().Add(1 * time.Second))
-		defer conn.SetDeadline(time.Time{})
+		conn.SetDeadline(time.Now().Add(3 * time.Second))
 
 		if _, err = conn.Write(sendData); err != nil {
 			b.Error(err)
@@ -402,6 +401,8 @@ func BenchmarkShadowUDP(b *testing.B) {
 		if _, err = conn.Read(recv); err != nil {
 			b.Error(err)
 		}
+
+		conn.SetDeadline(time.Time{})
 
 		if !bytes.Equal(sendData, recv) {
 			b.Error("data not equal")

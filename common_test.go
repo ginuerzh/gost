@@ -19,6 +19,7 @@ import (
 
 func init() {
 	SetLogger(&NopLogger{})
+	// SetLogger(&LogLogger{})
 	Debug = true
 	DialTimeout = 1000 * time.Millisecond
 	HandshakeTimeout = 1000 * time.Millisecond
