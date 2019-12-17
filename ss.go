@@ -348,17 +348,17 @@ func (l *shadowUDPListener) listenLoop() {
 			return
 		}
 
-		conn, ok := l.connMap.Get(raddr)
+		conn, ok := l.connMap.Get(raddr.String())
 		if !ok {
 			conn = newUDPServerConn(l.ln, raddr, l.ttl)
 			conn.onClose = func() {
-				l.connMap.Delete(raddr)
+				l.connMap.Delete(raddr.String())
 				log.Logf("[ssu] %s closed (%d)", raddr, l.connMap.Size())
 			}
 
 			select {
 			case l.connChan <- conn:
-				l.connMap.Set(raddr, conn)
+				l.connMap.Set(raddr.String(), conn)
 				log.Logf("[ssu] %s -> %s (%d)", raddr, l.Addr(), l.connMap.Size())
 			default:
 				conn.Close()
