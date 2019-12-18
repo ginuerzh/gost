@@ -279,6 +279,11 @@ func (r *route) GenRouters() ([]router, error) {
 			kvs[node.User.Username()], _ = node.User.Password()
 			authenticator = gost.NewLocalAuthenticator(kvs)
 		}
+		if node.User == nil {
+			if users, _ := parseUsers(node.Get("secrets")); len(users) > 0 {
+				node.User = users[0]
+			}
+		}
 		certFile, keyFile := node.Get("cert"), node.Get("key")
 		tlsCfg, err := tlsConfig(certFile, keyFile)
 		if err != nil && certFile != "" && keyFile != "" {
