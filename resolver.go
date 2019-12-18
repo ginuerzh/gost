@@ -136,6 +136,7 @@ type resolver struct {
 	domain  string
 	stopped chan struct{}
 	mux     sync.RWMutex
+	prefer  string // ipv4 or ipv6
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
@@ -211,18 +212,36 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 	return
 }
 
-func (*resolver) resolve(ex Exchanger, host string) (ips []net.IP, ttl time.Duration, err error) {
+func (r *resolver) resolve(ex Exchanger, host string) (ips []net.IP, ttl time.Duration, err error) {
 	if ex == nil {
 		return
 	}
 
+	ctx := context.Background()
+	if r.prefer == "ipv6" { // prefer ipv6
+		query := dns.Msg{}
+		query.SetQuestion(dns.Fqdn(host), dns.TypeAAAA)
+		ips, ttl, err = r.resolveIPs(ctx, ex, &query)
+		if err != nil || len(ips) > 0 {
+			return
+		}
+	}
+
 	query := dns.Msg{}
 	query.SetQuestion(dns.Fqdn(host), dns.TypeA)
-	mr, err := ex.Exchange(context.Background(), &query)
+	return r.resolveIPs(ctx, ex, &query)
+}
+
+func (*resolver) resolveIPs(ctx context.Context, ex Exchanger, query *dns.Msg) (ips []net.IP, ttl time.Duration, err error) {
+	mr, err := ex.Exchange(ctx, query)
 	if err != nil {
 		return
 	}
 	for _, ans := range mr.Answer {
+		if ar, _ := ans.(*dns.AAAA); ar != nil {
+			ips = append(ips, ar.AAAA)
+			ttl = time.Duration(ar.Header().Ttl) * time.Second
+		}
 		if ar, _ := ans.(*dns.A); ar != nil {
 			ips = append(ips, ar.A)
 			ttl = time.Duration(ar.Header().Ttl) * time.Second
@@ -271,7 +290,7 @@ func (r *resolver) storeCache(name string, ips []net.IP, ttl time.Duration) {
 
 func (r *resolver) Reload(rd io.Reader) error {
 	var ttl, timeout, period time.Duration
-	var domain string
+	var domain, prefer string
 	var nss []NameServer
 
 	if rd == nil || r.Stopped() {
@@ -304,6 +323,10 @@ func (r *resolver) Reload(rd io.Reader) error {
 				domain = ss[1]
 			}
 		case "search", "sortlist", "options": // we don't support these features in /etc/resolv.conf
+		case "prefer":
+			if len(ss) > 1 {
+				prefer = strings.ToLower(ss[1])
+			}
 		case "nameserver": // nameserver option, compatible with /etc/resolv.conf
 			if len(ss) <= 1 {
 				break
@@ -345,6 +368,7 @@ func (r *resolver) Reload(rd io.Reader) error {
 	r.TTL = ttl
 	r.domain = domain
 	r.period = period
+	r.prefer = prefer
 	r.Servers = nss
 	r.mux.Unlock()
 
