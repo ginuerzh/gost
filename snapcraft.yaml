@@ -12,6 +12,7 @@ license: MIT
 parts:
   gost:
     plugin: go
+    go-importpath: github.com/ginuerzh/gost
     go-packages: [github.com/ginuerzh/gost/cmd/gost]
     source: https://github.com/ginuerzh/gost.git
     source-type: git
