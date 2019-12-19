@@ -11,15 +11,28 @@ base: core18
 license: MIT
 parts:
   gost:
-    plugin: go
-    go-importpath: github.com/ginuerzh/gost
-    go-packages: [github.com/ginuerzh/gost/cmd/gost]
+    plugin: nil
+    build-snaps: [go/1.13/stable]
     source: https://github.com/ginuerzh/gost.git
+    source-subdir: cmd/gost
     source-type: git
     source-branch: '2.8'
     build-packages:
       - build-essential
-  
+    build-environment:
+    - GO111MODULE: 'on'
+    override-build: |
+      set -ex
+
+      echo "Starting override-build:"
+      pwd
+      cd $SNAPCRAFT_PART_BUILD
+      GO111MODULE=on go build
+      ./gost -V
+
+      echo "Installing to ${SNAPCRAFT_PART_INSTALL}..."
+      install -d $SNAPCRAFT_PART_INSTALL/bin
+      cp -v gost $SNAPCRAFT_PART_INSTALL/bin/
 apps:
   gost:
     command: bin/gost
