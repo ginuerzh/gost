@@ -1,26 +1,29 @@
 name: gost
-version: '2.8'
-summary: GO Simple Tunnel
+type: app
+version: '2.8.2'
+title: GO Simple Tunnel
+summary: A simple security tunnel written in golang
 description: |
-  A simple tunnel written in golang
-
-grade: stable
+  https://github.com/ginuerzh/gost
 confinement: strict
-
+grade: stable
+base: core18
+license: MIT
+parts:
+  gost:
+    plugin: go
+    go-packages: [github.com/ginuerzh/gost/cmd/gost]
+    source: https://github.com/ginuerzh/gost.git
+    source-type: git
+    source-branch: '2.8'
+    build-packages:
+      - build-essential
+  
 apps:
   gost:
     command: bin/gost
-    plugs: [network, network-bind, home]
+    plugs: 
+      - home
+      - network
+      - network-bind
 
-parts:
-  go:
-    source-tag: go1.10
-  gost:
-    after: [go]
-    source: .
-    source-type: git
-    source-branch: master
-    plugin: go
-    go-packages: [github.com/ginuerzh/gost/cmd/gost]
-    go-importpath: github.com/ginuerzh/gost
-  
