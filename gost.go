@@ -20,14 +20,14 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.8.2"
+const Version = "2.9.0-dev"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
 
 var (
-	tinyBufferSize   = 128
-	smallBufferSize  = 1 * 1024  // 1KB small buffer
+	tinyBufferSize   = 512
+	smallBufferSize  = 2 * 1024  // 2KB small buffer
 	mediumBufferSize = 8 * 1024  // 8KB medium buffer
 	largeBufferSize  = 32 * 1024 // 32KB large buffer
 )
@@ -77,6 +77,8 @@ var (
 
 	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket.
 	DefaultUserAgent = "Chrome/78.0.3904.106"
+
+	DefaultMTU = 1350 // default mtu for tun device
 )
 
 // SetLogger sets a new logger for internal log system.

@@ -82,6 +82,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
 	case "rtcp", "rudp": // rtcp and rudp are for remote port forwarding
 	case "ohttp": // obfs-http
+	case "tun": //tun device
 	default:
 		node.Transport = "tcp"
 	}
@@ -93,6 +94,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
 	case "direct", "remote", "forward": // forwarding
 	case "redirect": // TCP transparent proxy
+	case "tun": // tun device
 	default:
 		node.Protocol = ""
 	}

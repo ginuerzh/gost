@@ -81,14 +81,6 @@ func (s *Server) Serve(h Handler, opts ...ServerOption) error {
 		}
 		tempDelay = 0
 
-		/*
-			if s.options.Bypass.Contains(conn.RemoteAddr().String()) {
-				log.Log("[bypass]", conn.RemoteAddr())
-				conn.Close()
-				continue
-			}
-		*/
-
 		go h.Handle(conn)
 	}
 }

@@ -31,6 +31,7 @@ require (
 	github.com/ryanuber/go-glob v0.0.0-20170128012129-256dc444b735
 	github.com/shadowsocks/go-shadowsocks2 v0.0.11
 	github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba
+	github.com/songgao/water v0.0.0-20190725173103-fd331bda3f4b
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20181023030647-4e92f724b73b // indirect
 	github.com/tjfoc/gmsm v1.0.1 // indirect

@@ -65,6 +65,8 @@ github.com/shadowsocks/go-shadowsocks2 v0.0.11 h1:dXloqEhYnZV40jblWTK8kWeC0Eb+dg
 github.com/shadowsocks/go-shadowsocks2 v0.0.11/go.mod h1:R+KWaoIwRRhnpw6XV+dZil0XHi64Hc1D7hXUyXTjUzQ=
 github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba h1:tJgNXb3S+RkB4kNPi6N5OmEWe3m+Y3Qs6LUMiNDAONM=
 github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba/go.mod h1:mttDPaeLm87u74HMrP+n2tugXvIKWcwff/cqSX0lehY=
+github.com/songgao/water v0.0.0-20190725173103-fd331bda3f4b h1:+y4hCMc/WKsDbAPsOQZgBSaSZ26uh2afyaWeVg/3s/c=
+github.com/songgao/water v0.0.0-20190725173103-fd331bda3f4b/go.mod h1:P5HUIBuIWKbyjl083/loAegFkfbFNx5i2qEP4CNbm7E=
 github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 h1:89CEmDvlq/F7SJEOqkIdNDGJXrQIhuIx9D2DBXjavSU=
 github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161/go.mod h1:wM7WEvslTq+iOEAMDLSzhVuOt5BRZ05WirO+b09GHQU=
 github.com/templexxx/xor v0.0.0-20181023030647-4e92f724b73b h1:mnG1fcsIB1d/3vbkBak2MM0u+vhGhlQwpeimUi7QncM=

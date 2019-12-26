@@ -40,6 +40,7 @@ type HandlerOptions struct {
 	Node          Node
 	Host          string
 	IPs           []string
+	TunConfig     TunConfig
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -192,6 +193,13 @@ func HostHandlerOption(host string) HandlerOption {
 func IPsHandlerOption(ips []string) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.IPs = ips
+	}
+}
+
+// TunConfigHandlerOption sets the config for tun device.
+func TunConfigHandlerOption(cfg TunConfig) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.TunConfig = cfg
 	}
 }
 

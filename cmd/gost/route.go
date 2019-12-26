@@ -372,6 +372,8 @@ func (r *route) GenRouters() ([]router, error) {
 			ln, err = gost.Obfs4Listener(node.Addr)
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
+		case "tun":
+			ln, err = gost.TunListener(node.Addr)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
@@ -409,6 +411,13 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.ShadowUDPdHandler()
 		case "sni":
 			handler = gost.SNIHandler()
+		case "tun":
+			cfg := gost.TunConfig{
+				Name: node.Get("name"),
+				Addr: node.Get("net"),
+				MTU:  node.GetInt("mtu"),
+			}
+			handler = gost.TunHandler(node.Remote, gost.TunConfigHandlerOption(cfg))
 		default:
 			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
 			if node.Remote != "" {
