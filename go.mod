@@ -10,6 +10,7 @@ require (
 	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/dchest/siphash v1.2.1 // indirect
+	github.com/docker/libcontainer v2.2.1+incompatible // indirect
 	github.com/ginuerzh/gosocks4 v0.0.1
 	github.com/ginuerzh/gosocks5 v0.2.0
 	github.com/ginuerzh/tls-dissector v0.0.1
@@ -25,6 +26,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.10.0
 	github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cced // indirect
 	github.com/miekg/dns v1.1.3
+	github.com/milosgajdos83/tenus v0.0.0-20190415114537-1f3ed00ae7d8
 	github.com/onsi/ginkgo v1.7.0 // indirect
 	github.com/onsi/gomega v1.4.3 // indirect
 	github.com/pkg/errors v0.8.1 // indirect

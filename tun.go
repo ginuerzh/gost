@@ -5,8 +5,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
-	"strconv"
 	"sync"
 	"time"
 
@@ -26,6 +24,7 @@ type TunConfig struct {
 type tunHandler struct {
 	raddr   string
 	options *HandlerOptions
+	ipNet   *net.IPNet
 }
 
 // TunHandler creates a handler for tun tunnel.
@@ -92,50 +91,8 @@ func (h *tunHandler) Handle(conn net.Conn) {
 }
 
 func (h *tunHandler) createTun() (conn net.Conn, err error) {
-	cfg := h.options.TunConfig
-
-	ip, _, err := net.ParseCIDR(cfg.Addr)
-	if err != nil {
-		return
-	}
-
-	ifce, err := water.New(water.Config{
-		DeviceType: water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{
-			Name: cfg.Name,
-		},
-	})
-	if err != nil {
-		return
-	}
-
-	setup := func(args ...string) error {
-		cmd := exec.Command("/sbin/ip", args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
-
-	mtu := cfg.MTU
-	if mtu <= 0 {
-		mtu = DefaultMTU
-	}
-
-	if err = setup("link", "set", "dev", ifce.Name(), "mtu", strconv.Itoa(mtu)); err != nil {
-		return
-	}
-	if err = setup("addr", "add", cfg.Addr, "dev", ifce.Name()); err != nil {
-		return
-	}
-	if err = setup("link", "set", "dev", ifce.Name(), "up"); err != nil {
-		return
-	}
-
-	tc := &tunConn{
-		ifce: ifce,
-		addr: &net.IPAddr{IP: ip},
-	}
-	return tc, nil
+	conn, h.ipNet, err = createTun(h.options.TunConfig)
+	return
 }
 
 func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.Addr) error {
@@ -223,10 +180,12 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
 				}
 
-				if actual, loaded := routes.LoadOrStore(header.Src.String(), addr); loaded {
-					if actual.(net.Addr).String() != addr.String() {
-						log.Logf("[tun] %s <- %s: unexpected address mapping %s -> %s(actual %s)",
-							tun.LocalAddr(), addr, header.Dst.String(), addr, actual.(net.Addr).String())
+				if h.ipNet != nil && h.ipNet.Contains(header.Src) {
+					if actual, loaded := routes.LoadOrStore(header.Src.String(), addr); loaded {
+						if actual.(net.Addr).String() != addr.String() {
+							log.Logf("[tun] %s <- %s: unexpected address mapping %s -> %s(actual %s)",
+								tun.LocalAddr(), addr, header.Dst, addr, actual.(net.Addr))
+						}
 					}
 				}
 
