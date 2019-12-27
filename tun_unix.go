@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
-	"strconv"
+	"strings"
 
 	"github.com/go-log/log"
 	"github.com/songgao/water"
@@ -32,11 +32,8 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 
 	cmd := fmt.Sprintf("ifconfig %s inet %s mtu %d up", ifce.Name(), cfg.Addr, mtu)
 	log.Log("[tun]", cmd)
-	if er := exec.Command(
-		"ifconfig", ifce.Name(),
-		"inet", cfg.Addr,
-		"mtu", strconv.Itoa(mtu),
-		"up").Run(); er != nil {
+	args := strings.Split(cmd, " ")
+	if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
 		err = fmt.Errorf("%s: %v", cmd, er)
 		return
 	}
@@ -59,10 +56,8 @@ func addRoutes(ifName string, routes ...string) error {
 		}
 		cmd := fmt.Sprintf("route add -net %s -interface %s", route, ifName)
 		log.Log("[tun]", cmd)
-		if er := exec.Command(
-			"route", "add",
-			"-net", route,
-			"-interface", ifName).Run(); er != nil {
+		args := strings.Split(cmd, " ")
+		if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
 			return fmt.Errorf("%s: %v", cmd, er)
 		}
 	}

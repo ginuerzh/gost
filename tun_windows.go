@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 
 	"github.com/go-log/log"
 	"github.com/songgao/water"
@@ -31,11 +32,13 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 		"source=static addr=%s mask=%s gateway=none",
 		ifce.Name(), ip.String(), ipMask(ipNet.Mask))
 	log.Log("[tun]", cmd)
-	if er := exec.Command("netsh",
-		"interface", "ip", "set", "address",
-		"name="+ifce.Name(), "source=static",
-		"addr="+ip.String(), "mask="+ipMask(ipNet.Mask), "gateway=none").Run(); er != nil {
+	args := strings.Split(cmd, " ")
+	if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
 		err = fmt.Errorf("%s: %v", cmd, er)
+		return
+	}
+
+	if err = addRoutes(ip.String(), cfg.Routes...); err != nil {
 		return
 	}
 
@@ -44,6 +47,27 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 		addr: &net.IPAddr{IP: ip},
 	}
 	return
+}
+
+func addRoutes(ifIP string, routes ...string) error {
+	for _, route := range routes {
+		if route == "" {
+			continue
+		}
+		_, inet, err := net.ParseCIDR(route)
+		if err != nil {
+			return err
+		}
+
+		cmd := fmt.Sprintf("route ADD %s MASK %s %s",
+			inet.IP, ipMask(inet.Mask), ifIP)
+		log.Log("[tun]", cmd)
+		args := strings.Split(cmd, " ")
+		if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
+			return fmt.Errorf("%s: %v", cmd, er)
+		}
+	}
+	return nil
 }
 
 func ipMask(mask net.IPMask) string {
