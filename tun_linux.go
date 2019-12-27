@@ -3,8 +3,11 @@
 package gost
 
 import (
+	"fmt"
 	"net"
 
+	"github.com/docker/libcontainer/netlink"
+	"github.com/go-log/log"
 	"github.com/milosgajdos83/tenus"
 	"github.com/songgao/water"
 )
@@ -34,13 +37,29 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	if mtu <= 0 {
 		mtu = DefaultMTU
 	}
-	if err = link.SetLinkMTU(mtu); err != nil {
+
+	cmd := fmt.Sprintf("ip link set dev %s mtu %d", ifce.Name(), mtu)
+	log.Log("[tun]", cmd)
+	if er := link.SetLinkMTU(mtu); er != nil {
+		err = fmt.Errorf("%s: %v", cmd, er)
 		return
 	}
-	if err = link.SetLinkIp(ip, ipNet); err != nil {
+
+	cmd = fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())
+	log.Log("[tun]", cmd)
+	if er := link.SetLinkIp(ip, ipNet); er != nil {
+		err = fmt.Errorf("%s: %v", cmd, er)
 		return
 	}
-	if err = link.SetLinkUp(); err != nil {
+
+	cmd = fmt.Sprintf("ip link set dev %s up", ifce.Name())
+	log.Log("[tun]", cmd)
+	if er := link.SetLinkUp(); er != nil {
+		err = fmt.Errorf("%s: %v", cmd, er)
+		return
+	}
+
+	if err = addRoutes(ifce.Name(), cfg.Routes...); err != nil {
 		return
 	}
 
@@ -49,4 +68,18 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 		addr: &net.IPAddr{IP: ip},
 	}
 	return
+}
+
+func addRoutes(ifName string, routes ...string) error {
+	for _, route := range routes {
+		if route == "" {
+			continue
+		}
+		cmd := fmt.Sprintf("ip route add %s dev %s", route, ifName)
+		log.Log("[tun]", cmd)
+		if err := netlink.AddRoute(route, "", "", ifName); err != nil {
+			return fmt.Errorf("%s: %v", cmd, err)
+		}
+	}
+	return nil
 }

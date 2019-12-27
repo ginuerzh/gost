@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ginuerzh/gost"
@@ -413,9 +414,10 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.SNIHandler()
 		case "tun":
 			cfg := gost.TunConfig{
-				Name: node.Get("name"),
-				Addr: node.Get("net"),
-				MTU:  node.GetInt("mtu"),
+				Name:   node.Get("name"),
+				Addr:   node.Get("net"),
+				MTU:    node.GetInt("mtu"),
+				Routes: strings.Split(node.Get("route"), ","),
 			}
 			handler = gost.TunHandler(node.Remote, gost.TunConfigHandlerOption(cfg))
 		default:

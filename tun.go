@@ -12,6 +12,7 @@ import (
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	"github.com/songgao/water"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 type TunConfig struct {
@@ -117,6 +118,12 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				if header.Version != ipv4.Version {
+					if Debug && header.Version == ipv6.Version {
+						if hdr, _ := ipv6.ParseHeader(b[:n]); hdr != nil {
+							log.Logf("[tun] %s: %s -> %s %d %d",
+								tun.LocalAddr(), hdr.Src, hdr.Dst, hdr.PayloadLen, hdr.TrafficClass)
+						}
+					}
 					log.Logf("[tun] %s: v%d ignored, only support ipv4",
 						tun.LocalAddr(), header.Version)
 					return nil
@@ -127,13 +134,14 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 					addr = v.(net.Addr)
 				}
 				if addr == nil {
-					log.Logf("[tun] %s: no address to forward for %s -> %s",
-						tun.LocalAddr(), header.Src, header.Dst)
+					log.Logf("[tun] %s: no route for %s -> %s %d/%d %x %d %d",
+						tun.LocalAddr(), header.Src, header.Dst,
+						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
 					return nil
 				}
 
 				if Debug {
-					log.Logf("[tun] %s >>> %s: %s -> %s %d/%d %x %x %d",
+					log.Logf("[tun] %s >>> %s: %s -> %s %d/%d %x %d %d",
 						tun.LocalAddr(), addr, header.Src, header.Dst,
 						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
 				}
@@ -169,23 +177,31 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				if header.Version != ipv4.Version {
+					if Debug && header.Version == ipv6.Version {
+						if hdr, _ := ipv6.ParseHeader(b[:n]); hdr != nil {
+							log.Logf("[tun] %s <<< %s: %s -> %s %d %d",
+								tun.LocalAddr(), addr, hdr.Src, hdr.Dst, hdr.PayloadLen, hdr.TrafficClass)
+						}
+					}
 					log.Logf("[tun] %s <- %s: v%d ignored, only support ipv4",
 						tun.LocalAddr(), addr, header.Version)
 					return nil
 				}
 
 				if Debug {
-					log.Logf("[tun] %s <<< %s: %s -> %s %d/%d %x %x %d",
+					log.Logf("[tun] %s <<< %s: %s -> %s %d/%d %x %d %d",
 						tun.LocalAddr(), addr, header.Src, header.Dst,
 						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
 				}
 
-				if h.ipNet != nil && h.ipNet.Contains(header.Src) {
+				if h.ipNet != nil && h.ipNet.IP.Equal(header.Src.Mask(h.ipNet.Mask)) {
 					if actual, loaded := routes.LoadOrStore(header.Src.String(), addr); loaded {
 						if actual.(net.Addr).String() != addr.String() {
 							log.Logf("[tun] %s <- %s: unexpected address mapping %s -> %s(actual %s)",
 								tun.LocalAddr(), addr, header.Dst, addr, actual.(net.Addr))
 						}
+					} else {
+						log.Logf("[tun] %s: record route: %s -> %s", tun.LocalAddr(), header.Src, addr)
 					}
 				}
 

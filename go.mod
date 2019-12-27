@@ -10,7 +10,7 @@ require (
 	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/dchest/siphash v1.2.1 // indirect
-	github.com/docker/libcontainer v2.2.1+incompatible // indirect
+	github.com/docker/libcontainer v2.2.1+incompatible
 	github.com/ginuerzh/gosocks4 v0.0.1
 	github.com/ginuerzh/gosocks5 v0.2.0
 	github.com/ginuerzh/tls-dissector v0.0.1
