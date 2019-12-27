@@ -1,0 +1,13 @@
+language: go
+go:
+  - "1.12.1"
+  - "1.10.8"
+go_import_path: github.com/songgao/water
+install: go get -u golang.org/x/lint/golint
+script: make ci
+
+matrix:
+  include:
+    - os: linux
+      dist: xenial
+    - os: osx
