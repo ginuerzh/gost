@@ -1,13 +1,19 @@
-FROM golang:alpine as builder
+FROM golang:1-alpine as builder
 
-ADD . /go/src/github.com/ginuerzh/gost/
+RUN apk add --no-cache musl-dev git gcc
 
-RUN go install github.com/ginuerzh/gost/cmd/gost
+ADD . /src
+
+WORKDIR /src
+
+ENV GO111MODULE=on
+
+RUN cd cmd/gost && go build
 
 FROM alpine:latest
 
 WORKDIR /bin/
 
-COPY --from=builder /go/bin/gost .
+COPY --from=builder /src/cmd/gost/gost .
 
 ENTRYPOINT ["/bin/gost"]
