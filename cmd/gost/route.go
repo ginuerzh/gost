@@ -374,7 +374,7 @@ func (r *route) GenRouters() ([]router, error) {
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
 		case "tun":
-			ln, err = gost.TunListener(node.Addr)
+			ln, err = gost.TunListener(node.Addr, node.GetInt("threads"))
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}

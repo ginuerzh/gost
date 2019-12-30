@@ -19,7 +19,8 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	ifce, err := water.New(water.Config{
 		DeviceType: water.TUN,
 		PlatformSpecificParams: water.PlatformSpecificParams{
-			Name: cfg.Name,
+			Name:       cfg.Name,
+			MultiQueue: true,
 		},
 	})
 	if err != nil {
@@ -46,8 +47,8 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	cmd = fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())
 	log.Log("[tun]", cmd)
 	if er := link.SetLinkIp(ip, ipNet); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+		// err = fmt.Errorf("%s: %v", cmd, er)
+		// return
 	}
 
 	cmd = fmt.Sprintf("ip link set dev %s up", ifce.Name())

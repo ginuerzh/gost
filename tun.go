@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-log/log"
+	"github.com/libp2p/go-reuseport"
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	"github.com/songgao/water"
 	"golang.org/x/net/ipv4"
@@ -197,11 +198,12 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 				if h.ipNet != nil && h.ipNet.IP.Equal(header.Src.Mask(h.ipNet.Mask)) {
 					if actual, loaded := routes.LoadOrStore(header.Src.String(), addr); loaded {
 						if actual.(net.Addr).String() != addr.String() {
-							log.Logf("[tun] %s <- %s: unexpected address mapping %s -> %s(actual %s)",
-								tun.LocalAddr(), addr, header.Dst, addr, actual.(net.Addr))
+							log.Logf("[tun] %s <- %s: update route: %s -> %s (old %s)",
+								tun.LocalAddr(), addr, header.Src, addr, actual.(net.Addr))
+							routes.Store(header.Src.String(), addr)
 						}
 					} else {
-						log.Logf("[tun] %s: record route: %s -> %s", tun.LocalAddr(), header.Src, addr)
+						log.Logf("[tun] %s: new route: %s -> %s", tun.LocalAddr(), header.Src, addr)
 					}
 				}
 
@@ -264,37 +266,44 @@ func (c *tunConn) SetWriteDeadline(t time.Time) error {
 }
 
 type tunListener struct {
-	conn             *net.UDPConn
-	accepted, closed chan struct{}
+	addr   net.Addr
+	conns  chan net.Conn
+	closed chan struct{}
 }
 
 // TunListener creates a listener for tun tunnel.
-func TunListener(addr string) (Listener, error) {
+func TunListener(addr string, threads int) (Listener, error) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		return nil, err
+
+	if threads < 1 {
+		threads = 1
 	}
 
-	return &tunListener{
-		conn:     conn,
-		accepted: make(chan struct{}),
-		closed:   make(chan struct{}),
-	}, nil
+	ln := &tunListener{
+		addr:   laddr,
+		conns:  make(chan net.Conn, threads),
+		closed: make(chan struct{}),
+	}
+
+	for i := 0; i < threads; i++ {
+		conn, err := reuseport.ListenPacket("udp", addr)
+		// conn, err := net.ListenUDP("udp", laddr)
+		if err != nil {
+			return nil, err
+		}
+		ln.conns <- &tunTunnelConn{conn}
+	}
+
+	return ln, nil
 }
 
 func (l *tunListener) Accept() (net.Conn, error) {
 	select {
-	case <-l.accepted:
-	default:
-		close(l.accepted)
-		return l.conn, nil
-	}
-
-	select {
+	case conn := <-l.conns:
+		return conn, nil
 	case <-l.closed:
 	}
 
@@ -302,7 +311,7 @@ func (l *tunListener) Accept() (net.Conn, error) {
 }
 
 func (l *tunListener) Addr() net.Addr {
-	return l.conn.LocalAddr()
+	return l.addr
 }
 
 func (l *tunListener) Close() error {
@@ -312,5 +321,22 @@ func (l *tunListener) Close() error {
 	default:
 		close(l.closed)
 	}
+	return nil
+}
+
+type tunTunnelConn struct {
+	net.PacketConn
+}
+
+func (c *tunTunnelConn) Read(b []byte) (n int, err error) {
+	n, _, err = c.ReadFrom(b)
+	return
+}
+
+func (c *tunTunnelConn) Write(b []byte) (n int, err error) {
+	return c.WriteTo(b, nil)
+}
+
+func (c *tunTunnelConn) RemoteAddr() net.Addr {
 	return nil
 }
