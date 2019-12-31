@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-log/log"
-	"github.com/libp2p/go-reuseport"
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	"github.com/songgao/water"
 	"golang.org/x/net/ipv4"
@@ -272,16 +271,13 @@ type tunListener struct {
 }
 
 // TunListener creates a listener for tun tunnel.
-func TunListener(addr string, threads int) (Listener, error) {
+func TunListener(addr string) (Listener, error) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	if threads < 1 {
-		threads = 1
-	}
-
+	threads := 1
 	ln := &tunListener{
 		addr:   laddr,
 		conns:  make(chan net.Conn, threads),
@@ -289,12 +285,11 @@ func TunListener(addr string, threads int) (Listener, error) {
 	}
 
 	for i := 0; i < threads; i++ {
-		conn, err := reuseport.ListenPacket("udp", addr)
-		// conn, err := net.ListenUDP("udp", laddr)
+		conn, err := net.ListenUDP("udp", laddr)
 		if err != nil {
 			return nil, err
 		}
-		ln.conns <- &tunTunnelConn{conn}
+		ln.conns <- conn
 	}
 
 	return ln, nil
@@ -321,22 +316,5 @@ func (l *tunListener) Close() error {
 	default:
 		close(l.closed)
 	}
-	return nil
-}
-
-type tunTunnelConn struct {
-	net.PacketConn
-}
-
-func (c *tunTunnelConn) Read(b []byte) (n int, err error) {
-	n, _, err = c.ReadFrom(b)
-	return
-}
-
-func (c *tunTunnelConn) Write(b []byte) (n int, err error) {
-	return c.WriteTo(b, nil)
-}
-
-func (c *tunTunnelConn) RemoteAddr() net.Addr {
 	return nil
 }
