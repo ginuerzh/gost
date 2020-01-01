@@ -41,6 +41,7 @@ type HandlerOptions struct {
 	Host          string
 	IPs           []string
 	TunConfig     TunConfig
+	TapConfig     TapConfig
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -200,6 +201,13 @@ func IPsHandlerOption(ips []string) HandlerOption {
 func TunConfigHandlerOption(cfg TunConfig) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.TunConfig = cfg
+	}
+}
+
+// TapConfigHandlerOption sets the config for tap device.
+func TapConfigHandlerOption(cfg TapConfig) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.TapConfig = cfg
 	}
 }
 

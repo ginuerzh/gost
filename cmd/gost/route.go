@@ -396,6 +396,8 @@ func (r *route) GenRouters() ([]router, error) {
 			ln, err = gost.ObfsHTTPListener(node.Addr)
 		case "tun":
 			ln, err = gost.TunListener(node.Addr)
+		case "tap":
+			ln, err = gost.TapListener(node.Addr)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
@@ -441,6 +443,14 @@ func (r *route) GenRouters() ([]router, error) {
 				Routes: strings.Split(node.Get("route"), ","),
 			}
 			handler = gost.TunHandler(node.Remote, gost.TunConfigHandlerOption(cfg))
+		case "tap":
+			cfg := gost.TapConfig{
+				Name:   node.Get("name"),
+				Addr:   node.Get("net"),
+				MTU:    node.GetInt("mtu"),
+				Routes: strings.Split(node.Get("route"), ","),
+			}
+			handler = gost.TapHandler(node.Remote, gost.TapConfigHandlerOption(cfg))
 		default:
 			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
 			if node.Remote != "" {

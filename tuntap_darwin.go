@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
@@ -18,19 +19,17 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 
 	ifce, err := water.New(water.Config{
 		DeviceType: water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{
-			ComponentID:   "tap0901",
-			InterfaceName: cfg.Name,
-			Network:       cfg.Addr,
-		},
 	})
 	if err != nil {
 		return
 	}
 
-	cmd := fmt.Sprintf("netsh interface ip set address name=%s "+
-		"source=static addr=%s mask=%s gateway=none",
-		ifce.Name(), ip.String(), ipMask(ipNet.Mask))
+	mtu := cfg.MTU
+	if mtu <= 0 {
+		mtu = DefaultMTU
+	}
+
+	cmd := fmt.Sprintf("ifconfig %s inet %s mtu %d up", ifce.Name(), cfg.Addr, mtu)
 	log.Log("[tun]", cmd)
 	args := strings.Split(cmd, " ")
 	if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
@@ -42,10 +41,15 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 		return
 	}
 
-	conn = &tunConn{
+	conn = &tunTapConn{
 		ifce: ifce,
 		addr: &net.IPAddr{IP: ip},
 	}
+	return
+}
+
+func createTap(cfg TapConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
+	err = errors.New("tap is not supported on darwin")
 	return
 }
 
@@ -54,11 +58,7 @@ func addRoutes(ifName string, routes ...string) error {
 		if route == "" {
 			continue
 		}
-
-		deleteRoute(ifName, route)
-
-		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=%s store=active",
-			route, ifName)
+		cmd := fmt.Sprintf("route add -net %s -interface %s", route, ifName)
 		log.Log("[tun]", cmd)
 		args := strings.Split(cmd, " ")
 		if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
@@ -66,15 +66,4 @@ func addRoutes(ifName string, routes ...string) error {
 		}
 	}
 	return nil
-}
-
-func deleteRoute(ifName string, route string) error {
-	cmd := fmt.Sprintf("netsh interface ip delete route prefix=%s interface=%s store=active",
-		route, ifName)
-	args := strings.Split(cmd, " ")
-	return exec.Command(args[0], args[1:]...).Run()
-}
-
-func ipMask(mask net.IPMask) string {
-	return fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
 }
