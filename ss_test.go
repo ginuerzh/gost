@@ -302,7 +302,7 @@ func BenchmarkSSProxyParallel(b *testing.B) {
 
 func shadowUDPRoundtrip(t *testing.T, host string, data []byte,
 	clientInfo *url.Userinfo, serverInfo *url.Userinfo) error {
-	ln, err := ShadowUDPListener("localhost:0", serverInfo, 0)
+	ln, err := ShadowUDPListener("localhost:0", serverInfo, nil)
 	if err != nil {
 		return err
 	}
@@ -361,7 +361,7 @@ func BenchmarkShadowUDP(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), 0)
+	ln, err := ShadowUDPListener("localhost:0", url.UserPassword("chacha20-ietf", "123456"), nil)
 	if err != nil {
 		b.Error(err)
 	}
