@@ -302,10 +302,11 @@ type shadowUDPListener struct {
 	errChan  chan error
 	ttl      time.Duration
 	connMap  udpConnMap
+	config   *UDPForwardListenConfig
 }
 
 // ShadowUDPListener creates a Listener for shadowsocks UDP relay server.
-func ShadowUDPListener(addr string, cipher *url.Userinfo, ttl time.Duration) (Listener, error) {
+func ShadowUDPListener(addr string, cipher *url.Userinfo, cfg *UDPForwardListenConfig) (Listener, error) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -326,11 +327,20 @@ func ShadowUDPListener(addr string, cipher *url.Userinfo, ttl time.Duration) (Li
 		return nil, err
 	}
 
+	if cfg == nil {
+		cfg = &UDPForwardListenConfig{}
+	}
+
+	backlog := cfg.Backlog
+	if backlog <= 0 {
+		backlog = defaultBacklog
+	}
+
 	l := &shadowUDPListener{
 		ln:       ss.NewSecurePacketConn(ln, cp, false),
-		connChan: make(chan net.Conn, 128),
+		connChan: make(chan net.Conn, backlog),
 		errChan:  make(chan error, 1),
-		ttl:      ttl,
+		config:   cfg,
 	}
 	go l.listenLoop()
 	return l, nil
@@ -350,7 +360,7 @@ func (l *shadowUDPListener) listenLoop() {
 
 		conn, ok := l.connMap.Get(raddr.String())
 		if !ok {
-			conn = newUDPServerConn(l.ln, raddr, l.ttl)
+			conn = newUDPServerConn(l.ln, raddr, l.config.TTL, l.config.QueueSize)
 			conn.onClose = func() {
 				l.connMap.Delete(raddr.String())
 				log.Logf("[ssu] %s closed (%d)", raddr, l.connMap.Size())
@@ -362,7 +372,7 @@ func (l *shadowUDPListener) listenLoop() {
 				log.Logf("[ssu] %s -> %s (%d)", raddr, l.Addr(), l.connMap.Size())
 			default:
 				conn.Close()
-				log.Logf("[ssu] %s - %s: connection queue is full", raddr, l.Addr())
+				log.Logf("[ssu] %s - %s: connection queue is full (%d)", raddr, l.Addr(), cap(l.connChan))
 			}
 		}
 
@@ -372,7 +382,7 @@ func (l *shadowUDPListener) listenLoop() {
 				log.Logf("[ssu] %s >>> %s : length %d", raddr, l.Addr(), n)
 			}
 		default:
-			log.Logf("[ssu] %s -> %s : read queue is full", raddr, l.Addr())
+			log.Logf("[ssu] %s -> %s : recv queue is full (%d)", raddr, l.Addr(), cap(conn.rChan))
 		}
 	}
 }

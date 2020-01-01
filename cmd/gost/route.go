@@ -297,6 +297,11 @@ func (r *route) GenRouters() ([]router, error) {
 		wsOpts.WriteBufferSize = node.GetInt("wbuf")
 		wsOpts.Path = node.Get("path")
 
+		ttl, err := time.ParseDuration(node.Get("ttl"))
+		if err != nil {
+			ttl = time.Duration(node.GetInt("ttl")) * time.Second
+		}
+
 		var ln gost.Listener
 		switch node.Transport {
 		case "tls":
@@ -361,11 +366,27 @@ func (r *route) GenRouters() ([]router, error) {
 			}
 			ln, err = gost.TCPRemoteForwardListener(node.Addr, chain)
 		case "udp":
-			ln, err = gost.UDPDirectForwardListener(node.Addr, time.Duration(node.GetInt("ttl"))*time.Second)
+			ln, err = gost.UDPDirectForwardListener(node.Addr, &gost.UDPForwardListenConfig{
+				TTL:       ttl,
+				Backlog:   node.GetInt("backlog"),
+				QueueSize: node.GetInt("queue"),
+			})
 		case "rudp":
-			ln, err = gost.UDPRemoteForwardListener(node.Addr, chain, time.Duration(node.GetInt("ttl"))*time.Second)
+			ln, err = gost.UDPRemoteForwardListener(node.Addr,
+				chain,
+				&gost.UDPForwardListenConfig{
+					TTL:       ttl,
+					Backlog:   node.GetInt("backlog"),
+					QueueSize: node.GetInt("queue"),
+				})
 		case "ssu":
-			ln, err = gost.ShadowUDPListener(node.Addr, node.User, time.Duration(node.GetInt("ttl"))*time.Second)
+			ln, err = gost.ShadowUDPListener(node.Addr,
+				node.User,
+				&gost.UDPForwardListenConfig{
+					TTL:       ttl,
+					Backlog:   node.GetInt("backlog"),
+					QueueSize: node.GetInt("queue"),
+				})
 		case "obfs4":
 			if err = gost.Obfs4Init(node, true); err != nil {
 				return nil, err

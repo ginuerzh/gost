@@ -68,7 +68,9 @@ var (
 	// PingRetries is the reties of ping.
 	PingRetries = 1
 	// default udp node TTL in second for udp port forwarding.
-	defaultTTL = 60 * time.Second
+	defaultTTL       = 60 * time.Second
+	defaultBacklog   = 128
+	defaultQueueSize = 128
 )
 
 var (
