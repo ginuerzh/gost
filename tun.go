@@ -26,6 +26,7 @@ type tunHandler struct {
 	raddr   string
 	options *HandlerOptions
 	ipNet   *net.IPNet
+	routes  sync.Map
 }
 
 // TunHandler creates a handler for tun tunnel.
@@ -97,7 +98,6 @@ func (h *tunHandler) createTun() (conn net.Conn, err error) {
 }
 
 func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.Addr) error {
-	var routes sync.Map
 	errc := make(chan error, 1)
 
 	go func() {
@@ -130,7 +130,7 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				addr := raddr
-				if v, ok := routes.Load(header.Dst.String()); ok {
+				if v, ok := h.routes.Load(header.Dst.String()); ok {
 					addr = v.(net.Addr)
 				}
 				if addr == nil {
@@ -195,11 +195,11 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				if h.ipNet != nil && h.ipNet.IP.Equal(header.Src.Mask(h.ipNet.Mask)) {
-					if actual, loaded := routes.LoadOrStore(header.Src.String(), addr); loaded {
+					if actual, loaded := h.routes.LoadOrStore(header.Src.String(), addr); loaded {
 						if actual.(net.Addr).String() != addr.String() {
 							log.Logf("[tun] %s <- %s: update route: %s -> %s (old %s)",
 								tun.LocalAddr(), addr, header.Src, addr, actual.(net.Addr))
-							routes.Store(header.Src.String(), addr)
+							h.routes.Store(header.Src.String(), addr)
 						}
 					} else {
 						log.Logf("[tun] %s: new route: %s -> %s", tun.LocalAddr(), header.Src, addr)

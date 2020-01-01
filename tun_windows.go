@@ -38,7 +38,7 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 		return
 	}
 
-	if err = addRoutes(ip.String(), cfg.Routes...); err != nil {
+	if err = addRoutes(ifce.Name(), cfg.Routes...); err != nil {
 		return
 	}
 
@@ -49,18 +49,16 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	return
 }
 
-func addRoutes(ifIP string, routes ...string) error {
+func addRoutes(ifName string, routes ...string) error {
 	for _, route := range routes {
 		if route == "" {
 			continue
 		}
-		_, inet, err := net.ParseCIDR(route)
-		if err != nil {
-			return err
-		}
 
-		cmd := fmt.Sprintf("route ADD %s MASK %s %s",
-			inet.IP, ipMask(inet.Mask), ifIP)
+		deleteRoute(ifName, route)
+
+		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=%s store=active",
+			route, ifName)
 		log.Log("[tun]", cmd)
 		args := strings.Split(cmd, " ")
 		if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
@@ -68,6 +66,13 @@ func addRoutes(ifIP string, routes ...string) error {
 		}
 	}
 	return nil
+}
+
+func deleteRoute(ifName string, route string) error {
+	cmd := fmt.Sprintf("netsh interface ip delete route prefix=%s interface=%s store=active",
+		route, ifName)
+	args := strings.Split(cmd, " ")
+	return exec.Command(args[0], args[1:]...).Run()
 }
 
 func ipMask(mask net.IPMask) string {
