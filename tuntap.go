@@ -3,6 +3,7 @@ package gost
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -11,12 +12,30 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
-	"github.com/songgao/packets/ethernet"
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
+
+var mIPProts = map[waterutil.IPProtocol]string{
+	waterutil.HOPOPT:     "HOPOPT",
+	waterutil.ICMP:       "ICMP",
+	waterutil.IGMP:       "IGMP",
+	waterutil.GGP:        "GGP",
+	waterutil.TCP:        "TCP",
+	waterutil.UDP:        "UDP",
+	waterutil.IPv6_Route: "IPv6-Route",
+	waterutil.IPv6_Frag:  "IPv6-Frag",
+	waterutil.IPv6_ICMP:  "IPv6-ICMP",
+}
+
+func ipProtocol(p waterutil.IPProtocol) string {
+	if v, ok := mIPProts[p]; ok {
+		return v
+	}
+	return fmt.Sprintf("unknown(%d)", p)
+}
 
 type TunConfig struct {
 	Name   string
@@ -25,10 +44,17 @@ type TunConfig struct {
 	Routes []string
 }
 
+type tunRouteKey [16]byte
+
+func ipToTunRouteKey(ip net.IP) (key tunRouteKey) {
+	copy(key[:], ip.To16())
+	return
+}
+
 type tunHandler struct {
 	raddr   string
 	options *HandlerOptions
-	ipNet   *net.IPNet
+	ifce    *net.Interface
 	routes  sync.Map
 }
 
@@ -71,7 +97,9 @@ func (h *tunHandler) Handle(conn net.Conn) {
 	}
 	defer tc.Close()
 
-	log.Logf("[tun] %s - %s: tun creation successful", tc.LocalAddr(), conn.LocalAddr())
+	addrs, _ := h.ifce.Addrs()
+	log.Logf("[tun] %s - %s: name: %s, mtu: %d, addrs: %s",
+		tc.LocalAddr(), conn.LocalAddr(), h.ifce.Name, h.ifce.MTU, addrs)
 
 	var raddr net.Addr
 	if h.raddr != "" {
@@ -96,7 +124,7 @@ func (h *tunHandler) Handle(conn net.Conn) {
 }
 
 func (h *tunHandler) createTun() (conn net.Conn, err error) {
-	conn, h.ipNet, err = createTun(h.options.TunConfig)
+	conn, h.ifce, err = createTun(h.options.TunConfig)
 	return
 }
 
@@ -114,39 +142,50 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				header, err := ipv4.ParseHeader(b[:n])
-				if err != nil {
-					log.Logf("[tun] %s: %v", tun.LocalAddr(), err)
+				var src, dst net.IP
+				if waterutil.IsIPv4(b[:n]) {
+					header, err := ipv4.ParseHeader(b[:n])
+					if err != nil {
+						log.Logf("[tun] %s: %v", tun.LocalAddr(), err)
+						return nil
+					}
+					if Debug {
+						log.Logf("[tun] %s -> %s %-4s %d/%-4d %-4x %d",
+							header.Src, header.Dst, ipProtocol(waterutil.IPv4Protocol(b[:n])),
+							header.Len, header.TotalLen, header.ID, header.Flags)
+					}
+					src, dst = header.Src, header.Dst
+				} else if waterutil.IsIPv6(b[:n]) {
+					header, err := ipv6.ParseHeader(b[:n])
+					if err != nil {
+						log.Logf("[tun] %s: %v", tun.LocalAddr(), err)
+						return nil
+					}
+					if Debug {
+						log.Logf("[tun] %s -> %s %s %d %d",
+							header.Src, header.Dst,
+							ipProtocol(waterutil.IPProtocol(header.NextHeader)),
+							header.PayloadLen, header.TrafficClass)
+					}
+					src, dst = header.Src, header.Dst
+				} else {
+					log.Logf("[tun] unknown packet")
+					return nil
+				}
+
+				// client side, deliver packet directly.
+				if raddr != nil {
+					_, err := conn.WriteTo(b[:n], raddr)
 					return err
 				}
 
-				if header.Version != ipv4.Version {
-					if Debug && header.Version == ipv6.Version {
-						if hdr, _ := ipv6.ParseHeader(b[:n]); hdr != nil {
-							log.Logf("[tun] %s: %s -> %s %d %d",
-								tun.LocalAddr(), hdr.Src, hdr.Dst, hdr.PayloadLen, hdr.TrafficClass)
-						}
-					}
-					log.Logf("[tun] %s: v%d ignored, only support ipv4",
-						tun.LocalAddr(), header.Version)
-					return nil
-				}
-
-				addr := raddr
-				if v, ok := h.routes.Load(header.Dst.String()); ok {
+				var addr net.Addr
+				if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
 					addr = v.(net.Addr)
 				}
 				if addr == nil {
-					log.Logf("[tun] %s: no route for %s -> %s %d/%d %x %d %d",
-						tun.LocalAddr(), header.Src, header.Dst,
-						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
+					log.Logf("[tun] no route for %s -> %s", src, dst)
 					return nil
-				}
-
-				if Debug {
-					log.Logf("[tun] %s >>> %s: %s -> %s %d/%d %x %d %d",
-						tun.LocalAddr(), addr, header.Src, header.Dst,
-						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
 				}
 
 				if _, err := conn.WriteTo(b[:n], addr); err != nil {
@@ -173,40 +212,60 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				header, err := ipv4.ParseHeader(b[:n])
-				if err != nil {
-					log.Logf("[tun] %s <- %s: %v", tun.LocalAddr(), addr, err)
-					return err
-				}
-
-				if header.Version != ipv4.Version {
-					if Debug && header.Version == ipv6.Version {
-						if hdr, _ := ipv6.ParseHeader(b[:n]); hdr != nil {
-							log.Logf("[tun] %s <<< %s: %s -> %s %d %d",
-								tun.LocalAddr(), addr, hdr.Src, hdr.Dst, hdr.PayloadLen, hdr.TrafficClass)
-						}
+				var src, dst net.IP
+				if waterutil.IsIPv4(b[:n]) {
+					header, err := ipv4.ParseHeader(b[:n])
+					if err != nil {
+						log.Logf("[tun] %s: %v", tun.LocalAddr(), err)
+						return nil
 					}
-					log.Logf("[tun] %s <- %s: v%d ignored, only support ipv4",
-						tun.LocalAddr(), addr, header.Version)
+					if Debug {
+						log.Logf("[tun] %s -> %s %-4s %d/%-4d %-4x %d",
+							header.Src, header.Dst, ipProtocol(waterutil.IPv4Protocol(b[:n])),
+							header.Len, header.TotalLen, header.ID, header.Flags)
+					}
+					src, dst = header.Src, header.Dst
+				} else if waterutil.IsIPv6(b[:n]) {
+					header, err := ipv6.ParseHeader(b[:n])
+					if err != nil {
+						log.Logf("[tun] %s: %v", tun.LocalAddr(), err)
+						return nil
+					}
+					if Debug {
+						log.Logf("[tun] %s -> %s %s %d %d",
+							header.Src, header.Dst,
+							ipProtocol(waterutil.IPProtocol(header.NextHeader)),
+							header.PayloadLen, header.TrafficClass)
+					}
+					src, dst = header.Src, header.Dst
+				} else {
+					log.Logf("[tun] unknown packet")
 					return nil
 				}
 
-				if Debug {
-					log.Logf("[tun] %s <<< %s: %s -> %s %d/%d %x %d %d",
-						tun.LocalAddr(), addr, header.Src, header.Dst,
-						header.Len, header.TotalLen, header.ID, header.Flags, header.Protocol)
+				// client side, deliver packet to tun device.
+				if raddr != nil {
+					_, err := tun.Write(b[:n])
+					return err
 				}
 
-				if h.ipNet != nil && h.ipNet.IP.Equal(header.Src.Mask(h.ipNet.Mask)) {
-					if actual, loaded := h.routes.LoadOrStore(header.Src.String(), addr); loaded {
-						if actual.(net.Addr).String() != addr.String() {
-							log.Logf("[tun] %s <- %s: update route: %s -> %s (old %s)",
-								tun.LocalAddr(), addr, header.Src, addr, actual.(net.Addr))
-							h.routes.Store(header.Src.String(), addr)
-						}
-					} else {
-						log.Logf("[tun] %s: new route: %s -> %s", tun.LocalAddr(), header.Src, addr)
+				rkey := ipToTunRouteKey(src)
+				if actual, loaded := h.routes.LoadOrStore(rkey, addr); loaded {
+					if actual.(net.Addr).String() != addr.String() {
+						log.Logf("[tun] update route: %s -> %s (old %s)",
+							src, addr, actual.(net.Addr))
+						h.routes.Store(rkey, addr)
 					}
+				} else {
+					log.Logf("[tun] new route: %s -> %s", src, addr)
+				}
+
+				if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
+					if Debug {
+						log.Logf("[tun] find route: %s -> %s", dst, v)
+					}
+					_, err := conn.WriteTo(b[:n], v.(net.Addr))
+					return err
 				}
 
 				if _, err := tun.Write(b[:n]); err != nil {
@@ -285,14 +344,14 @@ func (l *tunListener) Close() error {
 	return nil
 }
 
-var mEtherTypes = map[ethernet.Ethertype]string{
-	ethernet.IPv4: "ip",
-	ethernet.ARP:  "arp",
-	ethernet.RARP: "rarp",
-	ethernet.IPv6: "ip6",
+var mEtherTypes = map[waterutil.Ethertype]string{
+	waterutil.IPv4: "ip",
+	waterutil.ARP:  "arp",
+	waterutil.RARP: "rarp",
+	waterutil.IPv6: "ip6",
 }
 
-func etherType(et ethernet.Ethertype) string {
+func etherType(et waterutil.Ethertype) string {
 	if s, ok := mEtherTypes[et]; ok {
 		return s
 	}
@@ -360,7 +419,7 @@ func (h *tapHandler) Handle(conn net.Conn) {
 	defer tc.Close()
 
 	addrs, _ := h.ifce.Addrs()
-	log.Logf("[tap] %s - %s: name: %s, mac: %s, mtu: %d, addr: %s",
+	log.Logf("[tap] %s - %s: name: %s, mac: %s, mtu: %d, addrs: %s",
 		tc.LocalAddr(), conn.LocalAddr(),
 		h.ifce.Name, h.ifce.HardwareAddr, h.ifce.MTU, addrs)
 
@@ -405,22 +464,23 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				frame := ethernet.Frame(b[:n])
+				src := waterutil.MACSource(b[:n])
+				dst := waterutil.MACDestination(b[:n])
+				eType := etherType(waterutil.MACEthertype(b[:n]))
 
 				if Debug {
-					log.Logf("[tap] %s -> %s %s %d",
-						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+					log.Logf("[tap] %s -> %s %s %d", src, dst, eType, n)
 				}
 
-				// client side delivers frame directly.
+				// client side, deliver frame directly.
 				if raddr != nil {
 					_, err := conn.WriteTo(b[:n], raddr)
 					return err
 				}
 
-				// server side broadcast.
-				if waterutil.IsBroadcast(frame.Destination()) {
-					h.routes.Range(func(k, v interface{}) bool {
+				// server side, broadcast.
+				if waterutil.IsBroadcast(dst) {
+					go h.routes.Range(func(k, v interface{}) bool {
 						conn.WriteTo(b[:n], v.(net.Addr))
 						return true
 					})
@@ -428,12 +488,11 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				var addr net.Addr
-				if v, ok := h.routes.Load(hwAddrToTapRouteKey(frame.Destination())); ok {
+				if v, ok := h.routes.Load(hwAddrToTapRouteKey(dst)); ok {
 					addr = v.(net.Addr)
 				}
 				if addr == nil {
-					log.Logf("[tap] no route for %s -> %s %s %d",
-						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+					log.Logf("[tap] no route for %s -> %s %s %d", src, dst, eType, n)
 					return nil
 				}
 
@@ -461,18 +520,18 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				frame := ethernet.Frame(b[:n])
+				src := waterutil.MACSource(b[:n])
+				dst := waterutil.MACDestination(b[:n])
+				eType := etherType(waterutil.MACEthertype(b[:n]))
 
 				// ignore the frame send by myself
-				if bytes.Equal(frame.Source(), h.ifce.HardwareAddr) {
-					log.Logf("[tap] %s -> %s %s %d ignored",
-						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+				if bytes.Equal(src, h.ifce.HardwareAddr) {
+					log.Logf("[tap] %s -> %s %s %d ignored", src, dst, eType, n)
 					return nil
 				}
 
 				if Debug {
-					log.Logf("[tap] %s -> %s %s %d",
-						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+					log.Logf("[tap] %s -> %s %s %d", src, dst, eType, n)
 				}
 
 				// client side, deliver frame to tap device.
@@ -482,30 +541,30 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				// server side, record route.
-				rkey := hwAddrToTapRouteKey(frame.Source())
+				rkey := hwAddrToTapRouteKey(src)
 				if actual, loaded := h.routes.LoadOrStore(rkey, addr); loaded {
 					if actual.(net.Addr).String() != addr.String() {
 						log.Logf("[tap] update route: %s -> %s (old %s)",
-							frame.Source(), addr, actual.(net.Addr))
+							src, addr, actual.(net.Addr))
 						h.routes.Store(rkey, addr)
 					}
 				} else {
-					log.Logf("[tap] new route: %s -> %s",
-						frame.Source(), addr)
+					log.Logf("[tap] new route: %s -> %s", src, addr)
 				}
 
-				if waterutil.IsBroadcast(frame.Destination()) {
-					h.routes.Range(func(k, v interface{}) bool {
-						if k.(tapRouteKey) != hwAddrToTapRouteKey(frame.Source()) {
+				if waterutil.IsBroadcast(dst) {
+					go h.routes.Range(func(k, v interface{}) bool {
+						if k.(tapRouteKey) != rkey {
 							conn.WriteTo(b[:n], v.(net.Addr))
 						}
 						return true
 					})
 				}
 
-				if v, ok := h.routes.Load(hwAddrToTapRouteKey(frame.Destination())); ok {
-					log.Logf("[tap] find route: %s -> %s",
-						frame.Destination(), v)
+				if v, ok := h.routes.Load(hwAddrToTapRouteKey(dst)); ok {
+					if Debug {
+						log.Logf("[tap] find route: %s -> %s", dst, v)
+					}
 					_, err := conn.WriteTo(b[:n], v.(net.Addr))
 					return err
 				}
@@ -621,4 +680,8 @@ func (c *tunTapConn) SetReadDeadline(t time.Time) error {
 
 func (c *tunTapConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "tuntap", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+}
+
+func IsIPv6Multicast(addr net.HardwareAddr) bool {
+	return addr[0] == 0x33 && addr[1] == 0x33
 }

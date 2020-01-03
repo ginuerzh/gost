@@ -11,8 +11,8 @@ import (
 	"github.com/songgao/water"
 )
 
-func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
-	ip, ipNet, err := net.ParseCIDR(cfg.Addr)
+func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
+	ip, _, err := net.ParseCIDR(cfg.Addr)
 	if err != nil {
 		return
 	}
@@ -38,6 +38,11 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	}
 
 	if err = addRoutes(ifce.Name(), cfg.Routes...); err != nil {
+		return
+	}
+
+	itf, err = net.InterfaceByName(ifce.Name())
+	if err != nil {
 		return
 	}
 
