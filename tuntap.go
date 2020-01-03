@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
+	"github.com/songgao/packets/ethernet"
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
 	"golang.org/x/net/ipv4"
@@ -283,6 +285,20 @@ func (l *tunListener) Close() error {
 	return nil
 }
 
+var mEtherTypes = map[ethernet.Ethertype]string{
+	ethernet.IPv4: "ip",
+	ethernet.ARP:  "arp",
+	ethernet.RARP: "rarp",
+	ethernet.IPv6: "ip6",
+}
+
+func etherType(et ethernet.Ethertype) string {
+	if s, ok := mEtherTypes[et]; ok {
+		return s
+	}
+	return "unknown"
+}
+
 type TapConfig struct {
 	Name   string
 	Addr   string
@@ -290,10 +306,17 @@ type TapConfig struct {
 	Routes []string
 }
 
+type tapRouteKey [6]byte
+
+func hwAddrToTapRouteKey(addr net.HardwareAddr) (key tapRouteKey) {
+	copy(key[:], addr)
+	return
+}
+
 type tapHandler struct {
 	raddr   string
 	options *HandlerOptions
-	ipNet   *net.IPNet
+	ifce    *net.Interface
 	routes  sync.Map
 }
 
@@ -336,7 +359,10 @@ func (h *tapHandler) Handle(conn net.Conn) {
 	}
 	defer tc.Close()
 
-	log.Logf("[tap] %s - %s: tap creation successful", tc.LocalAddr(), conn.LocalAddr())
+	addrs, _ := h.ifce.Addrs()
+	log.Logf("[tap] %s - %s: name: %s, mac: %s, mtu: %d, addr: %s",
+		tc.LocalAddr(), conn.LocalAddr(),
+		h.ifce.Name, h.ifce.HardwareAddr, h.ifce.MTU, addrs)
 
 	var raddr net.Addr
 	if h.raddr != "" {
@@ -361,7 +387,7 @@ func (h *tapHandler) Handle(conn net.Conn) {
 }
 
 func (h *tapHandler) createTap() (conn net.Conn, err error) {
-	conn, h.ipNet, err = createTap(h.options.TapConfig)
+	conn, h.ifce, err = createTap(h.options.TapConfig)
 	return
 }
 
@@ -379,22 +405,36 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				macSrc := waterutil.MACSource(b[:n])
-				macDst := waterutil.MACDestination(b[:n])
+				frame := ethernet.Frame(b[:n])
 
-				addr := raddr
-				if v, ok := h.routes.Load(macDst.String()); ok {
-					addr = v.(net.Addr)
+				if Debug {
+					log.Logf("[tap] %s -> %s %s %d",
+						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
 				}
-				if addr == nil {
-					log.Logf("[tap] %s: no route for %s -> %s %d %d",
-						tap.LocalAddr(), macSrc, macDst, n, waterutil.MACEthertype(b[:n]))
+
+				// client side delivers frame directly.
+				if raddr != nil {
+					_, err := conn.WriteTo(b[:n], raddr)
+					return err
+				}
+
+				// server side broadcast.
+				if waterutil.IsBroadcast(frame.Destination()) {
+					h.routes.Range(func(k, v interface{}) bool {
+						conn.WriteTo(b[:n], v.(net.Addr))
+						return true
+					})
 					return nil
 				}
 
-				if Debug {
-					log.Logf("[tap] %s >>> %s: %s -> %s %d %d",
-						tap.LocalAddr(), addr, macSrc, macDst, n, waterutil.MACEthertype(b[:n]))
+				var addr net.Addr
+				if v, ok := h.routes.Load(hwAddrToTapRouteKey(frame.Destination())); ok {
+					addr = v.(net.Addr)
+				}
+				if addr == nil {
+					log.Logf("[tap] no route for %s -> %s %s %d",
+						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+					return nil
 				}
 
 				if _, err := conn.WriteTo(b[:n], addr); err != nil {
@@ -421,22 +461,53 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				macSrc := waterutil.MACSource(b[:n])
-				macDst := waterutil.MACDestination(b[:n])
+				frame := ethernet.Frame(b[:n])
 
-				if Debug {
-					log.Logf("[tap] %s <<< %s: %s -> %s %d %d",
-						tap.LocalAddr(), addr, macSrc, macDst, n, waterutil.MACEthertype(b[:n]))
+				// ignore the frame send by myself
+				if bytes.Equal(frame.Source(), h.ifce.HardwareAddr) {
+					log.Logf("[tap] %s -> %s %s %d ignored",
+						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+					return nil
 				}
 
-				if actual, loaded := h.routes.LoadOrStore(macSrc.String(), addr); loaded {
+				if Debug {
+					log.Logf("[tap] %s -> %s %s %d",
+						frame.Source(), frame.Destination(), etherType(frame.Ethertype()), n)
+				}
+
+				// client side, deliver frame to tap device.
+				if raddr != nil {
+					_, err := tap.Write(b[:n])
+					return err
+				}
+
+				// server side, record route.
+				rkey := hwAddrToTapRouteKey(frame.Source())
+				if actual, loaded := h.routes.LoadOrStore(rkey, addr); loaded {
 					if actual.(net.Addr).String() != addr.String() {
-						log.Logf("[tap] %s <- %s: update route: %s -> %s (old %s)",
-							tap.LocalAddr(), addr, macSrc, addr, actual.(net.Addr))
-						h.routes.Store(macSrc.String(), addr)
+						log.Logf("[tap] update route: %s -> %s (old %s)",
+							frame.Source(), addr, actual.(net.Addr))
+						h.routes.Store(rkey, addr)
 					}
 				} else {
-					log.Logf("[tap] %s: new route: %s -> %s", tap.LocalAddr(), macSrc, addr)
+					log.Logf("[tap] new route: %s -> %s",
+						frame.Source(), addr)
+				}
+
+				if waterutil.IsBroadcast(frame.Destination()) {
+					h.routes.Range(func(k, v interface{}) bool {
+						if k.(tapRouteKey) != hwAddrToTapRouteKey(frame.Source()) {
+							conn.WriteTo(b[:n], v.(net.Addr))
+						}
+						return true
+					})
+				}
+
+				if v, ok := h.routes.Load(hwAddrToTapRouteKey(frame.Destination())); ok {
+					log.Logf("[tap] find route: %s -> %s",
+						frame.Destination(), v)
+					_, err := conn.WriteTo(b[:n], v.(net.Addr))
+					return err
 				}
 
 				if _, err := tap.Write(b[:n]); err != nil {

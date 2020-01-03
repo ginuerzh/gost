@@ -68,7 +68,7 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	return
 }
 
-func createTap(cfg TapConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
+func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	ip, ipNet, err := net.ParseCIDR(cfg.Addr)
 	if err != nil {
 		return
@@ -116,6 +116,11 @@ func createTap(cfg TapConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	}
 
 	if err = addRoutes("tap", ifce.Name(), cfg.Routes...); err != nil {
+		return
+	}
+
+	itf, err = net.InterfaceByName(ifce.Name())
+	if err != nil {
 		return
 	}
 
