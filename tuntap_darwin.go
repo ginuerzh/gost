@@ -48,7 +48,7 @@ func createTun(cfg TunConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
 	return
 }
 
-func createTap(cfg TapConfig) (conn net.Conn, ipNet *net.IPNet, err error) {
+func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	err = errors.New("tap is not supported on darwin")
 	return
 }
