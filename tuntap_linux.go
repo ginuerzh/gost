@@ -57,7 +57,7 @@ func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
 		return
 	}
 
-	if err = addRoutes("tun", ifce.Name(), cfg.Routes...); err != nil {
+	if err = addTunRoutes(ifce.Name(), cfg.Routes...); err != nil {
 		return
 	}
 
@@ -120,7 +120,7 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 		return
 	}
 
-	if err = addRoutes("tap", ifce.Name(), cfg.Routes...); err != nil {
+	if err = addTapRoutes(ifce.Name(), cfg.Gateway, cfg.Routes...); err != nil {
 		return
 	}
 
@@ -136,14 +136,28 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	return
 }
 
-func addRoutes(ifType, ifName string, routes ...string) error {
+func addTunRoutes(ifName string, routes ...string) error {
 	for _, route := range routes {
 		if route == "" {
 			continue
 		}
 		cmd := fmt.Sprintf("ip route add %s dev %s", route, ifName)
-		log.Logf("[%s] %s", ifType, cmd)
+		log.Logf("[tun] %s", cmd)
 		if err := netlink.AddRoute(route, "", "", ifName); err != nil {
+			return fmt.Errorf("%s: %v", cmd, err)
+		}
+	}
+	return nil
+}
+
+func addTapRoutes(ifName string, gw string, routes ...string) error {
+	for _, route := range routes {
+		if route == "" {
+			continue
+		}
+		cmd := fmt.Sprintf("ip route add %s via %s dev %s", route, gw, ifName)
+		log.Logf("[tap] %s", cmd)
+		if err := netlink.AddRoute(route, "", gw, ifName); err != nil {
 			return fmt.Errorf("%s: %v", cmd, err)
 		}
 	}

@@ -437,18 +437,20 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.SNIHandler()
 		case "tun":
 			cfg := gost.TunConfig{
-				Name:   node.Get("name"),
-				Addr:   node.Get("net"),
-				MTU:    node.GetInt("mtu"),
-				Routes: strings.Split(node.Get("route"), ","),
+				Name:    node.Get("name"),
+				Addr:    node.Get("net"),
+				MTU:     node.GetInt("mtu"),
+				Routes:  strings.Split(node.Get("route"), ","),
+				Gateway: node.Get("gw"),
 			}
 			handler = gost.TunHandler(node.Remote, gost.TunConfigHandlerOption(cfg))
 		case "tap":
 			cfg := gost.TapConfig{
-				Name:   node.Get("name"),
-				Addr:   node.Get("net"),
-				MTU:    node.GetInt("mtu"),
-				Routes: strings.Split(node.Get("route"), ","),
+				Name:    node.Get("name"),
+				Addr:    node.Get("net"),
+				MTU:     node.GetInt("mtu"),
+				Routes:  strings.Split(node.Get("route"), ","),
+				Gateway: node.Get("gw"),
 			}
 			handler = gost.TapHandler(node.Remote, gost.TapConfigHandlerOption(cfg))
 		default:

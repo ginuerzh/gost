@@ -38,10 +38,11 @@ func ipProtocol(p waterutil.IPProtocol) string {
 }
 
 type TunConfig struct {
-	Name   string
-	Addr   string
-	MTU    int
-	Routes []string
+	Name    string
+	Addr    string
+	MTU     int
+	Routes  []string
+	Gateway string
 }
 
 type tunRouteKey [16]byte
@@ -355,14 +356,15 @@ func etherType(et waterutil.Ethertype) string {
 	if s, ok := mEtherTypes[et]; ok {
 		return s
 	}
-	return "unknown"
+	return fmt.Sprintf("unknown(%v)", et)
 }
 
 type TapConfig struct {
-	Name   string
-	Addr   string
-	MTU    int
-	Routes []string
+	Name    string
+	Addr    string
+	MTU     int
+	Routes  []string
+	Gateway string
 }
 
 type tapRouteKey [6]byte
