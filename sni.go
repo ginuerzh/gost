@@ -75,9 +75,7 @@ func (h *sniHandler) Handle(conn net.Conn) {
 				conn.RemoteAddr(), conn.LocalAddr(), err)
 			return
 		}
-		if !req.URL.IsAbs() {
-			req.URL.Scheme = "http" // make sure that the URL is absolute
-		}
+
 		handler := &httpHandler{options: h.options}
 		handler.Init()
 		handler.handleRequest(conn, req)
