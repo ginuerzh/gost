@@ -56,7 +56,7 @@ func sniRoundtrip(client *Client, server *Server, targetURL string, data []byte)
 	if err != nil {
 		return
 	}
-	if err = req.Write(conn); err != nil {
+	if err = req.WriteProxy(conn); err != nil {
 		return
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
