@@ -9,6 +9,7 @@ require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
+	github.com/coreos/go-iptables v0.4.5 // indirect
 	github.com/dchest/siphash v1.2.1 // indirect
 	github.com/docker/libcontainer v2.2.1+incompatible
 	github.com/ginuerzh/gosocks4 v0.0.1
@@ -17,6 +18,7 @@ require (
 	github.com/go-log/log v0.1.0
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/mock v1.2.0 // indirect
+	github.com/google/gopacket v1.1.17 // indirect
 	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/klauspost/compress v1.4.1
@@ -37,10 +39,10 @@ require (
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20181023030647-4e92f724b73b // indirect
 	github.com/tjfoc/gmsm v1.0.1 // indirect
-	golang.org/x/crypto v0.0.0-20190130090550-b01c7a725664
-	golang.org/x/net v0.0.0-20190125091013-d26f9f9a57f3
+	github.com/xtaci/tcpraw v1.2.25
+	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
+	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
-	golang.org/x/sys v0.0.0-20190228124157-a34e9553db1e // indirect
 	gopkg.in/gorilla/websocket.v1 v1.4.0
 	gopkg.in/xtaci/kcp-go.v4 v4.3.2
 	gopkg.in/xtaci/smux.v1 v1.0.7

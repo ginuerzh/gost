@@ -14,6 +14,7 @@ import (
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
+	"github.com/xtaci/tcpraw"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -290,14 +291,20 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 	return err
 }
 
+type TunListenConfig struct {
+	TCP        bool
+	RemoteAddr string
+}
+
 type tunListener struct {
 	addr   net.Addr
 	conns  chan net.Conn
 	closed chan struct{}
+	config TunListenConfig
 }
 
 // TunListener creates a listener for tun tunnel.
-func TunListener(addr string) (Listener, error) {
+func TunListener(addr string, cfg TunListenConfig) (Listener, error) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -308,10 +315,22 @@ func TunListener(addr string) (Listener, error) {
 		addr:   laddr,
 		conns:  make(chan net.Conn, threads),
 		closed: make(chan struct{}),
+		config: cfg,
 	}
 
 	for i := 0; i < threads; i++ {
-		conn, err := net.ListenUDP("udp", laddr)
+		var conn net.Conn
+		if cfg.TCP {
+			var c *tcpraw.TCPConn
+			if cfg.RemoteAddr != "" {
+				c, err = tcpraw.Dial("tcp", cfg.RemoteAddr)
+			} else {
+				c, err = tcpraw.Listen("tcp", addr)
+			}
+			conn = &rawTCPConn{c}
+		} else {
+			conn, err = net.ListenUDP("udp", laddr)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -592,14 +611,20 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 	return err
 }
 
+type TapListenConfig struct {
+	TCP        bool
+	RemoteAddr string
+}
+
 type tapListener struct {
 	addr   net.Addr
 	conns  chan net.Conn
 	closed chan struct{}
+	config TapListenConfig
 }
 
 // TapListener creates a listener for tap tunnel.
-func TapListener(addr string) (Listener, error) {
+func TapListener(addr string, cfg TapListenConfig) (Listener, error) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -610,10 +635,22 @@ func TapListener(addr string) (Listener, error) {
 		addr:   laddr,
 		conns:  make(chan net.Conn, threads),
 		closed: make(chan struct{}),
+		config: cfg,
 	}
 
 	for i := 0; i < threads; i++ {
-		conn, err := net.ListenUDP("udp", laddr)
+		var conn net.Conn
+		if cfg.TCP {
+			var c *tcpraw.TCPConn
+			if cfg.RemoteAddr != "" {
+				c, err = tcpraw.Dial("tcp", cfg.RemoteAddr)
+			} else {
+				c, err = tcpraw.Listen("tcp", addr)
+			}
+			conn = &rawTCPConn{c}
+		} else {
+			conn, err = net.ListenUDP("udp", laddr)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -682,6 +719,24 @@ func (c *tunTapConn) SetReadDeadline(t time.Time) error {
 
 func (c *tunTapConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "tuntap", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
+}
+
+type rawTCPConn struct {
+	*tcpraw.TCPConn
+}
+
+func (c *rawTCPConn) Read(b []byte) (n int, err error) {
+	err = &net.OpError{Op: "read", Net: "rawtcp", Source: nil, Addr: nil, Err: errors.New("read not supported")}
+	return
+}
+
+func (c *rawTCPConn) Write(b []byte) (n int, err error) {
+	err = &net.OpError{Op: "write", Net: "rawtcp", Source: nil, Addr: nil, Err: errors.New("write not supported")}
+	return
+}
+
+func (c *rawTCPConn) RemoteAddr() net.Addr {
+	return &net.IPAddr{}
 }
 
 func IsIPv6Multicast(addr net.HardwareAddr) bool {

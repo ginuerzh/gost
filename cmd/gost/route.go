@@ -395,9 +395,17 @@ func (r *route) GenRouters() ([]router, error) {
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
 		case "tun":
-			ln, err = gost.TunListener(node.Addr)
+			ln, err = gost.TunListener(node.Addr,
+				gost.TunListenConfig{
+					TCP:        node.GetBool("tcp"),
+					RemoteAddr: node.Remote,
+				})
 		case "tap":
-			ln, err = gost.TapListener(node.Addr)
+			ln, err = gost.TapListener(node.Addr,
+				gost.TapListenConfig{
+					TCP:        node.GetBool("tcp"),
+					RemoteAddr: node.Remote,
+				})
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}

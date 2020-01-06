@@ -31,12 +31,13 @@ gost - GO Simple Tunnel
 * [负载均衡](https://docs.ginuerzh.xyz/gost/load-balancing/)
 * [路由控制](https://docs.ginuerzh.xyz/gost/bypass/)
 * [DNS控制](https://docs.ginuerzh.xyz/gost/dns/)
+* [TUN/TAP设备](https://docs.ginuerzh.xyz/gost/tuntap/)
 
 Wiki站点: <https://docs.ginuerzh.xyz/gost/>
 
-Google讨论组: <https://groups.google.com/d/forum/go-gost>
-
 Telegram讨论群: <https://t.me/gogost>
+
+Google讨论组: <https://groups.google.com/d/forum/go-gost>
 
 安装
 ------

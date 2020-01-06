@@ -28,12 +28,13 @@ Features
 * [Load balancing](https://docs.ginuerzh.xyz/gost/en/load-balancing/)
 * [Routing control](https://docs.ginuerzh.xyz/gost/en/bypass/)
 * [DNS control](https://docs.ginuerzh.xyz/gost/en/dns/)
+* [TUN/TAP device](https://docs.ginuerzh.xyz/gost/en/tuntap/)
 
 Wiki: <https://docs.ginuerzh.xyz/gost/en/>
 
-Google group: <https://groups.google.com/d/forum/go-gost>
-
 Telegram group: <https://t.me/gogost>
+
+Google group: <https://groups.google.com/d/forum/go-gost>
 
 Installation
 ------
