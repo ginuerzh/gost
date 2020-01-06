@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
+	"github.com/shadowsocks/go-shadowsocks2/shadowaead"
+	"github.com/shadowsocks/go-shadowsocks2/shadowstream"
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
 	"github.com/xtaci/tcpraw"
@@ -210,7 +212,8 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 				defer mPool.Put(b)
 
 				n, addr, err := conn.ReadFrom(b)
-				if err != nil {
+				if err != nil &&
+					err != shadowaead.ErrShortPacket && err != shadowstream.ErrShortPacket {
 					return err
 				}
 
@@ -537,7 +540,8 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 				defer mPool.Put(b)
 
 				n, addr, err := conn.ReadFrom(b)
-				if err != nil {
+				if err != nil &&
+					err != shadowaead.ErrShortPacket && err != shadowstream.ErrShortPacket {
 					return err
 				}
 
