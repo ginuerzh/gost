@@ -395,17 +395,23 @@ func (r *route) GenRouters() ([]router, error) {
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
 		case "tun":
-			ln, err = gost.TunListener(node.Addr,
-				gost.TunListenConfig{
-					TCP:        node.GetBool("tcp"),
-					RemoteAddr: node.Remote,
-				})
+			cfg := gost.TunConfig{
+				Name:    node.Get("name"),
+				Addr:    node.Get("net"),
+				MTU:     node.GetInt("mtu"),
+				Routes:  strings.Split(node.Get("route"), ","),
+				Gateway: node.Get("gw"),
+			}
+			ln, err = gost.TunListener(cfg)
 		case "tap":
-			ln, err = gost.TapListener(node.Addr,
-				gost.TapListenConfig{
-					TCP:        node.GetBool("tcp"),
-					RemoteAddr: node.Remote,
-				})
+			cfg := gost.TapConfig{
+				Name:    node.Get("name"),
+				Addr:    node.Get("net"),
+				MTU:     node.GetInt("mtu"),
+				Routes:  strings.Split(node.Get("route"), ","),
+				Gateway: node.Get("gw"),
+			}
+			ln, err = gost.TapListener(cfg)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
@@ -444,23 +450,9 @@ func (r *route) GenRouters() ([]router, error) {
 		case "sni":
 			handler = gost.SNIHandler()
 		case "tun":
-			cfg := gost.TunConfig{
-				Name:    node.Get("name"),
-				Addr:    node.Get("net"),
-				MTU:     node.GetInt("mtu"),
-				Routes:  strings.Split(node.Get("route"), ","),
-				Gateway: node.Get("gw"),
-			}
-			handler = gost.TunHandler(node.Remote, gost.TunConfigHandlerOption(cfg))
+			handler = gost.TunHandler()
 		case "tap":
-			cfg := gost.TapConfig{
-				Name:    node.Get("name"),
-				Addr:    node.Get("net"),
-				MTU:     node.GetInt("mtu"),
-				Routes:  strings.Split(node.Get("route"), ","),
-				Gateway: node.Get("gw"),
-			}
-			handler = gost.TapHandler(node.Remote, gost.TapConfigHandlerOption(cfg))
+			handler = gost.TapHandler()
 		default:
 			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
 			if node.Remote != "" {
@@ -507,6 +499,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.KnockingHandlerOption(node.Get("knock")),
 			gost.NodeHandlerOption(node),
 			gost.IPsHandlerOption(ips),
+			gost.TCPModeHandlerOption(node.GetBool("tcp")),
 		)
 
 		rt := router{

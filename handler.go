@@ -40,8 +40,7 @@ type HandlerOptions struct {
 	Node          Node
 	Host          string
 	IPs           []string
-	TunConfig     TunConfig
-	TapConfig     TapConfig
+	TCPMode       bool
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -197,17 +196,10 @@ func IPsHandlerOption(ips []string) HandlerOption {
 	}
 }
 
-// TunConfigHandlerOption sets the config for tun device.
-func TunConfigHandlerOption(cfg TunConfig) HandlerOption {
+// TCPModeHandlerOption sets the tcp mode for tun/tap device.
+func TCPModeHandlerOption(b bool) HandlerOption {
 	return func(opts *HandlerOptions) {
-		opts.TunConfig = cfg
-	}
-}
-
-// TapConfigHandlerOption sets the config for tap device.
-func TapConfigHandlerOption(cfg TapConfig) HandlerOption {
-	return func(opts *HandlerOptions) {
-		opts.TapConfig = cfg
+		opts.TCPMode = b
 	}
 }
 

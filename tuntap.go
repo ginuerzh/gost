@@ -1,7 +1,6 @@
 package gost
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -55,17 +54,71 @@ func ipToTunRouteKey(ip net.IP) (key tunRouteKey) {
 	return
 }
 
+type tunListener struct {
+	addr   net.Addr
+	conns  chan net.Conn
+	closed chan struct{}
+	config TunConfig
+}
+
+// TunListener creates a listener for tun tunnel.
+func TunListener(cfg TunConfig) (Listener, error) {
+	threads := 1
+	ln := &tunListener{
+		conns:  make(chan net.Conn, threads),
+		closed: make(chan struct{}),
+		config: cfg,
+	}
+
+	for i := 0; i < threads; i++ {
+		conn, ifce, err := createTun(cfg)
+		if err != nil {
+			return nil, err
+		}
+		ln.addr = conn.LocalAddr()
+
+		addrs, _ := ifce.Addrs()
+		log.Logf("[tun] %s: name: %s, mtu: %d, addrs: %s",
+			conn.LocalAddr(), ifce.Name, ifce.MTU, addrs)
+
+		ln.conns <- conn
+	}
+
+	return ln, nil
+}
+
+func (l *tunListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.conns:
+		return conn, nil
+	case <-l.closed:
+	}
+
+	return nil, errors.New("accept on closed listener")
+}
+
+func (l *tunListener) Addr() net.Addr {
+	return l.addr
+}
+
+func (l *tunListener) Close() error {
+	select {
+	case <-l.closed:
+		return errors.New("listener has been closed")
+	default:
+		close(l.closed)
+	}
+	return nil
+}
+
 type tunHandler struct {
-	raddr   string
 	options *HandlerOptions
-	ifce    *net.Interface
 	routes  sync.Map
 }
 
 // TunHandler creates a handler for tun tunnel.
-func TunHandler(raddr string, opts ...HandlerOption) Handler {
+func TunHandler(opts ...HandlerOption) Handler {
 	h := &tunHandler{
-		raddr:   raddr,
 		options: &HandlerOptions{},
 	}
 	for _, opt := range opts {
@@ -88,48 +141,44 @@ func (h *tunHandler) Handle(conn net.Conn) {
 	defer os.Exit(0)
 	defer conn.Close()
 
-	uc, ok := conn.(net.PacketConn)
-	if !ok {
-		log.Log("[tun] wrong connection type, must be PacketConn")
-		return
-	}
-
-	tc, err := h.createTun()
-	if err != nil {
-		log.Logf("[tun] %s create tun: %v", conn.LocalAddr(), err)
-		return
-	}
-	defer tc.Close()
-
-	addrs, _ := h.ifce.Addrs()
-	log.Logf("[tun] %s - %s: name: %s, mtu: %d, addrs: %s",
-		tc.LocalAddr(), conn.LocalAddr(), h.ifce.Name, h.ifce.MTU, addrs)
-
-	var raddr net.Addr
-	if h.raddr != "" {
-		raddr, err = net.ResolveUDPAddr("udp", h.raddr)
-		if err != nil {
-			log.Logf("[tun] %s - %s remote addr: %v", tc.LocalAddr(), conn.LocalAddr(), err)
-			return
+	laddr, raddr := h.options.Node.Addr, h.options.Node.Remote
+	var pc net.PacketConn
+	var err error
+	if h.options.TCPMode {
+		if raddr != "" {
+			pc, err = tcpraw.Dial("tcp", raddr)
+		} else {
+			pc, err = tcpraw.Listen("tcp", laddr)
 		}
+	} else {
+		addr, _ := net.ResolveUDPAddr("udp", laddr)
+		pc, err = net.ListenUDP("udp", addr)
+	}
+	if err != nil {
+		log.Logf("[tun] %s: %v", conn.LocalAddr(), err)
+		return
 	}
 
 	if len(h.options.Users) > 0 && h.options.Users[0] != nil {
 		passwd, _ := h.options.Users[0].Password()
 		cipher, err := core.PickCipher(h.options.Users[0].Username(), nil, passwd)
 		if err != nil {
-			log.Logf("[tun] %s - %s cipher: %v", tc.LocalAddr(), conn.LocalAddr(), err)
+			log.Logf("[tun] %s - %s cipher: %v", conn.LocalAddr(), pc.LocalAddr(), err)
 			return
 		}
-		uc = cipher.PacketConn(uc)
+		pc = cipher.PacketConn(pc)
 	}
 
-	h.transportTun(tc, uc, raddr)
-}
+	var ra net.Addr
+	if raddr != "" {
+		ra, err = net.ResolveUDPAddr("udp", raddr)
+		if err != nil {
+			log.Logf("[tun] %s - %s: remote addr: %v", conn.LocalAddr(), pc.LocalAddr(), err)
+			return
+		}
+	}
 
-func (h *tunHandler) createTun() (conn net.Conn, err error) {
-	conn, h.ifce, err = createTun(h.options.TunConfig)
-	return
+	h.transportTun(conn, pc, ra)
 }
 
 func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.Addr) error {
@@ -294,79 +343,6 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 	return err
 }
 
-type TunListenConfig struct {
-	TCP        bool
-	RemoteAddr string
-}
-
-type tunListener struct {
-	addr   net.Addr
-	conns  chan net.Conn
-	closed chan struct{}
-	config TunListenConfig
-}
-
-// TunListener creates a listener for tun tunnel.
-func TunListener(addr string, cfg TunListenConfig) (Listener, error) {
-	laddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	threads := 1
-	ln := &tunListener{
-		addr:   laddr,
-		conns:  make(chan net.Conn, threads),
-		closed: make(chan struct{}),
-		config: cfg,
-	}
-
-	for i := 0; i < threads; i++ {
-		var conn net.Conn
-		if cfg.TCP {
-			var c *tcpraw.TCPConn
-			if cfg.RemoteAddr != "" {
-				c, err = tcpraw.Dial("tcp", cfg.RemoteAddr)
-			} else {
-				c, err = tcpraw.Listen("tcp", addr)
-			}
-			conn = &rawTCPConn{c}
-		} else {
-			conn, err = net.ListenUDP("udp", laddr)
-		}
-		if err != nil {
-			return nil, err
-		}
-		ln.conns <- conn
-	}
-
-	return ln, nil
-}
-
-func (l *tunListener) Accept() (net.Conn, error) {
-	select {
-	case conn := <-l.conns:
-		return conn, nil
-	case <-l.closed:
-	}
-
-	return nil, errors.New("accept on closed listener")
-}
-
-func (l *tunListener) Addr() net.Addr {
-	return l.addr
-}
-
-func (l *tunListener) Close() error {
-	select {
-	case <-l.closed:
-		return errors.New("listener has been closed")
-	default:
-		close(l.closed)
-	}
-	return nil
-}
-
 var mEtherTypes = map[waterutil.Ethertype]string{
 	waterutil.IPv4: "ip",
 	waterutil.ARP:  "arp",
@@ -396,17 +372,70 @@ func hwAddrToTapRouteKey(addr net.HardwareAddr) (key tapRouteKey) {
 	return
 }
 
+type tapListener struct {
+	addr   net.Addr
+	conns  chan net.Conn
+	closed chan struct{}
+	config TapConfig
+}
+
+// TapListener creates a listener for tap tunnel.
+func TapListener(cfg TapConfig) (Listener, error) {
+	threads := 1
+	ln := &tapListener{
+		conns:  make(chan net.Conn, threads),
+		closed: make(chan struct{}),
+		config: cfg,
+	}
+
+	for i := 0; i < threads; i++ {
+		conn, ifce, err := createTap(cfg)
+		if err != nil {
+			return nil, err
+		}
+		ln.addr = conn.LocalAddr()
+
+		addrs, _ := ifce.Addrs()
+		log.Logf("[tap] %s: name: %s, mac: %s, mtu: %d, addrs: %s",
+			conn.LocalAddr(), ifce.Name, ifce.HardwareAddr, ifce.MTU, addrs)
+
+		ln.conns <- conn
+	}
+	return ln, nil
+}
+
+func (l *tapListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.conns:
+		return conn, nil
+	case <-l.closed:
+	}
+
+	return nil, errors.New("accept on closed listener")
+}
+
+func (l *tapListener) Addr() net.Addr {
+	return l.addr
+}
+
+func (l *tapListener) Close() error {
+	select {
+	case <-l.closed:
+		return errors.New("listener has been closed")
+	default:
+		close(l.closed)
+	}
+	return nil
+}
+
 type tapHandler struct {
-	raddr   string
 	options *HandlerOptions
-	ifce    *net.Interface
 	routes  sync.Map
 }
 
 // TapHandler creates a handler for tap tunnel.
-func TapHandler(raddr string, opts ...HandlerOption) Handler {
+func TapHandler(opts ...HandlerOption) Handler {
 	h := &tapHandler{
-		raddr:   raddr,
 		options: &HandlerOptions{},
 	}
 	for _, opt := range opts {
@@ -429,49 +458,44 @@ func (h *tapHandler) Handle(conn net.Conn) {
 	defer os.Exit(0)
 	defer conn.Close()
 
-	uc, ok := conn.(net.PacketConn)
-	if !ok {
-		log.Log("[tap] wrong connection type, must be PacketConn")
-		return
-	}
-
-	tc, err := h.createTap()
-	if err != nil {
-		log.Logf("[tap] %s create tap: %v", conn.LocalAddr(), err)
-		return
-	}
-	defer tc.Close()
-
-	addrs, _ := h.ifce.Addrs()
-	log.Logf("[tap] %s - %s: name: %s, mac: %s, mtu: %d, addrs: %s",
-		tc.LocalAddr(), conn.LocalAddr(),
-		h.ifce.Name, h.ifce.HardwareAddr, h.ifce.MTU, addrs)
-
-	var raddr net.Addr
-	if h.raddr != "" {
-		raddr, err = net.ResolveUDPAddr("udp", h.raddr)
-		if err != nil {
-			log.Logf("[tap] %s - %s remote addr: %v", tc.LocalAddr(), conn.LocalAddr(), err)
-			return
+	laddr, raddr := h.options.Node.Addr, h.options.Node.Remote
+	var pc net.PacketConn
+	var err error
+	if h.options.TCPMode {
+		if raddr != "" {
+			pc, err = tcpraw.Dial("tcp", raddr)
+		} else {
+			pc, err = tcpraw.Listen("tcp", laddr)
 		}
+	} else {
+		addr, _ := net.ResolveUDPAddr("udp", laddr)
+		pc, err = net.ListenUDP("udp", addr)
+	}
+	if err != nil {
+		log.Logf("[tap] %s: %v", conn.LocalAddr(), err)
+		return
 	}
 
 	if len(h.options.Users) > 0 && h.options.Users[0] != nil {
 		passwd, _ := h.options.Users[0].Password()
 		cipher, err := core.PickCipher(h.options.Users[0].Username(), nil, passwd)
 		if err != nil {
-			log.Logf("[tap] %s - %s cipher: %v", tc.LocalAddr(), conn.LocalAddr(), err)
+			log.Logf("[tap] %s - %s cipher: %v", conn.LocalAddr(), pc.LocalAddr(), err)
 			return
 		}
-		uc = cipher.PacketConn(uc)
+		pc = cipher.PacketConn(pc)
 	}
 
-	h.transportTap(tc, uc, raddr)
-}
+	var ra net.Addr
+	if raddr != "" {
+		ra, err = net.ResolveUDPAddr("udp", raddr)
+		if err != nil {
+			log.Logf("[tap] %s - %s: remote addr: %v", conn.LocalAddr(), pc.LocalAddr(), err)
+			return
+		}
+	}
 
-func (h *tapHandler) createTap() (conn net.Conn, err error) {
-	conn, h.ifce, err = createTap(h.options.TapConfig)
-	return
+	h.transportTap(conn, pc, ra)
 }
 
 func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.Addr) error {
@@ -549,12 +573,6 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 				dst := waterutil.MACDestination(b[:n])
 				eType := etherType(waterutil.MACEthertype(b[:n]))
 
-				// ignore the frame send by myself
-				if bytes.Equal(src, h.ifce.HardwareAddr) {
-					log.Logf("[tap] %s -> %s %s %d ignored", src, dst, eType, n)
-					return nil
-				}
-
 				if Debug {
 					log.Logf("[tap] %s -> %s %s %d", src, dst, eType, n)
 				}
@@ -615,79 +633,6 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 	return err
 }
 
-type TapListenConfig struct {
-	TCP        bool
-	RemoteAddr string
-}
-
-type tapListener struct {
-	addr   net.Addr
-	conns  chan net.Conn
-	closed chan struct{}
-	config TapListenConfig
-}
-
-// TapListener creates a listener for tap tunnel.
-func TapListener(addr string, cfg TapListenConfig) (Listener, error) {
-	laddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	threads := 1
-	ln := &tapListener{
-		addr:   laddr,
-		conns:  make(chan net.Conn, threads),
-		closed: make(chan struct{}),
-		config: cfg,
-	}
-
-	for i := 0; i < threads; i++ {
-		var conn net.Conn
-		if cfg.TCP {
-			var c *tcpraw.TCPConn
-			if cfg.RemoteAddr != "" {
-				c, err = tcpraw.Dial("tcp", cfg.RemoteAddr)
-			} else {
-				c, err = tcpraw.Listen("tcp", addr)
-			}
-			conn = &rawTCPConn{c}
-		} else {
-			conn, err = net.ListenUDP("udp", laddr)
-		}
-		if err != nil {
-			return nil, err
-		}
-		ln.conns <- conn
-	}
-
-	return ln, nil
-}
-
-func (l *tapListener) Accept() (net.Conn, error) {
-	select {
-	case conn := <-l.conns:
-		return conn, nil
-	case <-l.closed:
-	}
-
-	return nil, errors.New("accept on closed listener")
-}
-
-func (l *tapListener) Addr() net.Addr {
-	return l.addr
-}
-
-func (l *tapListener) Close() error {
-	select {
-	case <-l.closed:
-		return errors.New("listener has been closed")
-	default:
-		close(l.closed)
-	}
-	return nil
-}
-
 type tunTapConn struct {
 	ifce *water.Interface
 	addr net.Addr
@@ -723,24 +668,6 @@ func (c *tunTapConn) SetReadDeadline(t time.Time) error {
 
 func (c *tunTapConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "tuntap", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
-}
-
-type rawTCPConn struct {
-	*tcpraw.TCPConn
-}
-
-func (c *rawTCPConn) Read(b []byte) (n int, err error) {
-	err = &net.OpError{Op: "read", Net: "rawtcp", Source: nil, Addr: nil, Err: errors.New("read not supported")}
-	return
-}
-
-func (c *rawTCPConn) Write(b []byte) (n int, err error) {
-	err = &net.OpError{Op: "write", Net: "rawtcp", Source: nil, Addr: nil, Err: errors.New("write not supported")}
-	return
-}
-
-func (c *rawTCPConn) RemoteAddr() net.Addr {
-	return &net.IPAddr{}
 }
 
 func IsIPv6Multicast(addr net.HardwareAddr) bool {
