@@ -132,14 +132,14 @@ func BenchmarkHTTP2ProxyParallel(b *testing.B) {
 func httpOverH2Roundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := H2Listener("", tlsConfig)
+	ln, err := H2Listener("", tlsConfig, "/h2")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(clientInfo),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -186,14 +186,14 @@ func BenchmarkHTTPOverH2(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := H2Listener("", nil)
+	ln, err := H2Listener("", nil, "/h2")
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -219,14 +219,14 @@ func BenchmarkHTTPOverH2Parallel(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := H2Listener("", nil)
+	ln, err := H2Listener("", nil, "/h2")
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -250,14 +250,14 @@ func BenchmarkHTTPOverH2Parallel(b *testing.B) {
 func socks5OverH2Roundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := H2Listener("", tlsConfig)
+	ln, err := H2Listener("", tlsConfig, "/h2")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS5Connector(clientInfo),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -300,14 +300,14 @@ func TestSOCKS5OverH2(t *testing.T) {
 }
 
 func socks4OverH2Roundtrip(targetURL string, data []byte, tlsConfig *tls.Config) error {
-	ln, err := H2Listener("", tlsConfig)
+	ln, err := H2Listener("", tlsConfig, "/h2")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4Connector(),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -336,14 +336,14 @@ func TestSOCKS4OverH2(t *testing.T) {
 }
 
 func socks4aOverH2Roundtrip(targetURL string, data []byte, tlsConfig *tls.Config) error {
-	ln, err := H2Listener("", tlsConfig)
+	ln, err := H2Listener("", tlsConfig, "/h2")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4AConnector(),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -374,14 +374,14 @@ func TestSOCKS4AOverH2(t *testing.T) {
 func ssOverH2Roundtrip(targetURL string, data []byte, tlsConfig *tls.Config,
 	clientInfo, serverInfo *url.Userinfo) error {
 
-	ln, err := H2Listener("", tlsConfig)
+	ln, err := H2Listener("", tlsConfig, "/h2")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   ShadowConnector(clientInfo),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -424,7 +424,7 @@ func TestSSOverH2(t *testing.T) {
 }
 
 func sniOverH2Roundtrip(targetURL string, data []byte, host string) error {
-	ln, err := H2Listener("", nil)
+	ln, err := H2Listener("", nil, "/h2")
 	if err != nil {
 		return err
 	}
@@ -436,7 +436,7 @@ func sniOverH2Roundtrip(targetURL string, data []byte, host string) error {
 
 	client := &Client{
 		Connector:   SNIConnector(host),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, "/h2"),
 	}
 
 	server := &Server{
@@ -489,7 +489,7 @@ func TestSNIOverH2(t *testing.T) {
 }
 
 func h2ForwardTunnelRoundtrip(targetURL string, data []byte) error {
-	ln, err := H2Listener("", nil)
+	ln, err := H2Listener("", nil, "")
 	if err != nil {
 		return err
 	}
@@ -501,7 +501,7 @@ func h2ForwardTunnelRoundtrip(targetURL string, data []byte) error {
 
 	client := &Client{
 		Connector:   ForwardConnector(),
-		Transporter: H2Transporter(nil),
+		Transporter: H2Transporter(nil, ""),
 	}
 
 	server := &Server{
@@ -532,14 +532,14 @@ func TestH2ForwardTunnel(t *testing.T) {
 func httpOverH2CRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(clientInfo),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -586,14 +586,14 @@ func BenchmarkHTTPOverH2C(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -619,14 +619,14 @@ func BenchmarkHTTPOverH2CParallel(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		b.Error(err)
 	}
 
 	client := &Client{
 		Connector:   HTTPConnector(url.UserPassword("admin", "123456")),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -650,14 +650,14 @@ func BenchmarkHTTPOverH2CParallel(b *testing.B) {
 func socks5OverH2CRoundtrip(targetURL string, data []byte,
 	clientInfo *url.Userinfo, serverInfo []*url.Userinfo) error {
 
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS5Connector(clientInfo),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -699,14 +699,14 @@ func TestSOCKS5OverH2C(t *testing.T) {
 }
 
 func socks4OverH2CRoundtrip(targetURL string, data []byte) error {
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4Connector(),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -735,14 +735,14 @@ func TestSOCKS4OverH2C(t *testing.T) {
 }
 
 func socks4aOverH2CRoundtrip(targetURL string, data []byte) error {
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   SOCKS4AConnector(),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -773,14 +773,14 @@ func TestSOCKS4AOverH2C(t *testing.T) {
 func ssOverH2CRoundtrip(targetURL string, data []byte,
 	clientInfo, serverInfo *url.Userinfo) error {
 
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		return err
 	}
 
 	client := &Client{
 		Connector:   ShadowConnector(clientInfo),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -822,7 +822,7 @@ func TestSSOverH2C(t *testing.T) {
 }
 
 func sniOverH2CRoundtrip(targetURL string, data []byte, host string) error {
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "/h2c")
 	if err != nil {
 		return err
 	}
@@ -834,7 +834,7 @@ func sniOverH2CRoundtrip(targetURL string, data []byte, host string) error {
 
 	client := &Client{
 		Connector:   SNIConnector(host),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter("/h2c"),
 	}
 
 	server := &Server{
@@ -887,7 +887,7 @@ func TestSNIOverH2C(t *testing.T) {
 }
 
 func h2cForwardTunnelRoundtrip(targetURL string, data []byte) error {
-	ln, err := H2CListener("")
+	ln, err := H2CListener("", "")
 	if err != nil {
 		return err
 	}
@@ -899,7 +899,7 @@ func h2cForwardTunnelRoundtrip(targetURL string, data []byte) error {
 
 	client := &Client{
 		Connector:   ForwardConnector(),
-		Transporter: H2CTransporter(),
+		Transporter: H2CTransporter(""),
 	}
 
 	server := &Server{
