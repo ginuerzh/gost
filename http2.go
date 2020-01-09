@@ -79,6 +79,7 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 	}
 	resp, err := cc.client.Do(req)
 	if err != nil {
+		cc.Close()
 		return nil, err
 	}
 	if Debug {
@@ -130,11 +131,11 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 
 	client, ok := tr.clients[addr]
 	if !ok {
-		// NOTE: due to the dummy connection, HTTP2 node in a proxy chain can not be marked as dead.
-		// There is no real connection to the HTTP2 server at this moment.
-		// So we should try to connect the server.
+		// NOTE: There is no real connection to the HTTP2 server at this moment.
+		// So we try to connect to the server to check the server health.
 		conn, err := opts.Chain.Dial(addr)
 		if err != nil {
+			log.Log("http2 dial:", addr, err)
 			return nil, err
 		}
 		conn.Close()
@@ -163,6 +164,11 @@ func (tr *http2Transporter) Dial(addr string, options ...DialOption) (net.Conn, 
 	return &http2ClientConn{
 		addr:   addr,
 		client: client,
+		onClose: func() {
+			tr.clientMutex.Lock()
+			defer tr.clientMutex.Unlock()
+			delete(tr.clients, addr)
+		},
 	}, nil
 }
 
@@ -889,8 +895,16 @@ func (c *http2ServerConn) SetWriteDeadline(t time.Time) error {
 // a dummy HTTP2 client conn used by HTTP2 client connector
 type http2ClientConn struct {
 	nopConn
-	addr   string
-	client *http.Client
+	addr    string
+	client  *http.Client
+	onClose func()
+}
+
+func (c *http2ClientConn) Close() error {
+	if c.onClose != nil {
+		c.onClose()
+	}
+	return nil
 }
 
 type flushWriter struct {
