@@ -163,10 +163,9 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "http2":
 		tr = gost.HTTP2Transporter(tlsCfg)
 	case "h2":
-		tr = gost.H2Transporter(tlsCfg)
+		tr = gost.H2Transporter(tlsCfg, node.Get("path"))
 	case "h2c":
-		tr = gost.H2CTransporter()
-
+		tr = gost.H2CTransporter(node.Get("path"))
 	case "obfs4":
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
@@ -348,9 +347,9 @@ func (r *route) GenRouters() ([]router, error) {
 		case "http2":
 			ln, err = gost.HTTP2Listener(node.Addr, tlsCfg)
 		case "h2":
-			ln, err = gost.H2Listener(node.Addr, tlsCfg)
+			ln, err = gost.H2Listener(node.Addr, tlsCfg, node.Get("path"))
 		case "h2c":
-			ln, err = gost.H2CListener(node.Addr)
+			ln, err = gost.H2CListener(node.Addr, node.Get("path"))
 		case "tcp":
 			// Directly use SSH port forwarding if the last chain node is forward+ssh
 			if chain.LastNode().Protocol == "forward" && chain.LastNode().Transport == "ssh" {
