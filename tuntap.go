@@ -15,7 +15,6 @@ import (
 	"github.com/shadowsocks/go-shadowsocks2/shadowstream"
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
-	"github.com/xtaci/tcpraw"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -472,12 +471,14 @@ func (l *tapListener) Close() error {
 type tapHandler struct {
 	options *HandlerOptions
 	routes  sync.Map
+	chExit  chan struct{}
 }
 
 // TapHandler creates a handler for tap tunnel.
 func TapHandler(opts ...HandlerOption) Handler {
 	h := &tapHandler{
 		options: &HandlerOptions{},
+		chExit:  make(chan struct{}, 1),
 	}
 	for _, opt := range opts {
 		opt(h.options)
@@ -499,44 +500,76 @@ func (h *tapHandler) Handle(conn net.Conn) {
 	defer os.Exit(0)
 	defer conn.Close()
 
-	laddr, raddr := h.options.Node.Addr, h.options.Node.Remote
-	var pc net.PacketConn
 	var err error
-	if h.options.TCPMode {
-		if raddr != "" {
-			pc, err = tcpraw.Dial("tcp", raddr)
-		} else {
-			pc, err = tcpraw.Listen("tcp", laddr)
+	var raddr net.Addr
+	if addr := h.options.Node.Remote; addr != "" {
+		raddr, err = net.ResolveUDPAddr("udp", addr)
+		if err != nil {
+			log.Logf("[tap] %s: remote addr: %v", conn.LocalAddr(), err)
+			return
 		}
-	} else {
-		addr, _ := net.ResolveUDPAddr("udp", laddr)
-		pc, err = net.ListenUDP("udp", addr)
-	}
-	if err != nil {
-		log.Logf("[tap] %s: %v", conn.LocalAddr(), err)
-		return
 	}
 
+	var tempDelay time.Duration
+	for {
+		err := func() error {
+			var err error
+			var pc net.PacketConn
+			if raddr != nil && !h.options.Chain.IsEmpty() {
+				var cc net.Conn
+				cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
+				pc = &udpTunnelConn{Conn: cc, raddr: raddr}
+			} else {
+				laddr, _ := net.ResolveUDPAddr("udp", h.options.Node.Addr)
+				pc, err = net.ListenUDP("udp", laddr)
+			}
+			if err != nil {
+				return err
+			}
+
+			pc, err = h.initTunnelConn(pc)
+			if err != nil {
+				return err
+			}
+
+			return h.transportTap(conn, pc, raddr)
+		}()
+		if err != nil {
+			log.Logf("[tap] %s: %v", conn.LocalAddr(), err)
+		}
+
+		select {
+		case <-h.chExit:
+			return
+		default:
+		}
+
+		if err != nil {
+			if tempDelay == 0 {
+				tempDelay = 1000 * time.Millisecond
+			} else {
+				tempDelay *= 2
+			}
+			if max := 6 * time.Second; tempDelay > max {
+				tempDelay = max
+			}
+			time.Sleep(tempDelay)
+			continue
+		}
+		tempDelay = 0
+	}
+}
+
+func (h *tapHandler) initTunnelConn(pc net.PacketConn) (net.PacketConn, error) {
 	if len(h.options.Users) > 0 && h.options.Users[0] != nil {
 		passwd, _ := h.options.Users[0].Password()
 		cipher, err := core.PickCipher(h.options.Users[0].Username(), nil, passwd)
 		if err != nil {
-			log.Logf("[tap] %s - %s cipher: %v", conn.LocalAddr(), pc.LocalAddr(), err)
-			return
+			return nil, err
 		}
 		pc = cipher.PacketConn(pc)
 	}
-
-	var ra net.Addr
-	if raddr != "" {
-		ra, err = net.ResolveUDPAddr("udp", raddr)
-		if err != nil {
-			log.Logf("[tap] %s - %s: remote addr: %v", conn.LocalAddr(), pc.LocalAddr(), err)
-			return
-		}
-	}
-
-	h.transportTap(conn, pc, ra)
+	return pc, nil
 }
 
 func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.Addr) error {
@@ -550,6 +583,10 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 
 				n, err := tap.Read(b)
 				if err != nil {
+					select {
+					case h.chExit <- struct{}{}:
+					default:
+					}
 					return err
 				}
 
@@ -654,6 +691,10 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 				}
 
 				if _, err := tap.Write(b[:n]); err != nil {
+					select {
+					case h.chExit <- struct{}{}:
+					default:
+					}
 					return err
 				}
 				return nil
@@ -670,7 +711,6 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 	if err != nil && err == io.EOF {
 		err = nil
 	}
-	log.Logf("[tap] %s - %s: %v", tap.LocalAddr(), conn.LocalAddr(), err)
 	return err
 }
 
