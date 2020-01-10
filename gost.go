@@ -20,7 +20,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.9.0-dev"
+const Version = "2.9.0"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -80,7 +80,7 @@ var (
 	// DefaultUserAgent is the default HTTP User-Agent header used by HTTP and websocket.
 	DefaultUserAgent = "Chrome/78.0.3904.106"
 
-	DefaultMTU = 1350 // default mtu for tun device
+	DefaultMTU = 1350 // default mtu for tun/tap device
 )
 
 // SetLogger sets a new logger for internal log system.
