@@ -187,14 +187,15 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 		return
 	}
 
+	raddr, err := net.ResolveUDPAddr("udp", node.Addr)
+	if err != nil {
+		node.MarkDead()
+		log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
+		return
+	}
+
 	var cc net.Conn
 	if h.options.Chain.IsEmpty() {
-		raddr, err := net.ResolveUDPAddr("udp", node.Addr)
-		if err != nil {
-			node.MarkDead()
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
-			return
-		}
 		cc, err = net.DialUDP("udp", nil, raddr)
 		if err != nil {
 			node.MarkDead()
@@ -208,7 +209,8 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
-		cc = &udpTunnelConn{Conn: cc, raddr: node.Addr}
+
+		cc = &udpTunnelConn{Conn: cc, raddr: raddr}
 	}
 
 	defer cc.Close()
@@ -763,7 +765,7 @@ func (l *tcpRemoteForwardListener) getSession() (s *muxSession, err error) {
 	conn.SetDeadline(time.Now().Add(HandshakeTimeout))
 	defer conn.SetDeadline(time.Time{})
 
-	conn, err = socks5Handshake(conn, nil, l.chain.LastNode().User)
+	conn, err = socks5Handshake(conn, userSocks5HandshakeOption(l.chain.LastNode().User))
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +800,7 @@ func (l *tcpRemoteForwardListener) getSession() (s *muxSession, err error) {
 }
 
 func (l *tcpRemoteForwardListener) waitConnectSOCKS5(conn net.Conn) (net.Conn, error) {
-	conn, err := socks5Handshake(conn, nil, l.chain.LastNode().User)
+	conn, err := socks5Handshake(conn, userSocks5HandshakeOption(l.chain.LastNode().User))
 	if err != nil {
 		return nil, err
 	}

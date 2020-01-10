@@ -213,7 +213,9 @@ func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...Connect
 	if user == nil {
 		user = c.User
 	}
-	cc, err := socks5Handshake(conn, opts.Selector, user)
+	cc, err := socks5Handshake(conn,
+		selectorSocks5HandshakeOption(opts.Selector),
+		userSocks5HandshakeOption(user))
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +283,9 @@ func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...Con
 	if user == nil {
 		user = c.User
 	}
-	cc, err := socks5Handshake(conn, opts.Selector, user)
+	cc, err := socks5Handshake(conn,
+		selectorSocks5HandshakeOption(opts.Selector),
+		userSocks5HandshakeOption(user))
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +435,7 @@ func (tr *socks5MuxBindTransporter) initSession(conn net.Conn, addr string, opts
 		opts = &HandshakeOptions{}
 	}
 
-	cc, err := socks5Handshake(conn, nil, opts.User)
+	cc, err := socks5Handshake(conn, userSocks5HandshakeOption(opts.User))
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +519,9 @@ func (c *socks5UDPConnector) Connect(conn net.Conn, addr string, options ...Conn
 	if user == nil {
 		user = c.User
 	}
-	cc, err := socks5Handshake(conn, opts.Selector, user)
+	cc, err := socks5Handshake(conn,
+		selectorSocks5HandshakeOption(opts.Selector),
+		userSocks5HandshakeOption(user))
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +600,9 @@ func (c *socks5UDPTunConnector) Connect(conn net.Conn, addr string, options ...C
 	if user == nil {
 		user = c.User
 	}
-	cc, err := socks5Handshake(conn, opts.Selector, user)
+	cc, err := socks5Handshake(conn,
+		selectorSocks5HandshakeOption(opts.Selector),
+		userSocks5HandshakeOption(user))
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +644,7 @@ func (c *socks5UDPTunConnector) Connect(conn net.Conn, addr string, options ...C
 	}
 	log.Logf("[socks5] udp-tun associate on %s OK", baddr)
 
-	return &udpTunnelConn{Conn: conn, raddr: taddr.String()}, nil
+	return &udpTunnelConn{Conn: conn, raddr: taddr}, nil
 }
 
 type socks4Connector struct{}
@@ -1122,7 +1130,7 @@ func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
 	}
 	defer cc.Close()
 
-	cc, err = socks5Handshake(cc, nil, h.options.Chain.LastNode().User)
+	cc, err = socks5Handshake(cc, userSocks5HandshakeOption(h.options.Chain.LastNode().User))
 	if err != nil {
 		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), socksAddr, err)
 		return
@@ -1386,7 +1394,7 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 	}
 	defer cc.Close()
 
-	cc, err = socks5Handshake(cc, nil, h.options.Chain.LastNode().User)
+	cc, err = socks5Handshake(cc, userSocks5HandshakeOption(h.options.Chain.LastNode().User))
 	if err != nil {
 		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		return
@@ -1780,7 +1788,11 @@ func getSOCKS5UDPTunnel(chain *Chain, addr net.Addr) (net.Conn, error) {
 	conn.SetDeadline(time.Now().Add(HandshakeTimeout))
 	defer conn.SetDeadline(time.Time{})
 
-	cc, err := socks5Handshake(conn, nil, chain.LastNode().User)
+	node := chain.LastNode()
+	cc, err := socks5Handshake(conn,
+		userSocks5HandshakeOption(node.User),
+		noTLSSocks5HandshakeOption(node.GetBool("notls")),
+	)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -1813,17 +1825,51 @@ func getSOCKS5UDPTunnel(chain *Chain, addr net.Addr) (net.Conn, error) {
 	return conn, nil
 }
 
-func socks5Handshake(conn net.Conn, selector gosocks5.Selector, user *url.Userinfo) (net.Conn, error) {
+type socks5HandshakeOptions struct {
+	selector  gosocks5.Selector
+	user      *url.Userinfo
+	tlsConfig *tls.Config
+	noTLS     bool
+}
+
+type socks5HandshakeOption func(opts *socks5HandshakeOptions)
+
+func selectorSocks5HandshakeOption(selector gosocks5.Selector) socks5HandshakeOption {
+	return func(opts *socks5HandshakeOptions) {
+		opts.selector = selector
+	}
+}
+
+func userSocks5HandshakeOption(user *url.Userinfo) socks5HandshakeOption {
+	return func(opts *socks5HandshakeOptions) {
+		opts.user = user
+	}
+}
+
+func noTLSSocks5HandshakeOption(noTLS bool) socks5HandshakeOption {
+	return func(opts *socks5HandshakeOptions) {
+		opts.noTLS = noTLS
+	}
+}
+
+func socks5Handshake(conn net.Conn, opts ...socks5HandshakeOption) (net.Conn, error) {
+	options := socks5HandshakeOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	selector := options.selector
 	if selector == nil {
 		cs := &clientSelector{
 			TLSConfig: &tls.Config{InsecureSkipVerify: true},
-			User:      user,
+			User:      options.user,
 		}
 		cs.AddMethod(
 			gosocks5.MethodNoAuth,
 			gosocks5.MethodUserPass,
-			MethodTLS,
 		)
+		if !options.noTLS {
+			cs.AddMethod(MethodTLS)
+		}
 		selector = cs
 	}
 
@@ -1835,7 +1881,7 @@ func socks5Handshake(conn net.Conn, selector gosocks5.Selector, user *url.Userin
 }
 
 type udpTunnelConn struct {
-	raddr string
+	raddr net.Addr
 	net.Conn
 }
 
@@ -1859,11 +1905,7 @@ func (c *udpTunnelConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *udpTunnelConn) Write(b []byte) (n int, err error) {
-	addr, err := net.ResolveUDPAddr("udp", c.raddr)
-	if err != nil {
-		return
-	}
-	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(addr)), b)
+	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(c.raddr)), b)
 	if err = dgram.Write(c.Conn); err != nil {
 		return
 	}
