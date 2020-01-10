@@ -16,7 +16,7 @@ parts:
     source: https://github.com/ginuerzh/gost.git
     source-subdir: cmd/gost
     source-type: git
-    source-branch: '2.8'
+    source-branch: '2.9'
     build-packages:
       - build-essential
     override-build: |
