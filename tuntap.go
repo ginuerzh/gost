@@ -15,6 +15,7 @@ import (
 	"github.com/shadowsocks/go-shadowsocks2/shadowstream"
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
+	"github.com/xtaci/tcpraw"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -157,13 +158,22 @@ func (h *tunHandler) Handle(conn net.Conn) {
 		err := func() error {
 			var err error
 			var pc net.PacketConn
+			// fake tcp mode will be ignored when the client specifies a chain.
 			if raddr != nil && !h.options.Chain.IsEmpty() {
 				var cc net.Conn
 				cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
 				pc = &udpTunnelConn{Conn: cc, raddr: raddr}
 			} else {
-				laddr, _ := net.ResolveUDPAddr("udp", h.options.Node.Addr)
-				pc, err = net.ListenUDP("udp", laddr)
+				if h.options.TCPMode {
+					if raddr != nil {
+						pc, err = tcpraw.Dial("tcp", raddr.String())
+					} else {
+						pc, err = tcpraw.Listen("tcp", h.options.Node.Addr)
+					}
+				} else {
+					laddr, _ := net.ResolveUDPAddr("udp", h.options.Node.Addr)
+					pc, err = net.ListenUDP("udp", laddr)
+				}
 			}
 			if err != nil {
 				return err
@@ -515,13 +525,22 @@ func (h *tapHandler) Handle(conn net.Conn) {
 		err := func() error {
 			var err error
 			var pc net.PacketConn
+			// fake tcp mode will be ignored when the client specifies a chain.
 			if raddr != nil && !h.options.Chain.IsEmpty() {
 				var cc net.Conn
 				cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
 				pc = &udpTunnelConn{Conn: cc, raddr: raddr}
 			} else {
-				laddr, _ := net.ResolveUDPAddr("udp", h.options.Node.Addr)
-				pc, err = net.ListenUDP("udp", laddr)
+				if h.options.TCPMode {
+					if raddr != nil {
+						pc, err = tcpraw.Dial("tcp", raddr.String())
+					} else {
+						pc, err = tcpraw.Listen("tcp", h.options.Node.Addr)
+					}
+				} else {
+					laddr, _ := net.ResolveUDPAddr("udp", h.options.Node.Addr)
+					pc, err = net.ListenUDP("udp", laddr)
+				}
 			}
 			if err != nil {
 				return err
