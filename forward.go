@@ -534,7 +534,7 @@ func (c *udpServerConn) Write(b []byte) (n int, err error) {
 
 	if n > 0 {
 		if Debug {
-			log.Logf("[udp] %s <<< %s : length %d", c.RemoteAddr(), c.LocalAddr(), n)
+			log.Logf("[udp] %s <<< %s : length %d", c.raddr, c.LocalAddr(), n)
 		}
 
 		select {

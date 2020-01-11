@@ -171,6 +171,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "ohttp":
 		host = node.Get("host")
 		tr = gost.ObfsHTTPTransporter()
+	case "ftcp":
+		tr = gost.FakeTCPTransporter()
 	default:
 		tr = gost.TCPTransporter()
 	}
@@ -411,6 +413,15 @@ func (r *route) GenRouters() ([]router, error) {
 				Gateway: node.Get("gw"),
 			}
 			ln, err = gost.TapListener(cfg)
+		case "ftcp":
+			ln, err = gost.FakeTCPListener(
+				node.Addr,
+				&gost.FakeTCPListenConfig{
+					TTL:       ttl,
+					Backlog:   node.GetInt("backlog"),
+					QueueSize: node.GetInt("queue"),
+				},
+			)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
