@@ -139,6 +139,13 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		if err != nil {
 			return nil, err
 		}
+		if config == nil {
+			conf := gost.DefaultKCPConfig
+			if node.GetBool("tcp") {
+				conf.TCP = true
+			}
+			config = &conf
+		}
 		tr = gost.KCPTransporter(config)
 	case "ssh":
 		if node.Protocol == "direct" || node.Protocol == "remote" {
@@ -321,6 +328,13 @@ func (r *route) GenRouters() ([]router, error) {
 			config, er := parseKCPConfig(node.Get("c"))
 			if er != nil {
 				return nil, er
+			}
+			if config == nil {
+				conf := gost.DefaultKCPConfig
+				if node.GetBool("tcp") {
+					conf.TCP = true
+				}
+				config = &conf
 			}
 			ln, err = gost.KCPListener(node.Addr, config)
 		case "ssh":

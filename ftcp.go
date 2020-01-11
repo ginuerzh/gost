@@ -99,11 +99,7 @@ func (l *fakeTCPListener) listenLoop() {
 
 		conn, ok := l.connMap.Get(raddr.String())
 		if !ok {
-			cc := &fakeTCPConn{
-				raddr:      raddr,
-				PacketConn: l.ln,
-			}
-			conn = newUDPServerConn(cc, raddr, l.config.TTL, l.config.QueueSize)
+			conn = newUDPServerConn(l.ln, raddr, l.config.TTL, l.config.QueueSize)
 			conn.onClose = func() {
 				l.connMap.Delete(raddr.String())
 				log.Logf("[ftcp] %s closed (%d)", raddr, l.connMap.Size())
@@ -157,7 +153,6 @@ func (l *fakeTCPListener) Close() error {
 }
 
 type fakeTCPConn struct {
-	mss   int
 	raddr net.Addr
 	net.PacketConn
 }
@@ -169,33 +164,6 @@ func (c *fakeTCPConn) Read(b []byte) (n int, err error) {
 
 func (c *fakeTCPConn) Write(b []byte) (n int, err error) {
 	return c.WriteTo(b, c.raddr)
-}
-
-func (c *fakeTCPConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
-	mss := c.mss
-	if mss <= 0 {
-		mss = 1460
-	}
-
-	for {
-		if len(b) == 0 {
-			break
-		}
-		var nn int
-		if len(b) <= mss {
-			nn, err = c.PacketConn.WriteTo(b, addr)
-			n += nn
-			break
-		}
-		nn, err = c.PacketConn.WriteTo(b[:mss], addr)
-		n += nn
-		if err != nil {
-			break
-		}
-		b = b[mss:]
-	}
-
-	return
 }
 
 func (c *fakeTCPConn) RemoteAddr() net.Addr {
