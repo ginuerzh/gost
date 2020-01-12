@@ -42,6 +42,9 @@ type clientSelector struct {
 }
 
 func (selector *clientSelector) Methods() []uint8 {
+	if Debug {
+		log.Log("[socks5] methods:", selector.methods)
+	}
 	return selector.methods
 }
 
@@ -54,6 +57,9 @@ func (selector *clientSelector) Select(methods ...uint8) (method uint8) {
 }
 
 func (selector *clientSelector) OnSelected(method uint8, conn net.Conn) (net.Conn, error) {
+	if Debug {
+		log.Log("[socks5] method selected:", method)
+	}
 	switch method {
 	case MethodTLS:
 		conn = tls.Client(conn, selector.TLSConfig)
@@ -215,7 +221,9 @@ func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...Connect
 	}
 	cc, err := socks5Handshake(conn,
 		selectorSocks5HandshakeOption(opts.Selector),
-		userSocks5HandshakeOption(user))
+		userSocks5HandshakeOption(user),
+		noTLSSocks5HandshakeOption(opts.NoTLS),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +293,9 @@ func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...Con
 	}
 	cc, err := socks5Handshake(conn,
 		selectorSocks5HandshakeOption(opts.Selector),
-		userSocks5HandshakeOption(user))
+		userSocks5HandshakeOption(user),
+		noTLSSocks5HandshakeOption(opts.NoTLS),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +445,9 @@ func (tr *socks5MuxBindTransporter) initSession(conn net.Conn, addr string, opts
 		opts = &HandshakeOptions{}
 	}
 
-	cc, err := socks5Handshake(conn, userSocks5HandshakeOption(opts.User))
+	cc, err := socks5Handshake(conn,
+		userSocks5HandshakeOption(opts.User),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +533,9 @@ func (c *socks5UDPConnector) Connect(conn net.Conn, addr string, options ...Conn
 	}
 	cc, err := socks5Handshake(conn,
 		selectorSocks5HandshakeOption(opts.Selector),
-		userSocks5HandshakeOption(user))
+		userSocks5HandshakeOption(user),
+		noTLSSocks5HandshakeOption(opts.NoTLS),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +616,9 @@ func (c *socks5UDPTunConnector) Connect(conn net.Conn, addr string, options ...C
 	}
 	cc, err := socks5Handshake(conn,
 		selectorSocks5HandshakeOption(opts.Selector),
-		userSocks5HandshakeOption(user))
+		userSocks5HandshakeOption(user),
+		noTLSSocks5HandshakeOption(opts.NoTLS),
+	)
 	if err != nil {
 		return nil, err
 	}

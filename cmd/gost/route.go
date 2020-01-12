@@ -220,6 +220,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 
 	node.ConnectOptions = []gost.ConnectOption{
 		gost.UserAgentConnectOption(node.Get("agent")),
+		gost.NoTLSConnectOption(node.GetBool("notls")),
 	}
 
 	if host == "" {

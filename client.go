@@ -243,6 +243,7 @@ type ConnectOptions struct {
 	User      *url.Userinfo
 	Selector  gosocks5.Selector
 	UserAgent string
+	NoTLS     bool
 }
 
 // ConnectOption allows a common way to set ConnectOptions.
@@ -280,5 +281,12 @@ func SelectorConnectOption(s gosocks5.Selector) ConnectOption {
 func UserAgentConnectOption(ua string) ConnectOption {
 	return func(opts *ConnectOptions) {
 		opts.UserAgent = ua
+	}
+}
+
+// NoTLSConnectOption specifies the SOCKS5 method without TLS.
+func NoTLSConnectOption(b bool) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.NoTLS = b
 	}
 }
