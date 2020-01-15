@@ -12,6 +12,20 @@ import (
 	"github.com/miekg/dns"
 )
 
+var (
+	defaultResolver Resolver
+)
+
+func init() {
+	defaultResolver = NewResolver(
+		DefaultResolverTimeout,
+		NameServer{
+			Addr:     "127.0.0.1:53",
+			Protocol: "udp",
+		})
+	defaultResolver.Init()
+}
+
 type dnsHandler struct {
 	options *HandlerOptions
 }
@@ -58,7 +72,12 @@ func (h *dnsHandler) Handle(conn net.Conn) {
 	}
 
 	start := time.Now()
-	reply, err := h.options.Resolver.Exchange(context.Background(), b[:n])
+
+	resolver := h.options.Resolver
+	if resolver == nil {
+		resolver = defaultResolver
+	}
+	reply, err := resolver.Exchange(context.Background(), b[:n])
 	if err != nil {
 		log.Logf("[dns] %s - %s exchange: %v", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
