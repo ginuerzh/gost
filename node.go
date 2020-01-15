@@ -84,6 +84,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "ohttp": // obfs-http
 	case "tun", "tap": // tun/tap device
 	case "ftcp": // fake TCP
+	case "dns", "dot", "doh":
 	default:
 		node.Transport = "tcp"
 	}
@@ -97,6 +98,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "redirect": // TCP transparent proxy
 	case "tun", "tap": // tun/tap device
 	case "ftcp": // fake TCP
+	case "dns", "dot", "doh":
 	default:
 		node.Protocol = ""
 	}

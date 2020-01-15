@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/miekg/dns"
-	"golang.org/x/net/http2"
 )
 
 var (
@@ -25,18 +24,23 @@ var (
 	DefaultResolverTimeout = 5 * time.Second
 )
 
-// Resolver is a name resolver for domain name.
-// It contains a list of name servers.
-type Resolver interface {
-	// Resolve returns a slice of that host's IPv4 and IPv6 addresses.
-	Resolve(host string) ([]net.IP, error)
+type nameServerOptions struct {
+	timeout time.Duration
+	chain   *Chain
 }
 
-// ReloadResolver is resolover that support live reloading.
-type ReloadResolver interface {
-	Resolver
-	Reloader
-	Stoppable
+type NameServerOption func(*nameServerOptions)
+
+func TimeoutNameServerOption(timeout time.Duration) NameServerOption {
+	return func(opts *nameServerOptions) {
+		opts.timeout = timeout
+	}
+}
+
+func ChainNameServerOption(chain *Chain) NameServerOption {
+	return func(opts *nameServerOptions) {
+		opts.chain = chain
+	}
 }
 
 // NameServer is a name server.
@@ -45,26 +49,23 @@ type NameServer struct {
 	Addr      string
 	Protocol  string
 	Hostname  string // for TLS handshake verification
-	Timeout   time.Duration
 	exchanger Exchanger
+	options   nameServerOptions
 }
 
 // Init initializes the name server.
-func (ns *NameServer) Init() error {
-	timeout := ns.Timeout
-	if timeout <= 0 {
-		timeout = DefaultResolverTimeout
+func (ns *NameServer) Init(opts ...NameServerOption) error {
+	for _, opt := range opts {
+		opt(&ns.options)
 	}
 
 	switch strings.ToLower(ns.Protocol) {
 	case "tcp":
-		ns.exchanger = &dnsExchanger{
-			endpoint: ns.Addr,
-			client: &dns.Client{
-				Net:     "tcp",
-				Timeout: timeout,
-			},
-		}
+		ns.exchanger = NewDNSTCPExchanger(
+			ns.Addr,
+			TimeoutExchangerOption(ns.options.timeout),
+			ChainExchangerOption(ns.options.chain),
+		)
 	case "tls":
 		cfg := &tls.Config{
 			ServerName: ns.Hostname,
@@ -72,51 +73,39 @@ func (ns *NameServer) Init() error {
 		if cfg.ServerName == "" {
 			cfg.InsecureSkipVerify = true
 		}
-
-		ns.exchanger = &dnsExchanger{
-			endpoint: ns.Addr,
-			client: &dns.Client{
-				Net:       "tcp-tls",
-				Timeout:   timeout,
-				TLSConfig: cfg,
-			},
-		}
+		ns.exchanger = NewDoTExchanger(
+			ns.Addr, cfg,
+			TimeoutExchangerOption(ns.options.timeout),
+			ChainExchangerOption(ns.options.chain),
+		)
 	case "https":
 		u, err := url.Parse(ns.Addr)
 		if err != nil {
 			return err
 		}
 		cfg := &tls.Config{ServerName: u.Hostname()}
-		transport := &http.Transport{
-			TLSClientConfig:    cfg,
-			DisableCompression: true,
-			MaxIdleConns:       1,
+		if cfg.ServerName == "" {
+			cfg.InsecureSkipVerify = true
 		}
-		http2.ConfigureTransport(transport)
-
-		ns.exchanger = &dohExchanger{
-			endpoint: u,
-			client: &http.Client{
-				Transport: transport,
-				Timeout:   timeout,
-			},
-		}
+		ns.exchanger = NewDoHExchanger(
+			u, cfg,
+			TimeoutExchangerOption(ns.options.timeout),
+			ChainExchangerOption(ns.options.chain),
+		)
 	case "udp":
 		fallthrough
 	default:
-		ns.exchanger = &dnsExchanger{
-			endpoint: ns.Addr,
-			client: &dns.Client{
-				Net:     "udp",
-				Timeout: timeout,
-			},
-		}
+		ns.exchanger = NewDNSExchanger(
+			ns.Addr,
+			TimeoutExchangerOption(ns.options.timeout),
+			ChainExchangerOption(ns.options.chain),
+		)
 	}
 
 	return nil
 }
 
-func (ns NameServer) String() string {
+func (ns *NameServer) String() string {
 	addr := ns.Addr
 	prot := ns.Protocol
 	if _, port, _ := net.SplitHostPort(addr); port == "" {
@@ -128,15 +117,48 @@ func (ns NameServer) String() string {
 	return fmt.Sprintf("%s/%s", addr, prot)
 }
 
+type resolverOptions struct {
+	chain *Chain
+}
+
+type ResolverOption func(*resolverOptions)
+
+func ChainResolverOption(chain *Chain) ResolverOption {
+	return func(opts *resolverOptions) {
+		opts.chain = chain
+	}
+}
+
+// Resolver is a name resolver for domain name.
+// It contains a list of name servers.
+type Resolver interface {
+	// Init initializes the Resolver instance.
+	Init(opts ...ResolverOption) error
+	// Resolve returns a slice of that host's IPv4 and IPv6 addresses.
+	Resolve(host string) ([]net.IP, error)
+	// Exchange performs a synchronous query,
+	// It sends the message query and waits for a reply.
+	Exchange(ctx context.Context, query []byte) (reply []byte, err error)
+}
+
+// ReloadResolver is resolover that support live reloading.
+type ReloadResolver interface {
+	Resolver
+	Reloader
+	Stoppable
+}
+
 type resolver struct {
 	Servers []NameServer
 	mCache  *sync.Map
 	TTL     time.Duration
+	timeout time.Duration
 	period  time.Duration
 	domain  string
 	stopped chan struct{}
 	mux     sync.RWMutex
 	prefer  string // ipv4 or ipv6
+	options resolverOptions
 }
 
 // NewResolver create a new Resolver with the given name servers and resolution timeout.
@@ -152,6 +174,34 @@ func newResolver(ttl time.Duration, servers ...NameServer) *resolver {
 		mCache:  &sync.Map{},
 		stopped: make(chan struct{}),
 	}
+}
+
+func (r *resolver) Init(opts ...ResolverOption) error {
+	if r == nil {
+		return nil
+	}
+
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
+	for _, opt := range opts {
+		opt(&r.options)
+	}
+
+	var nss []NameServer
+	for _, ns := range r.Servers {
+		if err := ns.Init( // init all name servers
+			ChainNameServerOption(r.options.chain),
+			TimeoutNameServerOption(r.timeout),
+		); err != nil {
+			continue // ignore invalid name servers
+		}
+		nss = append(nss, ns)
+	}
+
+	r.Servers = nss
+
+	return nil
 }
 
 func (r *resolver) copyServers() []NameServer {
@@ -196,12 +246,12 @@ func (r *resolver) Resolve(host string) (ips []net.IP, err error) {
 	for _, ns := range servers {
 		ips, ttl, err = r.resolve(ns.exchanger, host)
 		if err != nil {
-			log.Logf("[resolver] %s via %s : %s", host, ns, err)
+			log.Logf("[resolver] %s via %s : %s", host, ns.String(), err)
 			continue
 		}
 
 		if Debug {
-			log.Logf("[resolver] %s via %s %v(ttl: %v)", host, ns, ips, ttl)
+			log.Logf("[resolver] %s via %s %v(ttl: %v)", host, ns.String(), ips, ttl)
 		}
 		if len(ips) > 0 {
 			break
@@ -233,10 +283,24 @@ func (r *resolver) resolve(ex Exchanger, host string) (ips []net.IP, ttl time.Du
 }
 
 func (*resolver) resolveIPs(ctx context.Context, ex Exchanger, query *dns.Msg) (ips []net.IP, ttl time.Duration, err error) {
-	mr, err := ex.Exchange(ctx, query)
+	// buf := mPool.Get().([]byte)
+	// defer mPool.Put(buf)
+
+	//	buf = buf[:0]
+	//	mq, err := query.PackBuffer(buf)
+	mq, err := query.Pack()
 	if err != nil {
 		return
 	}
+	reply, err := ex.Exchange(ctx, mq)
+	if err != nil {
+		return
+	}
+	mr := &dns.Msg{}
+	if err = mr.Unpack(reply); err != nil {
+		return
+	}
+
 	for _, ans := range mr.Answer {
 		if ar, _ := ans.(*dns.AAAA); ar != nil {
 			ips = append(ips, ar.AAAA)
@@ -245,6 +309,25 @@ func (*resolver) resolveIPs(ctx context.Context, ex Exchanger, query *dns.Msg) (
 		if ar, _ := ans.(*dns.A); ar != nil {
 			ips = append(ips, ar.A)
 			ttl = time.Duration(ar.Header().Ttl) * time.Second
+		}
+	}
+	return
+}
+
+func (r *resolver) Exchange(ctx context.Context, query []byte) (reply []byte, err error) {
+	if r == nil {
+		return
+	}
+
+	var servers []NameServer
+	r.mux.RLock()
+	servers = r.copyServers()
+	r.mux.RUnlock()
+
+	for _, ns := range servers {
+		reply, err = ns.exchanger.Exchange(ctx, query)
+		if err == nil {
+			return
 		}
 	}
 	return
@@ -352,11 +435,7 @@ func (r *resolver) Reload(rd io.Reader) error {
 			if strings.HasPrefix(ns.Addr, "https") {
 				ns.Protocol = "https"
 			}
-			ns.Timeout = timeout
-
-			if err := ns.Init(); err == nil {
-				nss = append(nss, ns)
-			}
+			nss = append(nss, ns)
 		}
 	}
 
@@ -366,11 +445,14 @@ func (r *resolver) Reload(rd io.Reader) error {
 
 	r.mux.Lock()
 	r.TTL = ttl
+	r.timeout = timeout
 	r.domain = domain
 	r.period = period
 	r.prefer = prefer
 	r.Servers = nss
 	r.mux.Unlock()
+
+	r.Init()
 
 	return nil
 }
@@ -425,62 +507,270 @@ func (r *resolver) String() string {
 
 // Exchanger is an interface for DNS synchronous query.
 type Exchanger interface {
-	Exchange(ctx context.Context, query *dns.Msg) (*dns.Msg, error)
+	Exchange(ctx context.Context, query []byte) ([]byte, error)
+}
+
+type exchangerOptions struct {
+	chain   *Chain
+	timeout time.Duration
+}
+
+type ExchangerOption func(opts *exchangerOptions)
+
+func ChainExchangerOption(chain *Chain) ExchangerOption {
+	return func(opts *exchangerOptions) {
+		opts.chain = chain
+	}
+}
+
+func TimeoutExchangerOption(timeout time.Duration) ExchangerOption {
+	return func(opts *exchangerOptions) {
+		opts.timeout = timeout
+	}
 }
 
 type dnsExchanger struct {
-	endpoint string
-	client   *dns.Client
+	addr    string
+	options exchangerOptions
 }
 
-func (ex *dnsExchanger) Exchange(ctx context.Context, query *dns.Msg) (*dns.Msg, error) {
-	ep := ex.endpoint
-	if _, port, _ := net.SplitHostPort(ep); port == "" {
-		ep = net.JoinHostPort(ep, "53")
+func NewDNSExchanger(addr string, opts ...ExchangerOption) Exchanger {
+	var options exchangerOptions
+	for _, opt := range opts {
+		opt(&options)
 	}
-	mr, _, err := ex.client.Exchange(query, ep)
-	return mr, err
+
+	if _, port, _ := net.SplitHostPort(addr); port == "" {
+		addr = net.JoinHostPort(addr, "53")
+	}
+
+	return &dnsExchanger{
+		addr:    addr,
+		options: options,
+	}
+}
+
+func (ex *dnsExchanger) dial(ctx context.Context, network, address string) (conn net.Conn, err error) {
+	if ex.options.chain.IsEmpty() {
+		d := &net.Dialer{
+			Timeout: ex.options.timeout,
+		}
+		return d.DialContext(ctx, network, address)
+	}
+
+	raddr, err := net.ResolveUDPAddr(network, address)
+	if err != nil {
+		return
+	}
+	cc, err := getSOCKS5UDPTunnel(ex.options.chain, nil)
+	conn = &udpTunnelConn{Conn: cc, raddr: raddr}
+	return
+}
+
+func (ex *dnsExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	c, err := ex.dial(ctx, "udp", ex.addr)
+	if err != nil {
+		return nil, err
+	}
+
+	mq := &dns.Msg{}
+	if err = mq.Unpack(query); err != nil {
+		return nil, err
+	}
+
+	conn := &dns.Conn{
+		Conn: c,
+	}
+
+	if err = conn.WriteMsg(mq); err != nil {
+		return nil, err
+	}
+
+	mr, err := conn.ReadMsg()
+	if err != nil {
+		return nil, err
+	}
+
+	return mr.Pack()
+}
+
+type dnsTCPExchanger struct {
+	addr    string
+	options exchangerOptions
+}
+
+func NewDNSTCPExchanger(addr string, opts ...ExchangerOption) Exchanger {
+	var options exchangerOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	if _, port, _ := net.SplitHostPort(addr); port == "" {
+		addr = net.JoinHostPort(addr, "53")
+	}
+
+	return &dnsTCPExchanger{
+		addr:    addr,
+		options: options,
+	}
+}
+
+func (ex *dnsTCPExchanger) dial(ctx context.Context, network, address string) (conn net.Conn, err error) {
+	if ex.options.chain.IsEmpty() {
+		d := &net.Dialer{
+			Timeout: ex.options.timeout,
+		}
+		return d.DialContext(ctx, network, address)
+	}
+	return ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
+}
+
+func (ex *dnsTCPExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	c, err := ex.dial(ctx, "tcp", ex.addr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn := &dns.Conn{
+		Conn: c,
+	}
+
+	if _, err = conn.Write(query); err != nil {
+		return nil, err
+	}
+
+	mr, err := conn.ReadMsg()
+	if err != nil {
+		log.Log("[dns] exchange", err)
+		return nil, err
+	}
+
+	return mr.Pack()
+}
+
+type dotExchanger struct {
+	addr      string
+	tlsConfig *tls.Config
+	options   exchangerOptions
+}
+
+func NewDoTExchanger(addr string, tlsConfig *tls.Config, opts ...ExchangerOption) Exchanger {
+	var options exchangerOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	if _, port, _ := net.SplitHostPort(addr); port == "" {
+		addr = net.JoinHostPort(addr, "53")
+	}
+
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+	return &dotExchanger{
+		addr:      addr,
+		tlsConfig: tlsConfig,
+		options:   options,
+	}
+}
+
+func (ex *dotExchanger) dial(ctx context.Context, network, address string) (conn net.Conn, err error) {
+	if ex.options.chain.IsEmpty() {
+		d := &net.Dialer{
+			Timeout: ex.options.timeout,
+		}
+		conn, err = d.DialContext(ctx, network, address)
+	} else {
+		conn, err = ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
+	}
+	if err == nil {
+		conn = tls.Client(conn, ex.tlsConfig)
+	}
+	return
+}
+
+func (ex *dotExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	c, err := ex.dial(ctx, "tcp", ex.addr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn := &dns.Conn{
+		Conn: c,
+	}
+
+	if _, err = conn.Write(query); err != nil {
+		return nil, err
+	}
+
+	mr, err := conn.ReadMsg()
+	if err != nil {
+		return nil, err
+	}
+
+	return mr.Pack()
 }
 
 type dohExchanger struct {
 	endpoint *url.URL
 	client   *http.Client
+	options  exchangerOptions
 }
 
-// reference: https://github.com/cloudflare/cloudflared/blob/master/tunneldns/https_upstream.go#L54
-func (ex *dohExchanger) Exchange(ctx context.Context, query *dns.Msg) (*dns.Msg, error) {
-	queryBuf, err := query.Pack()
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack DNS query: %s", err)
+func NewDoHExchanger(urlStr *url.URL, tlsConfig *tls.Config, opts ...ExchangerOption) Exchanger {
+	var options exchangerOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	ex := &dohExchanger{
+		endpoint: urlStr,
+		options:  options,
 	}
 
-	// No content negotiation for now, use DNS wire format
-	buf, backendErr := ex.exchangeWireformat(queryBuf)
-	if backendErr == nil {
-		response := &dns.Msg{}
-		if err := response.Unpack(buf); err != nil {
-			return nil, fmt.Errorf("failed to unpack DNS response from body: %s", err)
+	ex.client = &http.Client{
+		Timeout: options.timeout,
+		Transport: &http.Transport{
+			// Proxy: ProxyFromEnvironment,
+			TLSClientConfig:       tlsConfig,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   options.timeout,
+			ExpectContinueTimeout: 1 * time.Second,
+			DialContext:           ex.dialContext,
+		},
+	}
+
+	return ex
+}
+
+func (ex *dohExchanger) dialContext(ctx context.Context, network, address string) (conn net.Conn, err error) {
+	if ex.options.chain.IsEmpty() {
+		d := &net.Dialer{
+			Timeout: ex.options.timeout,
 		}
-
-		response.Id = query.Id
-		return response, nil
+		return d.DialContext(ctx, network, address)
 	}
-
-	return nil, backendErr
+	return ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
 }
 
-// Perform message exchange with the default UDP wireformat defined in current draft
-// https://datatracker.ietf.org/doc/draft-ietf-doh-dns-over-https
-func (ex *dohExchanger) exchangeWireformat(msg []byte) ([]byte, error) {
-	req, err := http.NewRequest("POST", ex.endpoint.String(), bytes.NewBuffer(msg))
+func (ex *dohExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", ex.endpoint.String(), bytes.NewBuffer(query))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create an HTTPS request: %s", err)
 	}
 
-	req.Header.Add("Content-Type", "application/dns-udpwireformat")
+	// req.Header.Add("Content-Type", "application/dns-udpwireformat")
+	req.Header.Add("Content-Type", "application/dns-message")
 	req.Host = ex.endpoint.Hostname()
 
-	resp, err := ex.client.Do(req)
+	client := ex.client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform an HTTPS request: %s", err)
 	}
