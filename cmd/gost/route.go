@@ -481,7 +481,8 @@ func (r *route) GenRouters() ([]router, error) {
 			ln, err = gost.DNSListener(
 				node.Addr,
 				&gost.DNSOptions{
-					TCPMode: node.GetBool("tcp"),
+					Mode:      node.Get("mode"),
+					TLSConfig: tlsCfg,
 				},
 			)
 		default:
@@ -525,7 +526,7 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.TunHandler()
 		case "tap":
 			handler = gost.TapHandler()
-		case "dns", "dot", "doh":
+		case "dns":
 			handler = gost.DNSHandler(node.Remote)
 		default:
 			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.

@@ -187,11 +187,16 @@ func (r *resolver) Init(opts ...ResolverOption) error {
 		opt(&r.options)
 	}
 
+	timeout := r.timeout
+	if timeout <= 0 {
+		timeout = DefaultResolverTimeout
+	}
+
 	var nss []NameServer
 	for _, ns := range r.servers {
 		if err := ns.Init( // init all name servers
 			ChainNameServerOption(r.options.chain),
-			TimeoutNameServerOption(r.timeout),
+			TimeoutNameServerOption(timeout),
 		); err != nil {
 			continue // ignore invalid name servers
 		}
@@ -254,8 +259,6 @@ func (r *resolver) resolve(ex Exchanger, host string) (ips []net.IP, err error) 
 	r.mux.RLock()
 	prefer := r.prefer
 	r.mux.RUnlock()
-
-	prefer = "ipv6"
 
 	ctx := context.Background()
 	if prefer == "ipv6" { // prefer ipv6
@@ -614,10 +617,12 @@ func (ex *dnsExchanger) dial(ctx context.Context, network, address string) (conn
 }
 
 func (ex *dnsExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	t := time.Now()
 	c, err := ex.dial(ctx, "udp", ex.addr)
 	if err != nil {
 		return nil, err
 	}
+	c.SetDeadline(time.Now().Add(ex.options.timeout - time.Since(t)))
 
 	mq := &dns.Msg{}
 	if err = mq.Unpack(query); err != nil {
@@ -672,10 +677,12 @@ func (ex *dnsTCPExchanger) dial(ctx context.Context, network, address string) (c
 }
 
 func (ex *dnsTCPExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	t := time.Now()
 	c, err := ex.dial(ctx, "tcp", ex.addr)
 	if err != nil {
 		return nil, err
 	}
+	c.SetDeadline(time.Now().Add(ex.options.timeout - time.Since(t)))
 
 	conn := &dns.Conn{
 		Conn: c,
@@ -731,17 +738,21 @@ func (ex *dotExchanger) dial(ctx context.Context, network, address string) (conn
 	} else {
 		conn, err = ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
 	}
-	if err == nil {
-		conn = tls.Client(conn, ex.tlsConfig)
+	if err != nil {
+		return
 	}
+	conn = tls.Client(conn, ex.tlsConfig)
+
 	return
 }
 
 func (ex *dotExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
+	t := time.Now()
 	c, err := ex.dial(ctx, "tcp", ex.addr)
 	if err != nil {
 		return nil, err
 	}
+	c.SetDeadline(time.Now().Add(ex.options.timeout - time.Since(t)))
 
 	conn := &dns.Conn{
 		Conn: c,
