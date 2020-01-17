@@ -219,9 +219,17 @@ func parseResolver(cfg string) gost.Resolver {
 				continue
 			}
 			if strings.HasPrefix(s, "https") {
+				p := "https"
+				u, _ := url.Parse(s)
+				if u == nil || u.Scheme == "" {
+					continue
+				}
+				if u.Scheme == "https-chain" {
+					p = u.Scheme
+				}
 				ns := gost.NameServer{
 					Addr:     s,
-					Protocol: "https",
+					Protocol: p,
 				}
 				nss = append(nss, ns)
 				continue

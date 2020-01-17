@@ -59,47 +59,48 @@ func (ns *NameServer) Init(opts ...NameServerOption) error {
 		opt(&ns.options)
 	}
 
-	switch strings.ToLower(ns.Protocol) {
-	case "tcp":
-		ns.exchanger = NewDNSTCPExchanger(
-			ns.Addr,
-			TimeoutExchangerOption(ns.options.timeout),
-			ChainExchangerOption(ns.options.chain),
-		)
-	case "tls":
+	options := []ExchangerOption{
+		TimeoutExchangerOption(ns.options.timeout),
+	}
+	protocol := strings.ToLower(ns.Protocol)
+	switch protocol {
+	case "tcp", "tcp-chain":
+		if protocol == "tcp-chain" {
+			options = append(options, ChainExchangerOption(ns.options.chain))
+		}
+		ns.exchanger = NewDNSTCPExchanger(ns.Addr, options...)
+	case "tls", "tls-chain":
+		if protocol == "tls-chain" {
+			options = append(options, ChainExchangerOption(ns.options.chain))
+		}
 		cfg := &tls.Config{
 			ServerName: ns.Hostname,
 		}
 		if cfg.ServerName == "" {
 			cfg.InsecureSkipVerify = true
 		}
-		ns.exchanger = NewDoTExchanger(
-			ns.Addr, cfg,
-			TimeoutExchangerOption(ns.options.timeout),
-			ChainExchangerOption(ns.options.chain),
-		)
-	case "https":
+		ns.exchanger = NewDoTExchanger(ns.Addr, cfg, options...)
+	case "https", "https-chain":
+		if protocol == "https-chain" {
+			options = append(options, ChainExchangerOption(ns.options.chain))
+		}
 		u, err := url.Parse(ns.Addr)
 		if err != nil {
 			return err
 		}
-		cfg := &tls.Config{ServerName: u.Hostname()}
+		u.Scheme = "https"
+		cfg := &tls.Config{ServerName: ns.Hostname}
 		if cfg.ServerName == "" {
 			cfg.InsecureSkipVerify = true
 		}
-		ns.exchanger = NewDoHExchanger(
-			u, cfg,
-			TimeoutExchangerOption(ns.options.timeout),
-			ChainExchangerOption(ns.options.chain),
-		)
-	case "udp":
+		ns.exchanger = NewDoHExchanger(u, cfg, options...)
+	case "udp", "udp-chain":
 		fallthrough
 	default:
-		ns.exchanger = NewDNSExchanger(
-			ns.Addr,
-			TimeoutExchangerOption(ns.options.timeout),
-			ChainExchangerOption(ns.options.chain),
-		)
+		if protocol == "udp-chain" {
+			options = append(options, ChainExchangerOption(ns.options.chain))
+		}
+		ns.exchanger = NewDNSExchanger(ns.Addr, options...)
 	}
 
 	return nil
@@ -108,9 +109,6 @@ func (ns *NameServer) Init(opts ...NameServerOption) error {
 func (ns *NameServer) String() string {
 	addr := ns.Addr
 	prot := ns.Protocol
-	if _, port, _ := net.SplitHostPort(addr); port == "" {
-		addr = net.JoinHostPort(addr, "53")
-	}
 	if prot == "" {
 		prot = "udp"
 	}
@@ -411,7 +409,7 @@ func (r *resolver) Reload(rd io.Reader) error {
 				ns.Hostname = ss[2]
 			}
 
-			if strings.HasPrefix(ns.Addr, "https") {
+			if strings.HasPrefix(ns.Addr, "https") && ns.Protocol == "" {
 				ns.Protocol = "https"
 			}
 			nss = append(nss, ns)
