@@ -623,17 +623,12 @@ func (ex *dnsExchanger) Exchange(ctx context.Context, query []byte) ([]byte, err
 		return nil, err
 	}
 	c.SetDeadline(time.Now().Add(ex.options.timeout - time.Since(t)))
-
-	mq := &dns.Msg{}
-	if err = mq.Unpack(query); err != nil {
-		return nil, err
-	}
+	defer c.Close()
 
 	conn := &dns.Conn{
 		Conn: c,
 	}
-
-	if err = conn.WriteMsg(mq); err != nil {
+	if _, err = conn.Write(query); err != nil {
 		return nil, err
 	}
 
@@ -683,18 +678,17 @@ func (ex *dnsTCPExchanger) Exchange(ctx context.Context, query []byte) ([]byte, 
 		return nil, err
 	}
 	c.SetDeadline(time.Now().Add(ex.options.timeout - time.Since(t)))
+	defer c.Close()
 
 	conn := &dns.Conn{
 		Conn: c,
 	}
-
 	if _, err = conn.Write(query); err != nil {
 		return nil, err
 	}
 
 	mr, err := conn.ReadMsg()
 	if err != nil {
-		log.Log("[dns] exchange", err)
 		return nil, err
 	}
 
@@ -753,11 +747,11 @@ func (ex *dotExchanger) Exchange(ctx context.Context, query []byte) ([]byte, err
 		return nil, err
 	}
 	c.SetDeadline(time.Now().Add(ex.options.timeout - time.Since(t)))
+	defer c.Close()
 
 	conn := &dns.Conn{
 		Conn: c,
 	}
-
 	if _, err = conn.Write(query); err != nil {
 		return nil, err
 	}
