@@ -230,15 +230,15 @@ func (h *tunHandler) initTunnelConn(pc net.PacketConn) (net.PacketConn, error) {
 }
 
 func (h *tunHandler) findRouteFor(dst net.IP) net.Addr {
+	if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
+		return v.(net.Addr)
+	}
 	for _, route := range h.options.IPRoutes {
 		if route.Dest.Contains(dst) && route.Gateway != nil {
 			if v, ok := h.routes.Load(ipToTunRouteKey(route.Gateway)); ok {
 				return v.(net.Addr)
 			}
 		}
-	}
-	if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
-		return v.(net.Addr)
 	}
 	return nil
 }
@@ -304,6 +304,9 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 					return nil
 				}
 
+				if Debug {
+					log.Logf("[tun] find route: %s -> %s", dst, addr)
+				}
 				if _, err := conn.WriteTo(b[:n], addr); err != nil {
 					return err
 				}

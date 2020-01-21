@@ -301,7 +301,12 @@ func parseIPRoutes(s string) (routes []gost.IPRoute) {
 		}
 
 		var route gost.IPRoute
-		ss := strings.Split(line, " ")
+		var ss []string
+		for _, s := range strings.Split(line, " ") {
+			if s = strings.TrimSpace(s); s != "" {
+				ss = append(ss, s)
+			}
+		}
 		if len(ss) > 0 && ss[0] != "" {
 			_, route.Dest, _ = net.ParseCIDR(strings.TrimSpace(ss[0]))
 			if route.Dest == nil {
