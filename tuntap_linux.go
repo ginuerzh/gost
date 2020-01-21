@@ -136,14 +136,14 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	return
 }
 
-func addTunRoutes(ifName string, routes ...string) error {
+func addTunRoutes(ifName string, routes ...IPRoute) error {
 	for _, route := range routes {
-		if route == "" {
+		if route.Dest == nil {
 			continue
 		}
-		cmd := fmt.Sprintf("ip route add %s dev %s", route, ifName)
+		cmd := fmt.Sprintf("ip route add %s dev %s", route.Dest.String(), ifName)
 		log.Logf("[tun] %s", cmd)
-		if err := netlink.AddRoute(route, "", "", ifName); err != nil {
+		if err := netlink.AddRoute(route.Dest.String(), "", "", ifName); err != nil {
 			return fmt.Errorf("%s: %v", cmd, err)
 		}
 	}

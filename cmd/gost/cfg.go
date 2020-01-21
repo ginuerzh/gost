@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -272,4 +273,45 @@ func parseHosts(s string) *gost.Hosts {
 	go gost.PeriodReload(hosts, s)
 
 	return hosts
+}
+
+func parseIPRoutes(s string) (routes []gost.IPRoute) {
+	if s == "" {
+		return
+	}
+
+	file, err := os.Open(s)
+	if err != nil {
+		ss := strings.Split(s, ",")
+		for _, s := range ss {
+			if _, inet, _ := net.ParseCIDR(strings.TrimSpace(s)); inet != nil {
+				routes = append(routes, gost.IPRoute{Dest: inet})
+			}
+		}
+		return
+	}
+
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.Replace(scanner.Text(), "\t", " ", -1)
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		var route gost.IPRoute
+		ss := strings.Split(line, " ")
+		if len(ss) > 0 && ss[0] != "" {
+			_, route.Dest, _ = net.ParseCIDR(strings.TrimSpace(ss[0]))
+			if route.Dest == nil {
+				continue
+			}
+		}
+		if len(ss) > 1 && ss[1] != "" {
+			route.Gateway = net.ParseIP(ss[1])
+		}
+		routes = append(routes, route)
+	}
+	return routes
 }

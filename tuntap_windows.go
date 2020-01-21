@@ -98,16 +98,16 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	return
 }
 
-func addTunRoutes(ifName string, gw string, routes ...string) error {
+func addTunRoutes(ifName string, gw string, routes ...IPRoute) error {
 	for _, route := range routes {
-		if route == "" {
+		if route.Dest == nil {
 			continue
 		}
 
-		deleteRoute(ifName, route)
+		deleteRoute(ifName, route.Dest.String())
 
 		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=%s store=active",
-			route, ifName)
+			route.Dest.String(), ifName)
 		if gw != "" {
 			cmd += " nexthop=" + gw
 		}

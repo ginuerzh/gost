@@ -39,11 +39,16 @@ func ipProtocol(p waterutil.IPProtocol) string {
 	return fmt.Sprintf("unknown(%d)", p)
 }
 
+type IPRoute struct {
+	Dest    *net.IPNet
+	Gateway net.IP
+}
+
 type TunConfig struct {
 	Name    string
 	Addr    string
 	MTU     int
-	Routes  []string
+	Routes  []IPRoute
 	Gateway string
 }
 
@@ -224,6 +229,20 @@ func (h *tunHandler) initTunnelConn(pc net.PacketConn) (net.PacketConn, error) {
 	return pc, nil
 }
 
+func (h *tunHandler) findRouteFor(dst net.IP) net.Addr {
+	for _, route := range h.options.IPRoutes {
+		if route.Dest.Contains(dst) && route.Gateway != nil {
+			if v, ok := h.routes.Load(ipToTunRouteKey(route.Gateway)); ok {
+				return v.(net.Addr)
+			}
+		}
+	}
+	if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
+		return v.(net.Addr)
+	}
+	return nil
+}
+
 func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.Addr) error {
 	errc := make(chan error, 1)
 
@@ -279,10 +298,7 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 					return err
 				}
 
-				var addr net.Addr
-				if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
-					addr = v.(net.Addr)
-				}
+				addr := h.findRouteFor(dst)
 				if addr == nil {
 					log.Logf("[tun] no route for %s -> %s", src, dst)
 					return nil
@@ -361,11 +377,11 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 					log.Logf("[tun] new route: %s -> %s", src, addr)
 				}
 
-				if v, ok := h.routes.Load(ipToTunRouteKey(dst)); ok {
+				if addr := h.findRouteFor(dst); addr != nil {
 					if Debug {
-						log.Logf("[tun] find route: %s -> %s", dst, v)
+						log.Logf("[tun] find route: %s -> %s", dst, addr)
 					}
-					_, err := conn.WriteTo(b[:n], v.(net.Addr))
+					_, err := conn.WriteTo(b[:n], addr)
 					return err
 				}
 

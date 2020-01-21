@@ -311,6 +311,8 @@ func (r *route) GenRouters() ([]router, error) {
 			ttl = time.Duration(node.GetInt("ttl")) * time.Second
 		}
 
+		tunRoutes := parseIPRoutes(node.Get("route"))
+
 		var ln gost.Listener
 		switch node.Transport {
 		case "tls":
@@ -415,7 +417,7 @@ func (r *route) GenRouters() ([]router, error) {
 				Name:    node.Get("name"),
 				Addr:    node.Get("net"),
 				MTU:     node.GetInt("mtu"),
-				Routes:  strings.Split(node.Get("route"), ","),
+				Routes:  tunRoutes,
 				Gateway: node.Get("gw"),
 			}
 			ln, err = gost.TunListener(cfg)
@@ -525,6 +527,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.NodeHandlerOption(node),
 			gost.IPsHandlerOption(ips),
 			gost.TCPModeHandlerOption(node.GetBool("tcp")),
+			gost.IPRoutesHandlerOption(tunRoutes...),
 		)
 
 		rt := router{
