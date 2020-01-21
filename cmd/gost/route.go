@@ -312,6 +312,12 @@ func (r *route) GenRouters() ([]router, error) {
 		}
 
 		tunRoutes := parseIPRoutes(node.Get("route"))
+		gw := net.ParseIP(node.Get("gw")) // default gateway
+		for i := range tunRoutes {
+			if tunRoutes[i].Gateway == nil {
+				tunRoutes[i].Gateway = gw
+			}
+		}
 
 		var ln gost.Listener
 		switch node.Transport {
