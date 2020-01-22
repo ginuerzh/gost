@@ -74,9 +74,13 @@ func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
 }
 
 func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
-	ip, ipNet, err := net.ParseCIDR(cfg.Addr)
-	if err != nil {
-		return
+	var ip net.IP
+	var ipNet *net.IPNet
+	if cfg.Addr != "" {
+		ip, ipNet, err = net.ParseCIDR(cfg.Addr)
+		if err != nil {
+			return
+		}
 	}
 
 	ifce, err := water.New(water.Config{
@@ -106,11 +110,13 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 		return
 	}
 
-	cmd = fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())
-	log.Log("[tap]", cmd)
-	if er := link.SetLinkIp(ip, ipNet); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+	if cfg.Addr != "" {
+		cmd = fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())
+		log.Log("[tap]", cmd)
+		if er := link.SetLinkIp(ip, ipNet); er != nil {
+			err = fmt.Errorf("%s: %v", cmd, er)
+			return
+		}
 	}
 
 	cmd = fmt.Sprintf("ip link set dev %s up", ifce.Name())

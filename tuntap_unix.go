@@ -55,10 +55,7 @@ func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
 }
 
 func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
-	ip, _, err := net.ParseCIDR(cfg.Addr)
-	if err != nil {
-		return
-	}
+	ip, _, _ := net.ParseCIDR(cfg.Addr)
 
 	ifce, err := water.New(water.Config{
 		DeviceType: water.TAP,
@@ -72,7 +69,12 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 		mtu = DefaultMTU
 	}
 
-	cmd := fmt.Sprintf("ifconfig %s inet %s mtu %d up", ifce.Name(), cfg.Addr, mtu)
+	var cmd string
+	if cfg.Addr != "" {
+		cmd = fmt.Sprintf("ifconfig %s inet %s mtu %d up", ifce.Name(), cfg.Addr, mtu)
+	} else {
+		cmd = fmt.Sprintf("ifconfig %s mtu %d up", ifce.Name(), mtu)
+	}
 	log.Log("[tap]", cmd)
 	args := strings.Split(cmd, " ")
 	if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
