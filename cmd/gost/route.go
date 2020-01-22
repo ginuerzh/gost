@@ -3,8 +3,10 @@ package main
 import (
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -90,13 +92,29 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		return
 	}
 
-	users, err := parseUsers(node.Get("secrets"))
-	if err != nil {
-		return
+	if auth := node.Get("auth"); auth != "" && node.User == nil {
+		c, err := base64.StdEncoding.DecodeString(auth)
+		if err != nil {
+			return nil, err
+		}
+		cs := string(c)
+		s := strings.IndexByte(cs, ':')
+		if s < 0 {
+			node.User = url.User(cs)
+		} else {
+			node.User = url.UserPassword(cs[:s], cs[s+1:])
+		}
 	}
-	if node.User == nil && len(users) > 0 {
-		node.User = users[0]
+	if node.User == nil {
+		users, err := parseUsers(node.Get("secrets"))
+		if err != nil {
+			return nil, err
+		}
+		if len(users) > 0 {
+			node.User = users[0]
+		}
 	}
+
 	serverName, sport, _ := net.SplitHostPort(node.Addr)
 	if serverName == "" {
 		serverName = "localhost" // default server name
@@ -279,6 +297,20 @@ func (r *route) GenRouters() ([]router, error) {
 		node, err := gost.ParseNode(ns)
 		if err != nil {
 			return nil, err
+		}
+
+		if auth := node.Get("auth"); auth != "" && node.User == nil {
+			c, err := base64.StdEncoding.DecodeString(auth)
+			if err != nil {
+				return nil, err
+			}
+			cs := string(c)
+			s := strings.IndexByte(cs, ':')
+			if s < 0 {
+				node.User = url.User(cs)
+			} else {
+				node.User = url.UserPassword(cs[:s], cs[s+1:])
+			}
 		}
 		authenticator, err := parseAuthenticator(node.Get("secrets"))
 		if err != nil {

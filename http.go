@@ -381,11 +381,9 @@ func (h *httpHandler) forwardRequest(conn net.Conn, req *http.Request, route *Ch
 	var userpass string
 
 	if user := route.LastNode().User; user != nil {
-		s := user.String()
-		if _, set := user.Password(); !set {
-			s += ":"
-		}
-		userpass = base64.StdEncoding.EncodeToString([]byte(s))
+		u := user.Username()
+		p, _ := user.Password()
+		userpass = base64.StdEncoding.EncodeToString([]byte(u + ":" + p))
 	}
 
 	cc, err := route.Conn()
