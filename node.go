@@ -90,6 +90,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "tun", "tap": // tun/tap device
 	case "ftcp": // fake TCP
 	case "dns":
+	case "redu", "redirectu": // UDP tproxy
 	default:
 		node.Transport = "tcp"
 	}
@@ -105,7 +106,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "sni":
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
 	case "direct", "remote", "forward": // forwarding
-	case "redirect": // TCP transparent proxy
+	case "red", "redirect", "redu", "redirectu": // TCP,UDP transparent proxy
 	case "tun", "tap": // tun/tap device
 	case "ftcp": // fake TCP
 	case "dns", "dot", "doh":

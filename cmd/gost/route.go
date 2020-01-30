@@ -481,6 +481,12 @@ func (r *route) GenRouters() ([]router, error) {
 					TLSConfig: tlsCfg,
 				},
 			)
+		case "redu", "redirectu":
+			ln, err = gost.UDPRedirectListener(node.Addr, &gost.UDPListenConfig{
+				TTL:       ttl,
+				Backlog:   node.GetInt("backlog"),
+				QueueSize: node.GetInt("queue"),
+			})
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
@@ -512,8 +518,10 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.UDPRemoteForwardHandler(node.Remote)
 		case "forward":
 			handler = gost.SSHForwardHandler()
-		case "redirect":
+		case "red", "redirect":
 			handler = gost.TCPRedirectHandler()
+		case "redu", "redirectu":
+			handler = gost.UDPRedirectHandler()
 		case "ssu":
 			handler = gost.ShadowUDPHandler()
 		case "sni":

@@ -2,6 +2,8 @@ git.torproject.org/pluggable-transports/goptlib.git v0.0.0-20180321061416-7d56ec
 git.torproject.org/pluggable-transports/goptlib.git v0.0.0-20180321061416-7d56ec4f381e/go.mod h1:YT4XMSkuEXbtqlydr9+OxqFAyspUv0Gr9qhM3B++o/Q=
 git.torproject.org/pluggable-transports/obfs4.git v0.0.0-20181103133120-08f4d470188e h1:c8h60PKrRxEB5debIHBmP7T+s/EUNXTklXqlmJfYiJQ=
 git.torproject.org/pluggable-transports/obfs4.git v0.0.0-20181103133120-08f4d470188e/go.mod h1:jRZbfRcLIgFQoCw6tRmsnETVyIj54jOmXhHCYYa0jbs=
+github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed h1:eqa6queieK8SvoszxCu0WwH7lSVeL4/N/f1JwOMw1G4=
+github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed/go.mod h1:rA52xkgZwql9LRZXWb2arHEFP6qSR48KY2xOfWzEciQ=
 github.com/Yawning/chacha20 v0.0.0-20170904085104-e3b1f968fc63 h1:I6/SJSN9wJMJ+ZyQaCHUlzoTA4ypU5Bb44YWR1wTY/0=
 github.com/Yawning/chacha20 v0.0.0-20170904085104-e3b1f968fc63/go.mod h1:nf+Komq6fVP4SwmKEaVGxHTyQGKREVlwjQKpvOV39yE=
 github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da h1:KjTM2ks9d14ZYCvmHS9iAKVt9AyzRSqNU1qabPih5BY=

@@ -189,7 +189,7 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 	raddr, err := net.ResolveUDPAddr("udp", node.Addr)
 	if err != nil {
 		node.MarkDead()
-		log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
+		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 		return
 	}
 
@@ -198,7 +198,7 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 		cc, err = net.DialUDP("udp", nil, raddr)
 		if err != nil {
 			node.MarkDead()
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
+			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 			return
 		}
 	} else if h.options.Chain.LastNode().Protocol == "ssu" {
@@ -208,14 +208,14 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 		)
 		if err != nil {
 			node.MarkDead()
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
+			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 			return
 		}
 	} else {
 		var err error
 		cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
 		if err != nil {
-			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
+			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 			return
 		}
 
