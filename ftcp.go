@@ -45,6 +45,7 @@ func (tr *fakeTCPTransporter) Multiplex() bool {
 	return false
 }
 
+// FakeTCPListenConfig is config for fake TCP Listener.
 type FakeTCPListenConfig struct {
 	TTL       time.Duration
 	Backlog   int
@@ -99,11 +100,14 @@ func (l *fakeTCPListener) listenLoop() {
 
 		conn, ok := l.connMap.Get(raddr.String())
 		if !ok {
-			conn = newUDPServerConn(l.ln, raddr, l.config.TTL, l.config.QueueSize)
-			conn.onClose = func() {
-				l.connMap.Delete(raddr.String())
-				log.Logf("[ftcp] %s closed (%d)", raddr, l.connMap.Size())
-			}
+			conn = newUDPServerConn(l.ln, raddr, &udpServerConnConfig{
+				ttl:   l.config.TTL,
+				qsize: l.config.QueueSize,
+				onClose: func() {
+					l.connMap.Delete(raddr.String())
+					log.Logf("[ftcp] %s closed (%d)", raddr, l.connMap.Size())
+				},
+			})
 
 			select {
 			case l.connChan <- conn:

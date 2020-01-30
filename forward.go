@@ -5,7 +5,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"fmt"
@@ -202,6 +201,16 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
 			return
 		}
+	} else if h.options.Chain.LastNode().Protocol == "ssu" {
+		cc, err = h.options.Chain.Dial(node.Addr,
+			RetryChainOption(h.options.Retries),
+			TimeoutChainOption(h.options.Timeout),
+		)
+		if err != nil {
+			node.MarkDead()
+			log.Logf("[udp] %s - %s : %s", conn.LocalAddr(), node.Addr, err)
+			return
+		}
 	} else {
 		var err error
 		cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
@@ -339,271 +348,6 @@ func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {
 	log.Logf("[rudp] %s <-> %s", conn.RemoteAddr(), node.Addr)
 	transport(conn, cc)
 	log.Logf("[rudp] %s >-< %s", conn.RemoteAddr(), node.Addr)
-}
-
-type udpConnMap struct {
-	m    sync.Map
-	size int64
-}
-
-func (m *udpConnMap) Get(key interface{}) (conn *udpServerConn, ok bool) {
-	v, ok := m.m.Load(key)
-	if ok {
-		conn, ok = v.(*udpServerConn)
-	}
-	return
-}
-
-func (m *udpConnMap) Set(key interface{}, conn *udpServerConn) {
-	m.m.Store(key, conn)
-	atomic.AddInt64(&m.size, 1)
-}
-
-func (m *udpConnMap) Delete(key interface{}) {
-	m.m.Delete(key)
-	atomic.AddInt64(&m.size, -1)
-}
-
-func (m *udpConnMap) Range(f func(key interface{}, value *udpServerConn) bool) {
-	m.m.Range(func(k, v interface{}) bool {
-		return f(k, v.(*udpServerConn))
-	})
-}
-
-func (m *udpConnMap) Size() int64 {
-	return atomic.LoadInt64(&m.size)
-}
-
-type UDPForwardListenConfig struct {
-	TTL       time.Duration
-	Backlog   int
-	QueueSize int
-}
-
-type udpDirectForwardListener struct {
-	ln       net.PacketConn
-	connChan chan net.Conn
-	errChan  chan error
-	connMap  udpConnMap
-	config   *UDPForwardListenConfig
-}
-
-// UDPDirectForwardListener creates a Listener for UDP port forwarding server.
-func UDPDirectForwardListener(addr string, cfg *UDPForwardListenConfig) (Listener, error) {
-	laddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	ln, err := net.ListenUDP("udp", laddr)
-	if err != nil {
-		return nil, err
-	}
-
-	if cfg == nil {
-		cfg = &UDPForwardListenConfig{}
-	}
-
-	backlog := cfg.Backlog
-	if backlog <= 0 {
-		backlog = defaultBacklog
-	}
-
-	l := &udpDirectForwardListener{
-		ln:       ln,
-		connChan: make(chan net.Conn, backlog),
-		errChan:  make(chan error, 1),
-		config:   cfg,
-	}
-	go l.listenLoop()
-	return l, nil
-}
-
-func (l *udpDirectForwardListener) listenLoop() {
-	for {
-		b := make([]byte, mediumBufferSize)
-		n, raddr, err := l.ln.ReadFrom(b)
-		if err != nil {
-			log.Logf("[udp] peer -> %s : %s", l.Addr(), err)
-			l.Close()
-			l.errChan <- err
-			close(l.errChan)
-			return
-		}
-
-		conn, ok := l.connMap.Get(raddr.String())
-		if !ok {
-			conn = newUDPServerConn(l.ln, raddr, l.config.TTL, l.config.QueueSize)
-			conn.onClose = func() {
-				l.connMap.Delete(raddr.String())
-				log.Logf("[udp] %s closed (%d)", raddr, l.connMap.Size())
-			}
-
-			select {
-			case l.connChan <- conn:
-				l.connMap.Set(raddr.String(), conn)
-				log.Logf("[udp] %s -> %s (%d)", raddr, l.Addr(), l.connMap.Size())
-			default:
-				conn.Close()
-				log.Logf("[udp] %s - %s: connection queue is full (%d)", raddr, l.Addr(), cap(l.connChan))
-			}
-		}
-
-		select {
-		case conn.rChan <- b[:n]:
-			if Debug {
-				log.Logf("[udp] %s >>> %s : length %d", raddr, l.Addr(), n)
-			}
-		default:
-			log.Logf("[udp] %s -> %s : recv queue is full (%d)", raddr, l.Addr(), cap(conn.rChan))
-		}
-	}
-}
-
-func (l *udpDirectForwardListener) Accept() (conn net.Conn, err error) {
-	var ok bool
-	select {
-	case conn = <-l.connChan:
-	case err, ok = <-l.errChan:
-		if !ok {
-			err = errors.New("accpet on closed listener")
-		}
-	}
-	return
-}
-
-func (l *udpDirectForwardListener) Addr() net.Addr {
-	return l.ln.LocalAddr()
-}
-
-func (l *udpDirectForwardListener) Close() error {
-	err := l.ln.Close()
-	l.connMap.Range(func(k interface{}, v *udpServerConn) bool {
-		v.Close()
-		return true
-	})
-
-	return err
-}
-
-type udpServerConn struct {
-	conn       net.PacketConn
-	raddr      net.Addr
-	rChan      chan []byte
-	closed     chan struct{}
-	closeMutex sync.Mutex
-	ttl        time.Duration
-	nopChan    chan int
-	onClose    func()
-}
-
-func newUDPServerConn(conn net.PacketConn, raddr net.Addr, ttl time.Duration, qsize int) *udpServerConn {
-	if qsize <= 0 {
-		qsize = defaultQueueSize
-	}
-	c := &udpServerConn{
-		conn:    conn,
-		raddr:   raddr,
-		rChan:   make(chan []byte, qsize),
-		closed:  make(chan struct{}),
-		nopChan: make(chan int),
-		ttl:     ttl,
-	}
-	go c.ttlWait()
-	return c
-}
-
-func (c *udpServerConn) Read(b []byte) (n int, err error) {
-	select {
-	case bb := <-c.rChan:
-		n = copy(b, bb)
-	case <-c.closed:
-		err = errors.New("read from closed connection")
-		return
-	}
-
-	select {
-	case c.nopChan <- n:
-	default:
-	}
-
-	return
-}
-
-func (c *udpServerConn) Write(b []byte) (n int, err error) {
-	n, err = c.conn.WriteTo(b, c.raddr)
-
-	if n > 0 {
-		if Debug {
-			log.Logf("[udp] %s <<< %s : length %d", c.raddr, c.LocalAddr(), n)
-		}
-
-		select {
-		case c.nopChan <- n:
-		default:
-		}
-	}
-
-	return
-}
-
-func (c *udpServerConn) Close() error {
-	c.closeMutex.Lock()
-	defer c.closeMutex.Unlock()
-
-	select {
-	case <-c.closed:
-		return errors.New("connection is closed")
-	default:
-		if c.onClose != nil {
-			c.onClose()
-		}
-		close(c.closed)
-	}
-	return nil
-}
-
-func (c *udpServerConn) ttlWait() {
-	ttl := c.ttl
-	if ttl == 0 {
-		ttl = defaultTTL
-	}
-	timer := time.NewTimer(ttl)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-c.nopChan:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(ttl)
-		case <-timer.C:
-			c.Close()
-			return
-		case <-c.closed:
-			return
-		}
-	}
-}
-
-func (c *udpServerConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *udpServerConn) RemoteAddr() net.Addr {
-	return c.raddr
-}
-
-func (c *udpServerConn) SetDeadline(t time.Time) error {
-	return c.conn.SetDeadline(t)
-}
-
-func (c *udpServerConn) SetReadDeadline(t time.Time) error {
-	return c.conn.SetReadDeadline(t)
-}
-
-func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
-	return c.conn.SetWriteDeadline(t)
 }
 
 type tcpRemoteForwardListener struct {
@@ -874,18 +618,18 @@ type udpRemoteForwardListener struct {
 	closed   chan struct{}
 	closeMux sync.Mutex
 	once     sync.Once
-	config   *UDPForwardListenConfig
+	config   *UDPListenConfig
 }
 
 // UDPRemoteForwardListener creates a Listener for UDP remote port forwarding server.
-func UDPRemoteForwardListener(addr string, chain *Chain, cfg *UDPForwardListenConfig) (Listener, error) {
+func UDPRemoteForwardListener(addr string, chain *Chain, cfg *UDPListenConfig) (Listener, error) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
 
 	if cfg == nil {
-		cfg = &UDPForwardListenConfig{}
+		cfg = &UDPListenConfig{}
 	}
 
 	backlog := cfg.Backlog
@@ -935,11 +679,14 @@ func (l *udpRemoteForwardListener) listenLoop() {
 
 				uc, ok := l.connMap.Get(raddr.String())
 				if !ok {
-					uc = newUDPServerConn(conn, raddr, l.config.TTL, l.config.QueueSize)
-					uc.onClose = func() {
-						l.connMap.Delete(raddr.String())
-						log.Logf("[rudp] %s closed (%d)", raddr, l.connMap.Size())
-					}
+					uc = newUDPServerConn(conn, raddr, &udpServerConnConfig{
+						ttl:   l.config.TTL,
+						qsize: l.config.QueueSize,
+						onClose: func() {
+							l.connMap.Delete(raddr.String())
+							log.Logf("[rudp] %s closed (%d)", raddr, l.connMap.Size())
+						},
+					})
 
 					select {
 					case l.connChan <- uc:

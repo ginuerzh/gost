@@ -29,14 +29,17 @@ type nameServerOptions struct {
 	chain   *Chain
 }
 
+// NameServerOption allows a common way to set name server options.
 type NameServerOption func(*nameServerOptions)
 
+// TimeoutNameServerOption sets the timeout for name server.
 func TimeoutNameServerOption(timeout time.Duration) NameServerOption {
 	return func(opts *nameServerOptions) {
 		opts.timeout = timeout
 	}
 }
 
+// ChainNameServerOption sets the chain for name server.
 func ChainNameServerOption(chain *Chain) NameServerOption {
 	return func(opts *nameServerOptions) {
 		opts.chain = chain
@@ -119,8 +122,10 @@ type resolverOptions struct {
 	chain *Chain
 }
 
+// ResolverOption allows a common way to set Resolver options.
 type ResolverOption func(*resolverOptions)
 
+// ChainResolverOption sets the chain for Resolver.
 func ChainResolverOption(chain *Chain) ResolverOption {
 	return func(opts *resolverOptions) {
 		opts.chain = chain
@@ -562,14 +567,17 @@ type exchangerOptions struct {
 	timeout time.Duration
 }
 
+// ExchangerOption allows a common way to set Exchanger options.
 type ExchangerOption func(opts *exchangerOptions)
 
+// ChainExchangerOption sets the chain for Exchanger.
 func ChainExchangerOption(chain *Chain) ExchangerOption {
 	return func(opts *exchangerOptions) {
 		opts.chain = chain
 	}
 }
 
+// TimeoutExchangerOption sets the timeout for Exchanger.
 func TimeoutExchangerOption(timeout time.Duration) ExchangerOption {
 	return func(opts *exchangerOptions) {
 		opts.timeout = timeout
@@ -581,6 +589,7 @@ type dnsExchanger struct {
 	options exchangerOptions
 }
 
+// NewDNSExchanger creates a DNS over UDP Exchanger
 func NewDNSExchanger(addr string, opts ...ExchangerOption) Exchanger {
 	var options exchangerOptions
 	for _, opt := range opts {
@@ -605,10 +614,15 @@ func (ex *dnsExchanger) dial(ctx context.Context, network, address string) (conn
 		return d.DialContext(ctx, network, address)
 	}
 
+	if ex.options.chain.LastNode().Protocol == "ssu" {
+		return ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
+	}
+
 	raddr, err := net.ResolveUDPAddr(network, address)
 	if err != nil {
 		return
 	}
+
 	cc, err := getSOCKS5UDPTunnel(ex.options.chain, nil)
 	conn = &udpTunnelConn{Conn: cc, raddr: raddr}
 	return
@@ -643,6 +657,7 @@ type dnsTCPExchanger struct {
 	options exchangerOptions
 }
 
+// NewDNSTCPExchanger creates a DNS over TCP Exchanger
 func NewDNSTCPExchanger(addr string, opts ...ExchangerOption) Exchanger {
 	var options exchangerOptions
 	for _, opt := range opts {
@@ -699,6 +714,7 @@ type dotExchanger struct {
 	options   exchangerOptions
 }
 
+// NewDoTExchanger creates a DNS over TLS Exchanger
 func NewDoTExchanger(addr string, tlsConfig *tls.Config, opts ...ExchangerOption) Exchanger {
 	var options exchangerOptions
 	for _, opt := range opts {
@@ -768,6 +784,7 @@ type dohExchanger struct {
 	options  exchangerOptions
 }
 
+// NewDoHExchanger creates a DNS over HTTPS Exchanger
 func NewDoHExchanger(urlStr *url.URL, tlsConfig *tls.Config, opts ...ExchangerOption) Exchanger {
 	var options exchangerOptions
 	for _, opt := range opts {

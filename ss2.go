@@ -116,7 +116,7 @@ func (h *shadow2Handler) Handle(conn net.Conn) {
 	conn = cipher.StreamConn(conn)
 	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 
-	addr, err := readAddr(conn)
+	addr, err := readSocksAddr(conn)
 	if err != nil {
 		log.Logf("[ss2] %s -> %s : %s",
 			conn.RemoteAddr(), conn.LocalAddr(), err)
@@ -191,7 +191,7 @@ func (h *shadow2Handler) Handle(conn net.Conn) {
 	log.Logf("[ss2] %s >-< %s", conn.RemoteAddr(), host)
 }
 
-func readAddr(r io.Reader) (*gosocks5.Addr, error) {
+func readSocksAddr(r io.Reader) (*gosocks5.Addr, error) {
 	addr := &gosocks5.Addr{}
 	b := sPool.Get().([]byte)
 	defer sPool.Put(b)

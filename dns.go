@@ -117,6 +117,7 @@ func (h *dnsHandler) dumpMsgHeader(m *dns.Msg) string {
 	return buf.String()
 }
 
+// DNSOptions is options for DNS Listener.
 type DNSOptions struct {
 	Mode         string
 	UDPSize      int
@@ -132,6 +133,7 @@ type dnsListener struct {
 	errc     chan error
 }
 
+// DNSListener creates a Listener for DNS proxy server.
 func DNSListener(addr string, options *DNSOptions) (Listener, error) {
 	if options == nil {
 		options = &DNSOptions{}

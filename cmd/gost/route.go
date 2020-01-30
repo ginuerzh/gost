@@ -198,6 +198,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.ObfsHTTPTransporter()
 	case "ftcp":
 		tr = gost.FakeTCPTransporter()
+	case "udp":
+		tr = gost.UDPTransporter()
 	default:
 		tr = gost.TCPTransporter()
 	}
@@ -216,6 +218,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		connector = gost.ShadowConnector(node.User)
 	case "ss2":
 		connector = gost.Shadow2Connector(node.User)
+	case "ssu":
+		connector = gost.ShadowUDPConnector(node.User)
 	case "direct":
 		connector = gost.SSHDirectForwardConnector()
 	case "remote":
@@ -414,6 +418,12 @@ func (r *route) GenRouters() ([]router, error) {
 				chain.Nodes()[len(chain.Nodes())-1].Client.Transporter = gost.SSHForwardTransporter()
 			}
 			ln, err = gost.TCPListener(node.Addr)
+		case "udp":
+			ln, err = gost.UDPListener(node.Addr, &gost.UDPListenConfig{
+				TTL:       ttl,
+				Backlog:   node.GetInt("backlog"),
+				QueueSize: node.GetInt("queue"),
+			})
 		case "rtcp":
 			// Directly use SSH port forwarding if the last chain node is forward+ssh
 			if chain.LastNode().Protocol == "forward" && chain.LastNode().Transport == "ssh" {
@@ -421,24 +431,10 @@ func (r *route) GenRouters() ([]router, error) {
 				chain.Nodes()[len(chain.Nodes())-1].Client.Transporter = gost.SSHForwardTransporter()
 			}
 			ln, err = gost.TCPRemoteForwardListener(node.Addr, chain)
-		case "udp":
-			ln, err = gost.UDPDirectForwardListener(node.Addr, &gost.UDPForwardListenConfig{
-				TTL:       ttl,
-				Backlog:   node.GetInt("backlog"),
-				QueueSize: node.GetInt("queue"),
-			})
 		case "rudp":
 			ln, err = gost.UDPRemoteForwardListener(node.Addr,
 				chain,
-				&gost.UDPForwardListenConfig{
-					TTL:       ttl,
-					Backlog:   node.GetInt("backlog"),
-					QueueSize: node.GetInt("queue"),
-				})
-		case "ssu":
-			ln, err = gost.ShadowUDPListener(node.Addr,
-				node.User,
-				&gost.UDPForwardListenConfig{
+				&gost.UDPListenConfig{
 					TTL:       ttl,
 					Backlog:   node.GetInt("backlog"),
 					QueueSize: node.GetInt("queue"),
@@ -519,7 +515,7 @@ func (r *route) GenRouters() ([]router, error) {
 		case "redirect":
 			handler = gost.TCPRedirectHandler()
 		case "ssu":
-			handler = gost.ShadowUDPdHandler()
+			handler = gost.ShadowUDPHandler()
 		case "sni":
 			handler = gost.SNIHandler()
 		case "tun":

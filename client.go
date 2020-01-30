@@ -64,68 +64,6 @@ type Transporter interface {
 	Multiplex() bool
 }
 
-// tcpTransporter is a raw TCP transporter.
-type tcpTransporter struct{}
-
-// TCPTransporter creates a raw TCP client.
-func TCPTransporter() Transporter {
-	return &tcpTransporter{}
-}
-
-func (tr *tcpTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	opts := &DialOptions{}
-	for _, option := range options {
-		option(opts)
-	}
-
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = DialTimeout
-	}
-	if opts.Chain == nil {
-		return net.DialTimeout("tcp", addr, timeout)
-	}
-	return opts.Chain.Dial(addr)
-}
-
-func (tr *tcpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
-	return conn, nil
-}
-
-func (tr *tcpTransporter) Multiplex() bool {
-	return false
-}
-
-// udpTransporter is a raw UDP transporter.
-type udpTransporter struct{}
-
-// UDPTransporter creates a raw UDP client.
-func UDPTransporter() Transporter {
-	return &udpTransporter{}
-}
-
-func (tr *udpTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	opts := &DialOptions{}
-	for _, option := range options {
-		option(opts)
-	}
-
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = DialTimeout
-	}
-
-	return net.DialTimeout("udp", addr, timeout)
-}
-
-func (tr *udpTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
-	return conn, nil
-}
-
-func (tr *udpTransporter) Multiplex() bool {
-	return false
-}
-
 // DialOptions describes the options for Transporter.Dial.
 type DialOptions struct {
 	Timeout time.Duration

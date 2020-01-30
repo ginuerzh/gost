@@ -75,11 +75,16 @@ func ParseNode(s string) (node Node, err error) {
 	}
 
 	switch node.Transport {
-	case "tls", "mtls", "ws", "mws", "wss", "mwss", "kcp", "ssh", "quic", "ssu", "http2", "h2", "h2c", "obfs4":
 	case "https":
-		node.Protocol = "http"
 		node.Transport = "tls"
-	case "tcp", "udp": // started from v2.1, tcp and udp are for local port forwarding
+	case "tls", "mtls":
+	case "http2", "h2", "h2c":
+	case "ws", "mws", "wss", "mwss":
+	case "kcp", "ssh", "quic":
+	case "ssu":
+		node.Transport = "udp"
+	case "obfs4":
+	case "tcp", "udp":
 	case "rtcp", "rudp": // rtcp and rudp are for remote port forwarding
 	case "ohttp": // obfs-http
 	case "tun", "tap": // tun/tap device
@@ -90,9 +95,14 @@ func ParseNode(s string) (node Node, err error) {
 	}
 
 	switch node.Protocol {
-	case "http", "http2", "socks4", "socks4a", "ss", "ss2", "ssu", "sni":
+	case "http", "http2":
+	case "https":
+		node.Protocol = "http"
+	case "socks4", "socks4a":
 	case "socks", "socks5":
 		node.Protocol = "socks5"
+	case "ss", "ss2", "ssu":
+	case "sni":
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
 	case "direct", "remote", "forward": // forwarding
 	case "redirect": // TCP transparent proxy

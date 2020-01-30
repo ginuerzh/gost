@@ -128,7 +128,7 @@ func BenchmarkTCPDirectForwardParallel(b *testing.B) {
 }
 
 func udpDirectForwardRoundtrip(t *testing.T, host string, data []byte) error {
-	ln, err := UDPDirectForwardListener("localhost:0", nil)
+	ln, err := UDPListener("localhost:0", nil)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func BenchmarkUDPDirectForward(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := UDPDirectForwardListener("localhost:0", nil)
+	ln, err := UDPListener("localhost:0", nil)
 	if err != nil {
 		b.Error(err)
 	}
@@ -207,7 +207,7 @@ func BenchmarkUDPDirectForwardParallel(b *testing.B) {
 	sendData := make([]byte, 128)
 	rand.Read(sendData)
 
-	ln, err := UDPDirectForwardListener("localhost:0", nil)
+	ln, err := UDPListener("localhost:0", nil)
 	if err != nil {
 		b.Error(err)
 	}

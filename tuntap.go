@@ -44,6 +44,7 @@ type IPRoute struct {
 	Gateway net.IP
 }
 
+// TunConfig is the config for TUN device.
 type TunConfig struct {
 	Name    string
 	Addr    string
@@ -426,6 +427,7 @@ func etherType(et waterutil.Ethertype) string {
 	return fmt.Sprintf("unknown(%v)", et)
 }
 
+// TapConfig is the config for TAP device.
 type TapConfig struct {
 	Name    string
 	Addr    string
@@ -789,6 +791,7 @@ func (c *tunTapConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "tuntap", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }
 
+// IsIPv6Multicast reports whether the address addr is an IPv6 multicast address.
 func IsIPv6Multicast(addr net.HardwareAddr) bool {
 	return addr[0] == 0x33 && addr[1] == 0x33
 }

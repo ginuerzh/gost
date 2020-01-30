@@ -102,37 +102,6 @@ type Listener interface {
 	net.Listener
 }
 
-type tcpListener struct {
-	net.Listener
-}
-
-// TCPListener creates a Listener for TCP proxy server.
-func TCPListener(addr string) (Listener, error) {
-	laddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	ln, err := net.ListenTCP("tcp", laddr)
-	if err != nil {
-		return nil, err
-	}
-	return &tcpListener{Listener: tcpKeepAliveListener{ln}}, nil
-}
-
-type tcpKeepAliveListener struct {
-	*net.TCPListener
-}
-
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
-	if err != nil {
-		return
-	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(KeepAliveTime)
-	return tc, nil
-}
-
 func transport(rw1, rw2 io.ReadWriter) error {
 	errc := make(chan error, 1)
 	go func() {

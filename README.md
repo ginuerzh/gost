@@ -30,7 +30,7 @@ gost - GO Simple Tunnel
 * [权限控制](https://docs.ginuerzh.xyz/gost/permission/)
 * [负载均衡](https://docs.ginuerzh.xyz/gost/load-balancing/)
 * [路由控制](https://docs.ginuerzh.xyz/gost/bypass/)
-* [DNS控制](https://docs.ginuerzh.xyz/gost/dns/)
+* DNS[解析](https://docs.ginuerzh.xyz/gost/resolver/)和[代理](https://docs.ginuerzh.xyz/gost/dns/)
 * [TUN/TAP设备](https://docs.ginuerzh.xyz/gost/tuntap/)
 
 Wiki站点: <https://docs.ginuerzh.xyz/gost/>
