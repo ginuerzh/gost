@@ -610,7 +610,7 @@ func (l *tcpRemoteForwardListener) Close() error {
 type udpRemoteForwardListener struct {
 	addr     net.Addr
 	chain    *Chain
-	connMap  udpConnMap
+	connMap  *udpConnMap
 	connChan chan net.Conn
 	ln       *net.UDPConn
 	errChan  chan error
@@ -640,6 +640,7 @@ func UDPRemoteForwardListener(addr string, chain *Chain, cfg *UDPListenConfig) (
 	ln := &udpRemoteForwardListener{
 		addr:     laddr,
 		chain:    chain,
+		connMap:  new(udpConnMap),
 		connChan: make(chan net.Conn, backlog),
 		errChan:  make(chan error, 1),
 		closed:   make(chan struct{}),

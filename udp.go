@@ -54,7 +54,7 @@ type udpListener struct {
 	ln       net.PacketConn
 	connChan chan net.Conn
 	errChan  chan error
-	connMap  udpConnMap
+	connMap  *udpConnMap
 	config   *UDPListenConfig
 }
 
@@ -82,6 +82,7 @@ func UDPListener(addr string, cfg *UDPListenConfig) (Listener, error) {
 		ln:       ln,
 		connChan: make(chan net.Conn, backlog),
 		errChan:  make(chan error, 1),
+		connMap:  new(udpConnMap),
 		config:   cfg,
 	}
 	go l.listenLoop()
@@ -159,8 +160,8 @@ func (l *udpListener) Close() error {
 }
 
 type udpConnMap struct {
-	m    sync.Map
 	size int64
+	m    sync.Map
 }
 
 func (m *udpConnMap) Get(key interface{}) (conn *udpServerConn, ok bool) {

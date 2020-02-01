@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/LiamHaworth/go-tproxy"
 	"github.com/go-log/log"
@@ -121,16 +123,14 @@ func (h *udpRedirectHandler) Init(options ...HandlerOption) {
 	}
 }
 
-func (h *udpRedirectHandler) Handle(c net.Conn) {
-	defer c.Close()
+func (h *udpRedirectHandler) Handle(conn net.Conn) {
+	defer conn.Close()
 
-	conn, ok := c.(*udpRedirectServerConn)
+	raddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
-		log.Log("wrong connection type")
+		log.Log("[red-udp] wrong connection type")
 		return
 	}
-
-	raddr := conn.DstAddr()
 
 	var cc net.Conn
 	var err error
@@ -167,11 +167,8 @@ func (h *udpRedirectHandler) Handle(c net.Conn) {
 }
 
 type udpRedirectListener struct {
-	ln       *net.UDPConn
-	connChan chan net.Conn
-	errChan  chan error
-	connMap  udpConnMap
-	config   *UDPListenConfig
+	*net.UDPConn
+	config *UDPListenConfig
 }
 
 // UDPRedirectListener creates a Listener for UDP transparent proxy server.
@@ -189,103 +186,72 @@ func UDPRedirectListener(addr string, cfg *UDPListenConfig) (Listener, error) {
 	if cfg == nil {
 		cfg = &UDPListenConfig{}
 	}
-
-	backlog := cfg.Backlog
-	if backlog <= 0 {
-		backlog = defaultBacklog
-	}
-
-	l := &udpRedirectListener{
-		ln:       ln,
-		connChan: make(chan net.Conn, backlog),
-		errChan:  make(chan error, 1),
-		config:   cfg,
-	}
-	go l.listenLoop()
-	return l, nil
-}
-
-func (l *udpRedirectListener) listenLoop() {
-	for {
-		b := make([]byte, mediumBufferSize)
-		n, raddr, dstAddr, err := tproxy.ReadFromUDP(l.ln, b)
-		if err != nil {
-			log.Logf("[red-udp] peer -> %s : %s", l.Addr(), err)
-			l.Close()
-			l.errChan <- err
-			close(l.errChan)
-			return
-		}
-
-		conn, ok := l.connMap.Get(raddr.String())
-		if !ok {
-			conn = newUDPServerConn(l.ln, raddr, &udpServerConnConfig{
-				ttl:   l.config.TTL,
-				qsize: l.config.QueueSize,
-				onClose: func() {
-					l.connMap.Delete(raddr.String())
-					log.Logf("[red-udp] %s closed (%d)", raddr, l.connMap.Size())
-				},
-			})
-
-			cc := udpRedirectServerConn{
-				udpServerConn: conn,
-				dstAddr:       dstAddr,
-			}
-			select {
-			case l.connChan <- cc:
-				l.connMap.Set(raddr.String(), conn)
-				log.Logf("[red-udp] %s -> %s (%d)", raddr, l.Addr(), l.connMap.Size())
-			default:
-				conn.Close()
-				log.Logf("[red-udp] %s - %s: connection queue is full (%d)",
-					raddr, l.Addr(), cap(l.connChan))
-			}
-		}
-
-		select {
-		case conn.rChan <- b[:n]:
-			if Debug {
-				log.Logf("[red-udp] %s >>> %s : length %d", raddr, l.Addr(), n)
-			}
-		default:
-			log.Logf("[red-udp] %s -> %s : recv queue is full (%d)",
-				raddr, l.Addr(), cap(conn.rChan))
-		}
-	}
+	return &udpRedirectListener{
+		UDPConn: ln,
+		config:  cfg,
+	}, nil
 }
 
 func (l *udpRedirectListener) Accept() (conn net.Conn, err error) {
-	var ok bool
-	select {
-	case conn = <-l.connChan:
-	case err, ok = <-l.errChan:
-		if !ok {
-			err = errors.New("accpet on closed listener")
-		}
+	b := make([]byte, mediumBufferSize)
+
+	n, raddr, dstAddr, err := tproxy.ReadFromUDP(l.UDPConn, b)
+	if err != nil {
+		log.Logf("[red-udp] %s : %s", l.Addr(), err)
+		return
+	}
+	log.Logf("[red-udp] %s: %s -> %s", l.Addr(), raddr, dstAddr)
+
+	c, err := tproxy.DialUDP("udp", dstAddr, raddr)
+	if err != nil {
+		log.Logf("[red-udp] %s -> %s : %s", raddr, dstAddr, err)
+		return
+	}
+
+	ttl := l.config.TTL
+	if ttl <= 0 {
+		ttl = defaultTTL
+	}
+
+	conn = &udpRedirectServerConn{
+		Conn: c,
+		buf:  b[:n],
+		ttl:  ttl,
 	}
 	return
 }
 
 func (l *udpRedirectListener) Addr() net.Addr {
-	return l.ln.LocalAddr()
-}
-
-func (l *udpRedirectListener) Close() error {
-	err := l.ln.Close()
-	l.connMap.Range(func(k interface{}, v *udpServerConn) bool {
-		v.Close()
-		return true
-	})
-
-	return err
+	return l.UDPConn.LocalAddr()
 }
 
 type udpRedirectServerConn struct {
-	*udpServerConn
-	dstAddr *net.UDPAddr
+	net.Conn
+	buf  []byte
+	ttl  time.Duration
+	once sync.Once
 }
 
-func (c *udpRedirectServerConn) DstAddr() *net.UDPAddr {
-	return c.dstAddr
+func (c *udpRedirectServerConn) Read(b []byte) (n int, err error) {
+	if c.ttl > 0 {
+		c.SetReadDeadline(time.Now().Add(c.ttl))
+		defer c.SetReadDeadline(time.Time{})
+	}
+	c.once.Do(func() {
+		n = copy(b, c.buf)
+		c.buf = nil
+	})
+
+	if n == 0 {
+		n, err = c.Conn.Read(b)
+	}
+	return
+}
+
+func (c *udpRedirectServerConn) Write(b []byte) (n int, err error) {
+	if c.ttl > 0 {
+		c.SetWriteDeadline(time.Now().Add(c.ttl))
+		defer c.SetWriteDeadline(time.Time{})
+	}
+	return c.Conn.Write(b)
 }
