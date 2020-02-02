@@ -23,7 +23,7 @@ gost - GO Simple Tunnel
 * [支持多种隧道类型](https://docs.ginuerzh.xyz/gost/configuration/)
 * [SOCKS5代理支持TLS协商加密](https://docs.ginuerzh.xyz/gost/socks/)
 * [Tunnel UDP over TCP](https://docs.ginuerzh.xyz/gost/socks/)
-* [TCP透明代理](https://docs.ginuerzh.xyz/gost/redirect/)
+* [TCP/UDP透明代理](https://docs.ginuerzh.xyz/gost/redirect/)
 * [本地/远程TCP/UDP端口转发](https://docs.ginuerzh.xyz/gost/port-forwarding/)
 * [支持Shadowsocks(TCP/UDP)协议](https://docs.ginuerzh.xyz/gost/ss/)
 * [支持SNI代理](https://docs.ginuerzh.xyz/gost/sni/)

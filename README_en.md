@@ -20,7 +20,7 @@ Features
 * [Support multiple tunnel types](https://docs.ginuerzh.xyz/gost/en/configuration/)
 * [TLS encryption via negotiation support for SOCKS5 proxy](https://docs.ginuerzh.xyz/gost/en/socks/)
 * [Tunnel UDP over TCP](https://docs.ginuerzh.xyz/gost/en/socks/)
-* [Transparent TCP proxy](https://docs.ginuerzh.xyz/gost/en/redirect/)
+* [TCP/UDP Transparent proxy](https://docs.ginuerzh.xyz/gost/en/redirect/)
 * [Local/remote TCP/UDP port forwarding](https://docs.ginuerzh.xyz/gost/en/port-forwarding/)
 * [Shadowsocks protocol](https://docs.ginuerzh.xyz/gost/en/ss/)
 * [SNI proxy](https://docs.ginuerzh.xyz/gost/en/sni/)
