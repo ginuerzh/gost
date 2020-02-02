@@ -403,7 +403,9 @@ func (h *shadowUDPHandler) Handle(conn net.Conn) {
 		if h.cipher != nil {
 			pc = h.cipher.PacketConn(pc)
 		}
+		log.Logf("[ssu] %s <-> %s", conn.RemoteAddr(), conn.LocalAddr())
 		h.transportPacket(pc, cc)
+		log.Logf("[ssu] %s >-< %s", conn.RemoteAddr(), conn.LocalAddr())
 		return
 	}
 

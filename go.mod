@@ -7,7 +7,6 @@ require (
 	git.torproject.org/pluggable-transports/obfs4.git v0.0.0-20181103133120-08f4d470188e
 	github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed
 	github.com/Yawning/chacha20 v0.0.0-20170904085104-e3b1f968fc63 // indirect
-	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/coreos/go-iptables v0.4.5 // indirect
@@ -34,7 +33,7 @@ require (
 	github.com/onsi/gomega v1.4.3 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/ryanuber/go-glob v0.0.0-20170128012129-256dc444b735
-	github.com/shadowsocks/go-shadowsocks2 v0.0.11
+	github.com/shadowsocks/go-shadowsocks2 v0.0.12-0.20191211020244-a57bc393e43a
 	github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba
 	github.com/songgao/water v0.0.0-20190725173103-fd331bda3f4b
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect

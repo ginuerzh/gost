@@ -45,13 +45,13 @@ func TestDNSResolver(t *testing.T) {
 		tc := tc
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
 			ns := tc.ns
-			if err := ns.Init(); err != nil {
-				t.Error(err)
-			}
 			t.Log(ns)
 			r := NewResolver(0, ns)
 			resolv := r.(*resolver)
 			resolv.domain = "com"
+			if err := r.Init(); err != nil {
+				t.Error("got error:", err)
+			}
 			err := dnsResolverRoundtrip(t, r, tc.host)
 			if err != nil {
 				if tc.pass {

@@ -1,6 +1,6 @@
 name: gost
 type: app
-version: '2.9.2'
+version: '2.10.0'
 title: GO Simple Tunnel
 summary: A simple security tunnel written in golang
 description: |
@@ -16,7 +16,7 @@ parts:
     source: https://github.com/ginuerzh/gost.git
     source-subdir: cmd/gost
     source-type: git
-    source-branch: '2.9'
+    source-branch: '2'
     build-packages:
       - build-essential
     override-build: |
