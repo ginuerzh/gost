@@ -48,6 +48,7 @@ type IPRoute struct {
 type TunConfig struct {
 	Name    string
 	Addr    string
+	Peer    string // peer addr of point-to-point on MacOS
 	MTU     int
 	Routes  []IPRoute
 	Gateway string

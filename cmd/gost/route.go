@@ -450,6 +450,7 @@ func (r *route) GenRouters() ([]router, error) {
 			cfg := gost.TunConfig{
 				Name:    node.Get("name"),
 				Addr:    node.Get("net"),
+				Peer:    node.Get("peer"),
 				MTU:     node.GetInt("mtu"),
 				Routes:  tunRoutes,
 				Gateway: node.Get("gw"),
