@@ -102,7 +102,9 @@ func ParseNode(s string) (node Node, err error) {
 	case "socks4", "socks4a":
 	case "socks", "socks5":
 		node.Protocol = "socks5"
-	case "ss", "ss2", "ssu":
+	case "ss", "ssu":
+	case "ss2": // as of 2.10.1, ss2 is same as ss
+		node.Protocol = "ss"
 	case "sni":
 	case "tcp", "udp", "rtcp", "rudp": // port forwarding
 	case "direct", "remote", "forward": // forwarding

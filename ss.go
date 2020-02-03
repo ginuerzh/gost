@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/ginuerzh/gosocks5"
@@ -17,14 +16,15 @@ import (
 )
 
 type shadowConnector struct {
-	Cipher *url.Userinfo
+	cipher core.Cipher
 }
 
 // ShadowConnector creates a Connector for shadowsocks proxy client.
-// It accepts a cipher info for shadowsocks data encryption/decryption.
-// The cipher must not be nil.
-func ShadowConnector(cipher *url.Userinfo) Connector {
-	return &shadowConnector{Cipher: cipher}
+// It accepts an optional cipher info for shadowsocks data encryption/decryption.
+func ShadowConnector(info *url.Userinfo) Connector {
+	return &shadowConnector{
+		cipher: initShadowCipher(info),
+	}
 }
 
 func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
@@ -38,37 +38,32 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 		timeout = ConnectTimeout
 	}
 
+	socksAddr, err := gosocks5.NewAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+	rawaddr := sPool.Get().([]byte)
+	defer sPool.Put(rawaddr)
+
+	n, err := socksAddr.Encode(rawaddr)
+	if err != nil {
+		return nil, err
+	}
+
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
 
-	rawaddr, err := ss.RawAddr(addr)
-	if err != nil {
+	if c.cipher != nil {
+		conn = c.cipher.StreamConn(conn)
+	}
+	if _, err := conn.Write(rawaddr[:n]); err != nil {
 		return nil, err
 	}
-
-	var method, password string
-	cp := opts.User
-	if cp == nil {
-		cp = c.Cipher
-	}
-	if cp != nil {
-		method = cp.Username()
-		password, _ = cp.Password()
-	}
-
-	cipher, err := ss.NewCipher(method, password)
-	if err != nil {
-		return nil, err
-	}
-
-	sc := &shadowConn{
-		Conn: ss.NewConn(conn, cipher),
-	}
-	_, err = sc.Write(rawaddr)
-	return sc, err
+	return conn, nil
 }
 
 type shadowHandler struct {
+	cipher  core.Cipher
 	options *HandlerOptions
 }
 
@@ -88,37 +83,32 @@ func (h *shadowHandler) Init(options ...HandlerOption) {
 	for _, opt := range options {
 		opt(h.options)
 	}
+	if len(h.options.Users) > 0 {
+		h.cipher = initShadowCipher(h.options.Users[0])
+	}
 }
 
 func (h *shadowHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	var method, password string
-	users := h.options.Users
-	if len(users) > 0 {
-		method = users[0].Username()
-		password, _ = users[0].Password()
+	if h.cipher != nil {
+		conn = h.cipher.StreamConn(conn)
 	}
-	cipher, err := ss.NewCipher(method, password)
-	if err != nil {
-		log.Logf("[ss] %s -> %s : %s",
-			conn.RemoteAddr(), conn.LocalAddr(), err)
-		return
-	}
-	conn = &shadowConn{Conn: ss.NewConn(conn, cipher)}
 
 	conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	host, err := h.getRequest(conn)
+
+	addr, err := readSocksAddr(conn)
 	if err != nil {
 		log.Logf("[ss] %s -> %s : %s",
 			conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
-	// clear timer
+
 	conn.SetReadDeadline(time.Time{})
 
-	log.Logf("[ss] %s -> %s -> %s",
-		conn.RemoteAddr(), h.options.Node.String(), host)
+	host := addr.String()
+	log.Logf("[ss] %s -> %s",
+		conn.RemoteAddr(), host)
 
 	if !Can("tcp", host, h.options.Whitelist, h.options.Blacklist) {
 		log.Logf("[ss] %s - %s : Unauthorized to tcp connect to %s",
@@ -181,104 +171,15 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 	log.Logf("[ss] %s >-< %s", conn.RemoteAddr(), host)
 }
 
-const (
-	idType  = 0 // address type index
-	idIP0   = 1 // ip address start index
-	idDmLen = 1 // domain address length index
-	idDm0   = 2 // domain address start index
-
-	typeIPv4 = 1 // type is ipv4 address
-	typeDm   = 3 // type is domain address
-	typeIPv6 = 4 // type is ipv6 address
-
-	lenIPv4     = net.IPv4len + 2 // ipv4 + 2port
-	lenIPv6     = net.IPv6len + 2 // ipv6 + 2port
-	lenDmBase   = 2               // 1addrLen + 2port, plus addrLen
-	lenHmacSha1 = 10
-)
-
-// This function is copied from shadowsocks library with some modification.
-func (h *shadowHandler) getRequest(r io.Reader) (host string, err error) {
-	// buf size should at least have the same size with the largest possible
-	// request size (when addrType is 3, domain name has at most 256 bytes)
-	// 1(addrType) + 1(lenByte) + 256(max length address) + 2(port)
-	buf := make([]byte, smallBufferSize)
-
-	// read till we get possible domain length field
-	if _, err = io.ReadFull(r, buf[:idType+1]); err != nil {
-		return
-	}
-
-	var reqStart, reqEnd int
-	addrType := buf[idType]
-	switch addrType & ss.AddrMask {
-	case typeIPv4:
-		reqStart, reqEnd = idIP0, idIP0+lenIPv4
-	case typeIPv6:
-		reqStart, reqEnd = idIP0, idIP0+lenIPv6
-	case typeDm:
-		if _, err = io.ReadFull(r, buf[idType+1:idDmLen+1]); err != nil {
-			return
-		}
-		reqStart, reqEnd = idDm0, idDm0+int(buf[idDmLen])+lenDmBase
-	default:
-		err = fmt.Errorf("addr type %d not supported", addrType&ss.AddrMask)
-		return
-	}
-
-	if _, err = io.ReadFull(r, buf[reqStart:reqEnd]); err != nil {
-		return
-	}
-
-	// Return string for typeIP is not most efficient, but browsers (Chrome,
-	// Safari, Firefox) all seems using typeDm exclusively. So this is not a
-	// big problem.
-	switch addrType & ss.AddrMask {
-	case typeIPv4:
-		host = net.IP(buf[idIP0 : idIP0+net.IPv4len]).String()
-	case typeIPv6:
-		host = net.IP(buf[idIP0 : idIP0+net.IPv6len]).String()
-	case typeDm:
-		host = string(buf[idDm0 : idDm0+int(buf[idDmLen])])
-	}
-	// parse port
-	port := binary.BigEndian.Uint16(buf[reqEnd-2 : reqEnd])
-	host = net.JoinHostPort(host, strconv.Itoa(int(port)))
-	return
-}
-
 type shadowUDPConnector struct {
 	cipher core.Cipher
 }
 
 // ShadowUDPConnector creates a Connector for shadowsocks UDP client.
-// It accepts a cipher info for shadowsocks data encryption/decryption.
-// The cipher must not be nil.
+// It accepts an optional cipher info for shadowsocks data encryption/decryption.
 func ShadowUDPConnector(info *url.Userinfo) Connector {
-	c := &shadowUDPConnector{}
-	c.initCipher(info)
-	return c
-}
-
-func (c *shadowUDPConnector) initCipher(info *url.Userinfo) {
-	var method, password string
-	if info != nil {
-		method = info.Username()
-		password, _ = info.Password()
-	}
-
-	if method == "" || password == "" {
-		return
-	}
-
-	c.cipher, _ = core.PickCipher(method, nil, password)
-	if c.cipher == nil {
-		cp, err := ss.NewCipher(method, password)
-		if err != nil {
-			log.Logf("[ssu] %s", err)
-			return
-		}
-		c.cipher = &shadowCipher{cipher: cp}
+	return &shadowUDPConnector{
+		cipher: initShadowCipher(info),
 	}
 }
 
@@ -346,33 +247,11 @@ func (h *shadowUDPHandler) Init(options ...HandlerOption) {
 	if h.options == nil {
 		h.options = &HandlerOptions{}
 	}
-
 	for _, opt := range options {
 		opt(h.options)
 	}
-
-	h.initCipher()
-}
-
-func (h *shadowUDPHandler) initCipher() {
-	var method, password string
-	users := h.options.Users
-	if len(users) > 0 {
-		method = users[0].Username()
-		password, _ = users[0].Password()
-	}
-
-	if method == "" || password == "" {
-		return
-	}
-	h.cipher, _ = core.PickCipher(method, nil, password)
-	if h.cipher == nil {
-		cp, err := ss.NewCipher(method, password)
-		if err != nil {
-			log.Logf("[ssu] %s", err)
-			return
-		}
-		h.cipher = &shadowCipher{cipher: cp}
+	if len(h.options.Users) > 0 {
+		h.cipher = initShadowCipher(h.options.Users[0])
 	}
 }
 
@@ -668,9 +547,71 @@ type shadowCipher struct {
 }
 
 func (c *shadowCipher) StreamConn(conn net.Conn) net.Conn {
-	return ss.NewConn(conn, c.cipher.Copy())
+	return &shadowConn{
+		Conn: ss.NewConn(conn, c.cipher.Copy()),
+	}
 }
 
 func (c *shadowCipher) PacketConn(conn net.PacketConn) net.PacketConn {
 	return ss.NewSecurePacketConn(conn, c.cipher.Copy(), false)
+}
+
+func initShadowCipher(info *url.Userinfo) (cipher core.Cipher) {
+	var method, password string
+	if info != nil {
+		method = info.Username()
+		password, _ = info.Password()
+	}
+
+	if method == "" || password == "" {
+		return
+	}
+
+	cipher, _ = core.PickCipher(method, nil, password)
+	if cipher == nil {
+		cp, err := ss.NewCipher(method, password)
+		if err != nil {
+			log.Logf("[ss] %s", err)
+			return
+		}
+		cipher = &shadowCipher{cipher: cp}
+	}
+	return
+}
+
+func readSocksAddr(r io.Reader) (*gosocks5.Addr, error) {
+	addr := &gosocks5.Addr{}
+	b := sPool.Get().([]byte)
+	defer sPool.Put(b)
+
+	_, err := io.ReadFull(r, b[:1])
+	if err != nil {
+		return nil, err
+	}
+	addr.Type = b[0]
+
+	switch addr.Type {
+	case gosocks5.AddrIPv4:
+		_, err = io.ReadFull(r, b[:net.IPv4len])
+		addr.Host = net.IP(b[0:net.IPv4len]).String()
+	case gosocks5.AddrIPv6:
+		_, err = io.ReadFull(r, b[:net.IPv6len])
+		addr.Host = net.IP(b[0:net.IPv6len]).String()
+	case gosocks5.AddrDomain:
+		if _, err = io.ReadFull(r, b[:1]); err != nil {
+			return nil, err
+		}
+		addrlen := int(b[0])
+		_, err = io.ReadFull(r, b[:addrlen])
+		addr.Host = string(b[:addrlen])
+	default:
+		return nil, gosocks5.ErrBadAddrType
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = io.ReadFull(r, b[:2])
+	addr.Port = binary.BigEndian.Uint16(b[:2])
+	return addr, err
 }

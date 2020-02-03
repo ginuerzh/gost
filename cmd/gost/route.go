@@ -216,8 +216,6 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		connector = gost.SOCKS4AConnector()
 	case "ss":
 		connector = gost.ShadowConnector(node.User)
-	case "ss2":
-		connector = gost.Shadow2Connector(node.User)
 	case "ssu":
 		connector = gost.ShadowUDPConnector(node.User)
 	case "direct":
@@ -505,8 +503,6 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.SOCKS4Handler()
 		case "ss":
 			handler = gost.ShadowHandler()
-		case "ss2":
-			handler = gost.Shadow2Handler()
 		case "http":
 			handler = gost.HTTPHandler()
 		case "tcp":
