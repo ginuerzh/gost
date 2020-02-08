@@ -138,7 +138,7 @@ var ssProxyTests = []struct {
 	serverCipher *url.Userinfo
 	pass         bool
 }{
-	{nil, nil, false},
+	{nil, nil, true},
 	{&url.Userinfo{}, &url.Userinfo{}, true},
 	{url.User("abc"), url.User("abc"), true},
 	{url.UserPassword("abc", "def"), url.UserPassword("abc", "def"), true},

@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -167,9 +168,11 @@ func (h *tunHandler) Handle(conn net.Conn) {
 			var pc net.PacketConn
 			// fake tcp mode will be ignored when the client specifies a chain.
 			if raddr != nil && !h.options.Chain.IsEmpty() {
-				var cc net.Conn
-				cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
-				pc = &udpTunnelConn{Conn: cc, raddr: raddr}
+				cc, err := h.options.Chain.DialContext(context.Background(), "udp", raddr.String())
+				if err != nil {
+					return err
+				}
+				pc = cc.(net.PacketConn)
 			} else {
 				if h.options.TCPMode {
 					if raddr != nil {
@@ -549,9 +552,11 @@ func (h *tapHandler) Handle(conn net.Conn) {
 			var pc net.PacketConn
 			// fake tcp mode will be ignored when the client specifies a chain.
 			if raddr != nil && !h.options.Chain.IsEmpty() {
-				var cc net.Conn
-				cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
-				pc = &udpTunnelConn{Conn: cc, raddr: raddr}
+				cc, err := h.options.Chain.DialContext(context.Background(), "udp", raddr.String())
+				if err != nil {
+					return err
+				}
+				pc = cc.(net.PacketConn)
 			} else {
 				if h.options.TCPMode {
 					if raddr != nil {

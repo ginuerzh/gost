@@ -19,19 +19,17 @@ func UDPTransporter() Transporter {
 }
 
 func (tr *udpTransporter) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	raddr, err := net.ResolveUDPAddr("udp", addr)
+	taddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := net.ListenUDP("udp", nil)
+	conn, err := net.DialUDP("udp", nil, taddr)
 	if err != nil {
 		return nil, err
 	}
-
 	return &udpClientConn{
 		UDPConn: conn,
-		raddr:   raddr,
 	}, nil
 }
 
@@ -340,19 +338,14 @@ func (c *udpServerConn) SetWriteDeadline(t time.Time) error {
 
 type udpClientConn struct {
 	*net.UDPConn
-	raddr net.Addr
 }
 
-func (c *udpClientConn) Write(b []byte) (int, error) {
-	if c.raddr != nil {
-		return c.WriteTo(b, c.raddr)
-	}
+func (c *udpClientConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	return c.UDPConn.Write(b)
 }
 
-func (c *udpClientConn) RemoteAddr() net.Addr {
-	if c.raddr != nil {
-		return c.raddr
-	}
-	return c.UDPConn.RemoteAddr()
+func (c *udpClientConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+	n, err = c.Read(b)
+	addr = c.RemoteAddr()
+	return
 }

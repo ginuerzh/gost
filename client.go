@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"net/url"
@@ -14,23 +15,8 @@ import (
 // Connector is responsible for connecting to the destination address through this proxy.
 // Transporter performs a handshake with this proxy.
 type Client struct {
-	Connector   Connector
-	Transporter Transporter
-}
-
-// Dial connects to the target address.
-func (c *Client) Dial(addr string, options ...DialOption) (net.Conn, error) {
-	return c.Transporter.Dial(addr, options...)
-}
-
-// Handshake performs a handshake with the proxy over connection conn.
-func (c *Client) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
-	return c.Transporter.Handshake(conn, options...)
-}
-
-// Connect connects to the address addr via the proxy over connection conn.
-func (c *Client) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
-	return c.Connector.Connect(conn, addr, options...)
+	Connector
+	Transporter
 }
 
 // DefaultClient is a standard HTTP proxy client.
@@ -53,7 +39,36 @@ func Connect(conn net.Conn, addr string) (net.Conn, error) {
 
 // Connector is responsible for connecting to the destination address.
 type Connector interface {
-	Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error)
+	// Deprecated: use ConnectContext instead.
+	Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error)
+	ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error)
+}
+
+type autoConnector struct {
+	User *url.Userinfo
+}
+
+// AutoConnector is a Connector.
+func AutoConnector(user *url.Userinfo) Connector {
+	return &autoConnector{
+		User: user,
+	}
+}
+
+func (c *autoConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *autoConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	var cnr Connector
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		cnr = &httpConnector{User: c.User}
+	default:
+		cnr = &socks5UDPTunConnector{User: c.User}
+	}
+
+	return cnr.ConnectContext(ctx, conn, network, address, options...)
 }
 
 // Transporter is responsible for handshaking with the proxy server.

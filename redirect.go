@@ -3,6 +3,7 @@
 package gost
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -132,32 +133,14 @@ func (h *udpRedirectHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	var cc net.Conn
-	var err error
-	if h.options.Chain.IsEmpty() {
-		cc, err = net.DialUDP("udp", nil, raddr)
-		if err != nil {
-			log.Logf("[red-udp] %s - %s : %s", conn.RemoteAddr(), raddr, err)
-			return
-		}
-	} else if h.options.Chain.LastNode().Protocol == "ssu" {
-		cc, err = h.options.Chain.Dial(raddr.String(),
-			RetryChainOption(h.options.Retries),
-			TimeoutChainOption(h.options.Timeout),
-		)
-		if err != nil {
-			log.Logf("[red-udp] %s - %s : %s", conn.RemoteAddr(), raddr, err)
-			return
-		}
-	} else {
-		var err error
-		cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
-		if err != nil {
-			log.Logf("[red-udp] %s - %s : %s", conn.RemoteAddr(), raddr, err)
-			return
-		}
-
-		cc = &udpTunnelConn{Conn: cc, raddr: raddr}
+	cc, err := h.options.Chain.DialContext(context.Background(),
+		"udp", raddr.String(),
+		RetryChainOption(h.options.Retries),
+		TimeoutChainOption(h.options.Timeout),
+	)
+	if err != nil {
+		log.Logf("[red-udp] %s - %s : %s", conn.RemoteAddr(), raddr, err)
+		return
 	}
 	defer cc.Close()
 

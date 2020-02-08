@@ -606,31 +606,12 @@ func NewDNSExchanger(addr string, opts ...ExchangerOption) Exchanger {
 	}
 }
 
-func (ex *dnsExchanger) dial(ctx context.Context, network, address string) (conn net.Conn, err error) {
-	if ex.options.chain.IsEmpty() {
-		d := &net.Dialer{
-			Timeout: ex.options.timeout,
-		}
-		return d.DialContext(ctx, network, address)
-	}
-
-	if ex.options.chain.LastNode().Protocol == "ssu" {
-		return ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
-	}
-
-	raddr, err := net.ResolveUDPAddr(network, address)
-	if err != nil {
-		return
-	}
-
-	cc, err := getSOCKS5UDPTunnel(ex.options.chain, nil)
-	conn = &udpTunnelConn{Conn: cc, raddr: raddr}
-	return
-}
-
 func (ex *dnsExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
 	t := time.Now()
-	c, err := ex.dial(ctx, "udp", ex.addr)
+	c, err := ex.options.chain.DialContext(ctx,
+		"udp", ex.addr,
+		TimeoutChainOption(ex.options.timeout),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -674,19 +655,12 @@ func NewDNSTCPExchanger(addr string, opts ...ExchangerOption) Exchanger {
 	}
 }
 
-func (ex *dnsTCPExchanger) dial(ctx context.Context, network, address string) (conn net.Conn, err error) {
-	if ex.options.chain.IsEmpty() {
-		d := &net.Dialer{
-			Timeout: ex.options.timeout,
-		}
-		return d.DialContext(ctx, network, address)
-	}
-	return ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
-}
-
 func (ex *dnsTCPExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {
 	t := time.Now()
-	c, err := ex.dial(ctx, "tcp", ex.addr)
+	c, err := ex.options.chain.DialContext(ctx,
+		"tcp", ex.addr,
+		TimeoutChainOption(ex.options.timeout),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -738,14 +712,10 @@ func NewDoTExchanger(addr string, tlsConfig *tls.Config, opts ...ExchangerOption
 }
 
 func (ex *dotExchanger) dial(ctx context.Context, network, address string) (conn net.Conn, err error) {
-	if ex.options.chain.IsEmpty() {
-		d := &net.Dialer{
-			Timeout: ex.options.timeout,
-		}
-		conn, err = d.DialContext(ctx, network, address)
-	} else {
-		conn, err = ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
-	}
+	conn, err = ex.options.chain.DialContext(ctx,
+		network, address,
+		TimeoutChainOption(ex.options.timeout),
+	)
 	if err != nil {
 		return
 	}
@@ -812,14 +782,11 @@ func NewDoHExchanger(urlStr *url.URL, tlsConfig *tls.Config, opts ...ExchangerOp
 	return ex
 }
 
-func (ex *dohExchanger) dialContext(ctx context.Context, network, address string) (conn net.Conn, err error) {
-	if ex.options.chain.IsEmpty() {
-		d := &net.Dialer{
-			Timeout: ex.options.timeout,
-		}
-		return d.DialContext(ctx, network, address)
-	}
-	return ex.options.chain.Dial(address, TimeoutChainOption(ex.options.timeout))
+func (ex *dohExchanger) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return ex.options.chain.DialContext(ctx,
+		network, address,
+		TimeoutChainOption(ex.options.timeout),
+	)
 }
 
 func (ex *dohExchanger) Exchange(ctx context.Context, query []byte) ([]byte, error) {

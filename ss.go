@@ -2,6 +2,7 @@ package gost
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -13,6 +14,15 @@ import (
 	"github.com/go-log/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
+)
+
+const (
+	maxSocksAddrLen = 259
+)
+
+var (
+	_ net.Conn       = (*shadowConn)(nil)
+	_ net.PacketConn = (*shadowUDPPacketConn)(nil)
 )
 
 type shadowConnector struct {
@@ -27,7 +37,16 @@ func ShadowConnector(info *url.Userinfo) Connector {
 	}
 }
 
-func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *shadowConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *shadowConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -38,7 +57,7 @@ func (c *shadowConnector) Connect(conn net.Conn, addr string, options ...Connect
 		timeout = ConnectTimeout
 	}
 
-	socksAddr, err := gosocks5.NewAddr(addr)
+	socksAddr, err := gosocks5.NewAddr(address)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +202,16 @@ func ShadowUDPConnector(info *url.Userinfo) Connector {
 	}
 }
 
-func (c *shadowUDPConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *shadowUDPConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "udp", address, options...)
+}
+
+func (c *shadowUDPConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -197,13 +225,13 @@ func (c *shadowUDPConnector) Connect(conn net.Conn, addr string, options ...Conn
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
 
+	taddr, _ := net.ResolveUDPAddr(network, address)
+	if taddr == nil {
+		taddr = &net.UDPAddr{}
+	}
+
 	pc, ok := conn.(net.PacketConn)
 	if ok {
-		rawaddr, err := ss.RawAddr(addr)
-		if err != nil {
-			return nil, err
-		}
-
 		if c.cipher != nil {
 			pc = c.cipher.PacketConn(pc)
 		}
@@ -211,22 +239,17 @@ func (c *shadowUDPConnector) Connect(conn net.Conn, addr string, options ...Conn
 		return &shadowUDPPacketConn{
 			PacketConn: pc,
 			raddr:      conn.RemoteAddr(),
-			header:     rawaddr,
+			taddr:      taddr,
 		}, nil
-	}
-
-	taddr, err := gosocks5.NewAddr(addr)
-	if err != nil {
-		return nil, err
 	}
 
 	if c.cipher != nil {
 		conn = c.cipher.StreamConn(conn)
 	}
 
-	return &shadowUDPStreamConn{
-		Conn: conn,
-		addr: taddr,
+	return &socks5UDPTunnelConn{
+		Conn:  conn,
+		taddr: taddr,
 	}, nil
 }
 
@@ -258,23 +281,13 @@ func (h *shadowUDPHandler) Init(options ...HandlerOption) {
 func (h *shadowUDPHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	var err error
 	var cc net.PacketConn
-	if h.options.Chain.IsEmpty() {
-		cc, err = net.ListenUDP("udp", nil)
-		if err != nil {
-			log.Logf("[ssu] %s - : %s", conn.LocalAddr(), err)
-			return
-		}
-	} else {
-		var c net.Conn
-		c, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
-		if err != nil {
-			log.Logf("[ssu] %s - : %s", conn.LocalAddr(), err)
-			return
-		}
-		cc = &udpTunnelConn{Conn: c}
+	c, err := h.options.Chain.DialContext(context.Background(), "udp", "")
+	if err != nil {
+		log.Logf("[ssu] %s: %s", conn.LocalAddr(), err)
+		return
 	}
+	cc = c.(net.PacketConn)
 	defer cc.Close()
 
 	pc, ok := conn.(net.PacketConn)
@@ -466,24 +479,11 @@ func (c *shadowConn) Write(b []byte) (n int, err error) {
 
 type shadowUDPPacketConn struct {
 	net.PacketConn
-	raddr  net.Addr
-	header []byte
+	raddr net.Addr
+	taddr net.Addr
 }
 
-func (c *shadowUDPPacketConn) Write(b []byte) (n int, err error) {
-	n = len(b) // force byte length consistent
-	buf := bytes.Buffer{}
-	if _, err = buf.Write(c.header); err != nil {
-		return
-	}
-	if _, err = buf.Write(b); err != nil {
-		return
-	}
-	_, err = c.PacketConn.WriteTo(buf.Bytes(), c.raddr)
-	return
-}
-
-func (c *shadowUDPPacketConn) Read(b []byte) (n int, err error) {
+func (c *shadowUDPPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	buf := mPool.Get().([]byte)
 	defer mPool.Put(buf)
 
@@ -501,45 +501,44 @@ func (c *shadowUDPPacketConn) Read(b []byte) (n int, err error) {
 		return
 	}
 	n = copy(b, dgram.Data)
+	addr, err = net.ResolveUDPAddr("udp", dgram.Header.Addr.String())
+
 	return
+
+}
+
+func (c *shadowUDPPacketConn) Read(b []byte) (n int, err error) {
+	n, _, err = c.ReadFrom(b)
+	return
+}
+
+func (c *shadowUDPPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+	sa, err := gosocks5.NewAddr(addr.String())
+	if err != nil {
+		return
+	}
+	var rawaddr [maxSocksAddrLen]byte
+	nn, err := sa.Encode(rawaddr[:])
+	if err != nil {
+		return
+	}
+
+	buf := mPool.Get().([]byte)
+	defer mPool.Put(buf)
+
+	copy(buf, rawaddr[:nn])
+	n = copy(buf[nn:], b)
+	_, err = c.PacketConn.WriteTo(buf[:n+nn], c.raddr)
+
+	return
+}
+
+func (c *shadowUDPPacketConn) Write(b []byte) (n int, err error) {
+	return c.WriteTo(b, c.taddr)
 }
 
 func (c *shadowUDPPacketConn) RemoteAddr() net.Addr {
 	return c.raddr
-}
-
-type shadowUDPStreamConn struct {
-	net.Conn
-	addr *gosocks5.Addr
-}
-
-func (c *shadowUDPStreamConn) Read(b []byte) (n int, err error) {
-	dgram, err := gosocks5.ReadUDPDatagram(c.Conn)
-	if err != nil {
-		return
-	}
-	n = copy(b, dgram.Data)
-	return
-}
-
-func (c *shadowUDPStreamConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
-	n, err = c.Read(b)
-	addr = c.Conn.RemoteAddr()
-
-	return
-}
-
-func (c *shadowUDPStreamConn) Write(b []byte) (n int, err error) {
-	n = len(b) // force byte length consistent
-	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, c.addr), b)
-	buf := bytes.Buffer{}
-	dgram.Write(&buf)
-	_, err = c.Conn.Write(buf.Bytes())
-	return
-}
-
-func (c *shadowUDPStreamConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
-	return c.Write(b)
 }
 
 type shadowCipher struct {

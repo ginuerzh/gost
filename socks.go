@@ -2,6 +2,7 @@ package gost
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -33,6 +34,10 @@ const (
 	CmdMuxBind uint8 = 0xF2
 	// CmdUDPTun is an extended SOCKS5 request CMD for UDP over TCP.
 	CmdUDPTun uint8 = 0xF3
+)
+
+var (
+	_ net.PacketConn = (*socks5UDPTunnelConn)(nil)
 )
 
 type clientSelector struct {
@@ -201,7 +206,17 @@ func SOCKS5Connector(user *url.Userinfo) Connector {
 	return &socks5Connector{User: user}
 }
 
-func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks5Connector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *socks5Connector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		cnr := &socks5UDPTunConnector{User: c.User}
+		return cnr.ConnectContext(ctx, conn, network, address, options...)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -229,7 +244,7 @@ func (c *socks5Connector) Connect(conn net.Conn, addr string, options ...Connect
 	}
 	conn = cc
 
-	host, port, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +288,16 @@ func SOCKS5BindConnector(user *url.Userinfo) Connector {
 	return &socks5BindConnector{User: user}
 }
 
-func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks5BindConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *socks5BindConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -301,7 +325,7 @@ func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...Con
 	}
 	conn = cc
 
-	laddr, err := net.ResolveTCPAddr("tcp", addr)
+	laddr, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		log.Log(err)
 		return nil, err
@@ -331,8 +355,8 @@ func (c *socks5BindConnector) Connect(conn net.Conn, addr string, options ...Con
 	}
 
 	if reply.Rep != gosocks5.Succeeded {
-		log.Logf("[socks5] bind on %s failure", addr)
-		return nil, fmt.Errorf("SOCKS5 bind on %s failure", addr)
+		log.Logf("[socks5] bind on %s failure", address)
+		return nil, fmt.Errorf("SOCKS5 bind on %s failure", address)
 	}
 	baddr, err := net.ResolveTCPAddr("tcp", reply.Addr.String())
 	if err != nil {
@@ -350,8 +374,17 @@ func Socks5MuxBindConnector() Connector {
 	return &socks5MuxBindConnector{}
 }
 
+func (c *socks5MuxBindConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
 // NOTE: the conn must be *muxBindClientConn.
-func (c *socks5MuxBindConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks5MuxBindConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	accepter, ok := conn.(Accepter)
 	if !ok {
 		return nil, errors.New("wrong connection type")
@@ -513,7 +546,16 @@ func SOCKS5UDPConnector(user *url.Userinfo) Connector {
 	return &socks5UDPConnector{User: user}
 }
 
-func (c *socks5UDPConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks5UDPConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "udp", address, options...)
+}
+
+func (c *socks5UDPConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -541,7 +583,7 @@ func (c *socks5UDPConnector) Connect(conn net.Conn, addr string, options ...Conn
 	}
 	conn = cc
 
-	taddr, err := net.ResolveUDPAddr("udp", addr)
+	taddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		return nil, err
 	}
@@ -596,71 +638,40 @@ func SOCKS5UDPTunConnector(user *url.Userinfo) Connector {
 	return &socks5UDPTunConnector{User: user}
 }
 
-func (c *socks5UDPTunConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks5UDPTunConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "udp", address, options...)
+}
+
+func (c *socks5UDPTunConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
+	}
+
+	user := opts.User
+	if user == nil {
+		user = c.User
 	}
 
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = ConnectTimeout
 	}
-
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
 
-	user := opts.User
-	if user == nil {
-		user = c.User
-	}
-	cc, err := socks5Handshake(conn,
+	taddr, _ := net.ResolveUDPAddr("udp", address)
+	return newSocks5UDPTunnelConn(conn,
+		nil, taddr,
 		selectorSocks5HandshakeOption(opts.Selector),
 		userSocks5HandshakeOption(user),
 		noTLSSocks5HandshakeOption(opts.NoTLS),
 	)
-	if err != nil {
-		return nil, err
-	}
-	conn = cc
-
-	taddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	req := gosocks5.NewRequest(CmdUDPTun, &gosocks5.Addr{
-		Type: gosocks5.AddrIPv4,
-	})
-
-	if err := req.Write(conn); err != nil {
-		return nil, err
-	}
-
-	if Debug {
-		log.Log("[socks5] udp\n", req)
-	}
-
-	reply, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if Debug {
-		log.Log("[socks5] udp\n", reply)
-	}
-
-	if reply.Rep != gosocks5.Succeeded {
-		log.Logf("[socks5] udp relay failure")
-		return nil, fmt.Errorf("SOCKS5 udp relay failure")
-	}
-	baddr, err := net.ResolveUDPAddr("udp", reply.Addr.String())
-	if err != nil {
-		return nil, err
-	}
-	log.Logf("[socks5] udp-tun associate on %s OK", baddr)
-
-	return &udpTunnelConn{Conn: conn, raddr: taddr}, nil
 }
 
 type socks4Connector struct{}
@@ -670,7 +681,16 @@ func SOCKS4Connector() Connector {
 	return &socks4Connector{}
 }
 
-func (c *socks4Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks4Connector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *socks4Connector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -684,7 +704,7 @@ func (c *socks4Connector) Connect(conn net.Conn, addr string, options ...Connect
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
 
-	taddr, err := net.ResolveTCPAddr("tcp4", addr)
+	taddr, err := net.ResolveTCPAddr("tcp4", address)
 	if err != nil {
 		return nil, err
 	}
@@ -730,7 +750,16 @@ func SOCKS4AConnector() Connector {
 	return &socks4aConnector{}
 }
 
-func (c *socks4aConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *socks4aConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *socks4aConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -744,7 +773,7 @@ func (c *socks4aConnector) Connect(conn net.Conn, addr string, options ...Connec
 	conn.SetDeadline(time.Now().Add(timeout))
 	defer conn.SetDeadline(time.Time{})
 
-	host, port, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
 	}
@@ -1601,6 +1630,7 @@ func (h *socks5Handler) muxBindOn(conn net.Conn, addr string) {
 	}
 }
 
+// TODO: support ipv6 and domain
 func toSocksAddr(addr net.Addr) *gosocks5.Addr {
 	host := "0.0.0.0"
 	port := 0
@@ -1795,52 +1825,6 @@ func (h *socks4Handler) handleBind(conn net.Conn, req *gosocks4.Request) {
 	log.Logf("[socks4-bind] %s >-< %s", conn.RemoteAddr(), cc.RemoteAddr())
 }
 
-func getSOCKS5UDPTunnel(chain *Chain, addr net.Addr) (net.Conn, error) {
-	conn, err := chain.Conn()
-	if err != nil {
-		return nil, err
-	}
-
-	conn.SetDeadline(time.Now().Add(HandshakeTimeout))
-	defer conn.SetDeadline(time.Time{})
-
-	node := chain.LastNode()
-	cc, err := socks5Handshake(conn,
-		userSocks5HandshakeOption(node.User),
-		noTLSSocks5HandshakeOption(node.GetBool("notls")),
-	)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	conn = cc
-
-	req := gosocks5.NewRequest(CmdUDPTun, toSocksAddr(addr))
-	if err := req.Write(conn); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if Debug {
-		log.Log("[socks5]", req)
-	}
-
-	reply, err := gosocks5.ReadReply(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	if Debug {
-		log.Log("[socks5]", reply)
-	}
-
-	if reply.Rep != gosocks5.Succeeded {
-		conn.Close()
-		return nil, errors.New("UDP tunnel failure")
-	}
-	return conn, nil
-}
-
 type socks5HandshakeOptions struct {
 	selector  gosocks5.Selector
 	user      *url.Userinfo
@@ -1896,21 +1880,74 @@ func socks5Handshake(conn net.Conn, opts ...socks5HandshakeOption) (net.Conn, er
 	return cc, nil
 }
 
-type udpTunnelConn struct {
-	raddr net.Addr
-	net.Conn
+func getSocks5UDPTunnel(chain *Chain, addr net.Addr) (net.Conn, error) {
+	c, err := chain.Conn()
+	if err != nil {
+		return nil, err
+	}
+
+	node := chain.LastNode()
+	conn, err := newSocks5UDPTunnelConn(c,
+		addr, nil,
+		userSocks5HandshakeOption(node.User),
+		noTLSSocks5HandshakeOption(node.GetBool("notls")),
+	)
+	if err != nil {
+		c.Close()
+	}
+	return conn, nil
 }
 
-func (c *udpTunnelConn) Read(b []byte) (n int, err error) {
-	dgram, err := gosocks5.ReadUDPDatagram(c.Conn)
+type socks5UDPTunnelConn struct {
+	net.Conn
+	taddr net.Addr
+}
+
+func newSocks5UDPTunnelConn(conn net.Conn, raddr, taddr net.Addr, opts ...socks5HandshakeOption) (net.Conn, error) {
+	cc, err := socks5Handshake(conn, opts...)
 	if err != nil {
-		return
+		return nil, err
 	}
-	n = copy(b, dgram.Data)
+
+	req := gosocks5.NewRequest(CmdUDPTun, toSocksAddr(raddr))
+	if err := req.Write(cc); err != nil {
+		return nil, err
+	}
+	if Debug {
+		log.Log("[socks5] udp-tun", req)
+	}
+
+	reply, err := gosocks5.ReadReply(cc)
+	if err != nil {
+		return nil, err
+	}
+
+	if Debug {
+		log.Log("[socks5] udp-tun", reply)
+	}
+
+	if reply.Rep != gosocks5.Succeeded {
+		return nil, errors.New("socks5 UDP tunnel failure")
+	}
+
+	baddr, err := net.ResolveUDPAddr("udp", reply.Addr.String())
+	if err != nil {
+		return nil, err
+	}
+	log.Logf("[socks5] udp-tun associate on %s OK", baddr)
+
+	return &socks5UDPTunnelConn{
+		Conn:  cc,
+		taddr: taddr,
+	}, nil
+}
+
+func (c *socks5UDPTunnelConn) Read(b []byte) (n int, err error) {
+	n, _, err = c.ReadFrom(b)
 	return
 }
 
-func (c *udpTunnelConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+func (c *socks5UDPTunnelConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	dgram, err := gosocks5.ReadUDPDatagram(c.Conn)
 	if err != nil {
 		return
@@ -1920,15 +1957,11 @@ func (c *udpTunnelConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
 	return
 }
 
-func (c *udpTunnelConn) Write(b []byte) (n int, err error) {
-	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(c.raddr)), b)
-	if err = dgram.Write(c.Conn); err != nil {
-		return
-	}
-	return len(b), nil
+func (c *socks5UDPTunnelConn) Write(b []byte) (n int, err error) {
+	return c.WriteTo(b, c.taddr)
 }
 
-func (c *udpTunnelConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+func (c *socks5UDPTunnelConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	dgram := gosocks5.NewUDPDatagram(gosocks5.NewUDPHeader(uint16(len(b)), 0, toSocksAddr(addr)), b)
 	if err = dgram.Write(c.Conn); err != nil {
 		return

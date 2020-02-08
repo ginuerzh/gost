@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"context"
 	"errors"
 	"net"
 	"time"
@@ -100,9 +101,14 @@ func (c *Chain) IsEmpty() bool {
 	return c == nil || len(c.nodeGroups) == 0
 }
 
-// Dial connects to the target address addr through the chain.
-// If the chain is empty, it will use the net.Dial directly.
-func (c *Chain) Dial(addr string, opts ...ChainOption) (conn net.Conn, err error) {
+// Dial connects to the target TCP address addr through the chain.
+// Deprecated: use DialContext instead.
+func (c *Chain) Dial(address string, opts ...ChainOption) (conn net.Conn, err error) {
+	return c.DialContext(context.Background(), "tcp", address, opts...)
+}
+
+// DialContext connects to the address on the named network using the provided context.
+func (c *Chain) DialContext(ctx context.Context, network, address string, opts ...ChainOption) (conn net.Conn, err error) {
 	options := &ChainOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -117,7 +123,7 @@ func (c *Chain) Dial(addr string, opts ...ChainOption) (conn net.Conn, err error
 	}
 
 	for i := 0; i < retries; i++ {
-		conn, err = c.dialWithOptions(addr, options)
+		conn, err = c.dialWithOptions(ctx, network, address, options)
 		if err == nil {
 			break
 		}
@@ -125,16 +131,19 @@ func (c *Chain) Dial(addr string, opts ...ChainOption) (conn net.Conn, err error
 	return
 }
 
-func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, error) {
+func (c *Chain) dialWithOptions(ctx context.Context, network, address string, options *ChainOptions) (net.Conn, error) {
 	if options == nil {
 		options = &ChainOptions{}
 	}
-	route, err := c.selectRouteFor(addr)
+	route, err := c.selectRouteFor(address)
 	if err != nil {
 		return nil, err
 	}
 
-	ipAddr := c.resolve(addr, options.Resolver, options.Hosts)
+	ipAddr := address
+	if address != "" {
+		ipAddr = c.resolve(address, options.Resolver, options.Hosts)
+	}
 
 	timeout := options.Timeout
 	if timeout <= 0 {
@@ -142,16 +151,27 @@ func (c *Chain) dialWithOptions(addr string, options *ChainOptions) (net.Conn, e
 	}
 
 	if route.IsEmpty() {
-		return net.DialTimeout("tcp", ipAddr, timeout)
+		switch network {
+		case "udp", "udp4", "udp6":
+			if address == "" {
+				return net.ListenUDP(network, nil)
+			}
+		default:
+		}
+		d := &net.Dialer{
+			Timeout: timeout,
+			// LocalAddr: laddr, // TODO: optional local address
+		}
+		return d.DialContext(ctx, network, ipAddr)
 	}
 
-	conn, err := route.getConn()
+	conn, err := route.getConn(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	cOpts := append([]ConnectOption{AddrConnectOption(addr)}, route.LastNode().ConnectOptions...)
-	cc, err := route.LastNode().Client.Connect(conn, ipAddr, cOpts...)
+	cOpts := append([]ConnectOption{AddrConnectOption(address)}, route.LastNode().ConnectOptions...)
+	cc, err := route.LastNode().Client.ConnectContext(ctx, conn, network, ipAddr, cOpts...)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -187,6 +207,8 @@ func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
 		opt(options)
 	}
 
+	ctx := context.Background()
+
 	retries := 1
 	if c != nil && c.Retries > 0 {
 		retries = c.Retries
@@ -201,7 +223,7 @@ func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
 		if err != nil {
 			continue
 		}
-		conn, err = route.getConn()
+		conn, err = route.getConn(ctx)
 		if err == nil {
 			break
 		}
@@ -210,7 +232,7 @@ func (c *Chain) Conn(opts ...ChainOption) (conn net.Conn, err error) {
 }
 
 // getConn obtains a connection to the last node of the chain.
-func (c *Chain) getConn() (conn net.Conn, err error) {
+func (c *Chain) getConn(ctx context.Context) (conn net.Conn, err error) {
 	if c.IsEmpty() {
 		err = ErrEmptyChain
 		return
@@ -234,7 +256,7 @@ func (c *Chain) getConn() (conn net.Conn, err error) {
 	preNode := node
 	for _, node := range nodes[1:] {
 		var cc net.Conn
-		cc, err = preNode.Client.Connect(cn, node.Addr, preNode.ConnectOptions...)
+		cc, err = preNode.Client.ConnectContext(ctx, cn, "tcp", node.Addr, preNode.ConnectOptions...)
 		if err != nil {
 			cn.Close()
 			node.MarkDead()

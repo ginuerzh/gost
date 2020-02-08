@@ -1,6 +1,7 @@
 package gost
 
 import (
+	"context"
 	"errors"
 	"net"
 	"strings"
@@ -22,7 +23,11 @@ func ForwardConnector() Connector {
 	return &forwardConnector{}
 }
 
-func (c *forwardConnector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *forwardConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return conn, nil
+}
+
+func (c *forwardConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
 	return conn, nil
 }
 
@@ -186,42 +191,12 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	raddr, err := net.ResolveUDPAddr("udp", node.Addr)
+	cc, err := h.options.Chain.DialContext(context.Background(), "udp", node.Addr)
 	if err != nil {
 		node.MarkDead()
 		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
 		return
 	}
-
-	var cc net.Conn
-	if h.options.Chain.IsEmpty() {
-		cc, err = net.DialUDP("udp", nil, raddr)
-		if err != nil {
-			node.MarkDead()
-			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
-			return
-		}
-	} else if h.options.Chain.LastNode().Protocol == "ssu" {
-		cc, err = h.options.Chain.Dial(node.Addr,
-			RetryChainOption(h.options.Retries),
-			TimeoutChainOption(h.options.Timeout),
-		)
-		if err != nil {
-			node.MarkDead()
-			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
-			return
-		}
-	} else {
-		var err error
-		cc, err = getSOCKS5UDPTunnel(h.options.Chain, nil)
-		if err != nil {
-			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
-			return
-		}
-
-		cc = &udpTunnelConn{Conn: cc, raddr: raddr}
-	}
-
 	defer cc.Close()
 	node.ResetDead()
 
@@ -726,11 +701,11 @@ func (l *udpRemoteForwardListener) connect() (conn net.PacketConn, err error) {
 		lastNode := l.chain.LastNode()
 		if lastNode.Protocol == "socks5" {
 			var cc net.Conn
-			cc, err = getSOCKS5UDPTunnel(l.chain, l.addr)
+			cc, err = getSocks5UDPTunnel(l.chain, l.addr)
 			if err != nil {
 				log.Logf("[rudp] %s : %s", l.Addr(), err)
 			} else {
-				conn = &udpTunnelConn{Conn: cc}
+				conn = cc.(net.PacketConn)
 			}
 		} else {
 			var uc *net.UDPConn

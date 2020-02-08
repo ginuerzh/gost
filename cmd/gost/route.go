@@ -227,10 +227,9 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "sni":
 		connector = gost.SNIConnector(node.Get("host"))
 	case "http":
-		fallthrough
-	default:
-		node.Protocol = "http" // default protocol is HTTP
 		connector = gost.HTTPConnector(node.User)
+	default:
+		connector = gost.AutoConnector(node.User)
 	}
 
 	timeout := node.GetInt("timeout")

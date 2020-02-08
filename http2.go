@@ -3,6 +3,7 @@ package gost
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -33,7 +34,16 @@ func HTTP2Connector(user *url.Userinfo) Connector {
 	return &http2Connector{User: user}
 }
 
-func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectOption) (net.Conn, error) {
+func (c *http2Connector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
+}
+
+func (c *http2Connector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
+	switch network {
+	case "udp", "udp4", "udp6":
+		return nil, fmt.Errorf("%s unsupported", network)
+	}
+
 	opts := &ConnectOptions{}
 	for _, option := range options {
 		option(opts)
@@ -57,7 +67,7 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 		ProtoMajor:    2,
 		ProtoMinor:    0,
 		Body:          pr,
-		Host:          addr,
+		Host:          address,
 		ContentLength: -1,
 	}
 	req.Header.Set("User-Agent", ua)
@@ -97,7 +107,7 @@ func (c *http2Connector) Connect(conn net.Conn, addr string, options ...ConnectO
 		closed: make(chan struct{}),
 	}
 
-	hc.remoteAddr, _ = net.ResolveTCPAddr("tcp", addr)
+	hc.remoteAddr, _ = net.ResolveTCPAddr("tcp", address)
 	hc.localAddr, _ = net.ResolveTCPAddr("tcp", cc.addr)
 
 	return hc, nil
