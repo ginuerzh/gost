@@ -157,13 +157,16 @@ func (node *Node) GetBool(key string) bool {
 
 // GetInt converts node parameter value to int.
 func (node *Node) GetInt(key string) int {
-	n, _ := strconv.Atoi(node.Values.Get(key))
+	n, _ := strconv.Atoi(node.Get(key))
 	return n
 }
 
 // GetDuration converts node parameter value to time.Duration.
 func (node *Node) GetDuration(key string) time.Duration {
-	d, _ := time.ParseDuration(node.Values.Get(key))
+	d, err := time.ParseDuration(node.Get(key))
+	if err != nil {
+		d = time.Duration(node.GetInt(key)) * time.Second
+	}
 	return d
 }
 

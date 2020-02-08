@@ -119,7 +119,9 @@ func (ns *NameServer) String() string {
 }
 
 type resolverOptions struct {
-	chain *Chain
+	chain   *Chain
+	timeout time.Duration
+	ttl     time.Duration
 }
 
 // ResolverOption allows a common way to set Resolver options.
@@ -129,6 +131,20 @@ type ResolverOption func(*resolverOptions)
 func ChainResolverOption(chain *Chain) ResolverOption {
 	return func(opts *resolverOptions) {
 		opts.chain = chain
+	}
+}
+
+// TimeoutResolverOption sets the timeout for Resolver.
+func TimeoutResolverOption(timeout time.Duration) ResolverOption {
+	return func(opts *resolverOptions) {
+		opts.timeout = timeout
+	}
+}
+
+// TTLResolverOption sets the timeout for Resolver.
+func TTLResolverOption(ttl time.Duration) ResolverOption {
+	return func(opts *resolverOptions) {
+		opts.ttl = ttl
 	}
 }
 
@@ -191,8 +207,15 @@ func (r *resolver) Init(opts ...ResolverOption) error {
 	}
 
 	timeout := r.timeout
+	if r.options.timeout != 0 {
+		timeout = r.options.timeout
+	}
 	if timeout <= 0 {
 		timeout = DefaultResolverTimeout
+	}
+
+	if r.options.ttl != 0 {
+		r.ttl = r.options.ttl
 	}
 
 	var nss []NameServer
@@ -279,7 +302,7 @@ func (r *resolver) resolve(ex Exchanger, host string) (ips []net.IP, err error) 
 }
 
 func (r *resolver) resolveIPs(ctx context.Context, ex Exchanger, mq *dns.Msg) (ips []net.IP, err error) {
-	mr, err := r.exchangeMsg(ctx, ex, mq)
+	mr, _, err := r.exchangeMsg(ctx, ex, mq)
 	if err != nil {
 		return
 	}
@@ -302,12 +325,20 @@ func (r *resolver) Exchange(ctx context.Context, query []byte) (reply []byte, er
 		return
 	}
 
+	var qs string
+	if len(mq.Question) > 0 {
+		qs = mq.Question[0].String()
+	}
+
 	var mr *dns.Msg
 	for _, ns := range r.copyServers() {
-		mr, err = r.exchangeMsg(ctx, ns.exchanger, mq)
+		var cache bool
+		mr, cache, err = r.exchangeMsg(ctx, ns.exchanger, mq)
+		log.Logf("[dns] exchange message %d via %s (cache hit: %v): %s", mq.Id, ns.String(), cache, qs)
 		if err == nil {
 			break
 		}
+		log.Logf("[dns] exchange message %d via %s: %s", mq.Id, ns.String(), err)
 	}
 	if err != nil {
 		return
@@ -315,12 +346,13 @@ func (r *resolver) Exchange(ctx context.Context, query []byte) (reply []byte, er
 	return mr.Pack()
 }
 
-func (r *resolver) exchangeMsg(ctx context.Context, ex Exchanger, mq *dns.Msg) (mr *dns.Msg, err error) {
+func (r *resolver) exchangeMsg(ctx context.Context, ex Exchanger, mq *dns.Msg) (mr *dns.Msg, cache bool, err error) {
 	// Only cache for single question.
 	if len(mq.Question) == 1 {
 		key := newResolverCacheKey(&mq.Question[0])
 		mr = r.cache.loadCache(key)
 		if mr != nil {
+			cache = true
 			mr.Id = mq.Id
 			return
 		}
@@ -340,9 +372,7 @@ func (r *resolver) exchangeMsg(ctx context.Context, ex Exchanger, mq *dns.Msg) (
 	}
 
 	mr = &dns.Msg{}
-	if err = mr.Unpack(reply); err != nil {
-		return nil, err
-	}
+	err = mr.Unpack(reply)
 
 	return
 }

@@ -334,7 +334,6 @@ type tcpRemoteForwardListener struct {
 	sessionMux sync.Mutex
 	closed     chan struct{}
 	closeMux   sync.Mutex
-	errChan    chan error
 }
 
 // TCPRemoteForwardListener creates a Listener for TCP remote port forwarding server.
@@ -349,7 +348,6 @@ func TCPRemoteForwardListener(addr string, chain *Chain) (Listener, error) {
 		chain:    chain,
 		connChan: make(chan net.Conn, 1024),
 		closed:   make(chan struct{}),
-		errChan:  make(chan error),
 	}
 
 	if !ln.isChainValid() {
@@ -365,7 +363,7 @@ func TCPRemoteForwardListener(addr string, chain *Chain) (Listener, error) {
 func (l *tcpRemoteForwardListener) isChainValid() bool {
 	lastNode := l.chain.LastNode()
 	if (lastNode.Protocol == "forward" && lastNode.Transport == "ssh") ||
-		lastNode.Protocol == "socks5" {
+		lastNode.Protocol == "socks5" || lastNode.Protocol == "" {
 		return true
 	}
 	return false
@@ -431,7 +429,7 @@ func (l *tcpRemoteForwardListener) accept() (conn net.Conn, err error) {
 		return l.chain.Dial(l.addr.String())
 	}
 
-	if lastNode.Protocol == "socks5" {
+	if lastNode.Protocol == "socks5" || lastNode.Protocol == "" {
 		if lastNode.GetBool("mbind") {
 			return l.muxAccept() // multiplexing support for binding.
 		}
@@ -588,11 +586,9 @@ type udpRemoteForwardListener struct {
 	connMap  *udpConnMap
 	connChan chan net.Conn
 	ln       *net.UDPConn
-	errChan  chan error
 	ttl      time.Duration
 	closed   chan struct{}
 	closeMux sync.Mutex
-	once     sync.Once
 	config   *UDPListenConfig
 }
 
@@ -617,14 +613,11 @@ func UDPRemoteForwardListener(addr string, chain *Chain, cfg *UDPListenConfig) (
 		chain:    chain,
 		connMap:  new(udpConnMap),
 		connChan: make(chan net.Conn, backlog),
-		errChan:  make(chan error, 1),
 		closed:   make(chan struct{}),
 		config:   cfg,
 	}
 
 	go ln.listenLoop()
-
-	err = <-ln.errChan
 
 	return ln, err
 }
@@ -699,7 +692,7 @@ func (l *udpRemoteForwardListener) connect() (conn net.PacketConn, err error) {
 		}
 
 		lastNode := l.chain.LastNode()
-		if lastNode.Protocol == "socks5" {
+		if lastNode.Protocol == "socks5" || lastNode.Protocol == "" {
 			var cc net.Conn
 			cc, err = getSocks5UDPTunnel(l.chain, l.addr)
 			if err != nil {
@@ -715,11 +708,6 @@ func (l *udpRemoteForwardListener) connect() (conn net.PacketConn, err error) {
 				conn = uc
 			}
 		}
-
-		l.once.Do(func() {
-			l.errChan <- err
-			close(l.errChan)
-		})
 
 		if err != nil {
 			if tempDelay == 0 {

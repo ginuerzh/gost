@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/ginuerzh/gost"
 	"github.com/go-log/log"
@@ -136,6 +135,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	wsOpts.UserAgent = node.Get("agent")
 	wsOpts.Path = node.Get("path")
 
+	timeout := node.GetDuration("timeout")
+
 	var host string
 
 	var tr gost.Transporter
@@ -175,8 +176,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		config := &gost.QUICConfig{
 			TLSConfig:   tlsCfg,
 			KeepAlive:   node.GetBool("keepalive"),
-			Timeout:     time.Duration(node.GetInt("timeout")) * time.Second,
-			IdleTimeout: time.Duration(node.GetInt("idle")) * time.Second,
+			Timeout:     timeout,
+			IdleTimeout: node.GetDuration("idle"),
 		}
 
 		if cipher := node.Get("cipher"); cipher != "" {
@@ -232,9 +233,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		connector = gost.AutoConnector(node.User)
 	}
 
-	timeout := node.GetInt("timeout")
 	node.DialOptions = append(node.DialOptions,
-		gost.TimeoutDialOption(time.Duration(timeout)*time.Second),
+		gost.TimeoutDialOption(timeout),
 	)
 
 	node.ConnectOptions = []gost.ConnectOption{
@@ -250,8 +250,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		gost.HostHandshakeOption(host),
 		gost.UserHandshakeOption(node.User),
 		gost.TLSConfigHandshakeOption(tlsCfg),
-		gost.IntervalHandshakeOption(time.Duration(node.GetInt("ping")) * time.Second),
-		gost.TimeoutHandshakeOption(time.Duration(timeout) * time.Second),
+		gost.IntervalHandshakeOption(node.GetDuration("ping")),
+		gost.TimeoutHandshakeOption(timeout),
 		gost.RetryHandshakeOption(node.GetInt("retry")),
 	}
 	node.Client = &gost.Client{
@@ -339,10 +339,8 @@ func (r *route) GenRouters() ([]router, error) {
 		wsOpts.WriteBufferSize = node.GetInt("wbuf")
 		wsOpts.Path = node.Get("path")
 
-		ttl, err := time.ParseDuration(node.Get("ttl"))
-		if err != nil {
-			ttl = time.Duration(node.GetInt("ttl")) * time.Second
-		}
+		ttl := node.GetDuration("ttl")
+		timeout := node.GetDuration("timeout")
 
 		tunRoutes := parseIPRoutes(node.Get("route"))
 		gw := net.ParseIP(node.Get("gw")) // default gateway
@@ -393,8 +391,8 @@ func (r *route) GenRouters() ([]router, error) {
 			config := &gost.QUICConfig{
 				TLSConfig:   tlsCfg,
 				KeepAlive:   node.GetBool("keepalive"),
-				Timeout:     time.Duration(node.GetInt("timeout")) * time.Second,
-				IdleTimeout: time.Duration(node.GetInt("idle")) * time.Second,
+				Timeout:     timeout,
+				IdleTimeout: node.GetDuration("idle"),
 			}
 			if cipher := node.Get("cipher"); cipher != "" {
 				sum := sha256.Sum256([]byte(cipher))
@@ -555,7 +553,11 @@ func (r *route) GenRouters() ([]router, error) {
 
 		resolver := parseResolver(node.Get("dns"))
 		if resolver != nil {
-			resolver.Init(gost.ChainResolverOption(chain))
+			resolver.Init(
+				gost.ChainResolverOption(chain),
+				gost.TimeoutResolverOption(timeout),
+				gost.TTLResolverOption(ttl),
+			)
 		}
 
 		handler.Init(
@@ -573,7 +575,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.ResolverHandlerOption(resolver),
 			gost.HostsHandlerOption(hosts),
 			gost.RetryHandlerOption(node.GetInt("retry")), // override the global retry option.
-			gost.TimeoutHandlerOption(time.Duration(node.GetInt("timeout"))*time.Second),
+			gost.TimeoutHandlerOption(timeout),
 			gost.ProbeResistHandlerOption(node.Get("probe_resist")),
 			gost.KnockingHandlerOption(node.Get("knock")),
 			gost.NodeHandlerOption(node),

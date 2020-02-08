@@ -1400,14 +1400,14 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 		addr := req.Addr.String()
 
 		if !Can("rudp", addr, h.options.Whitelist, h.options.Blacklist) {
-			log.Logf("[socks5-udp] Unauthorized to udp bind to %s", addr)
+			log.Logf("[socks5] udp-tun Unauthorized to udp bind to %s", addr)
 			return
 		}
 
 		bindAddr, _ := net.ResolveUDPAddr("udp", addr)
 		uc, err := net.ListenUDP("udp", bindAddr)
 		if err != nil {
-			log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+			log.Logf("[socks5] udp-tun %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 			return
 		}
 		defer uc.Close()
@@ -1416,32 +1416,32 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 		socksAddr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String())
 		reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 		if err := reply.Write(conn); err != nil {
-			log.Logf("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
+			log.Logf("[socks5] udp-tun %s <- %s : %s", conn.RemoteAddr(), socksAddr, err)
 			return
 		}
 		if Debug {
-			log.Logf("[socks5-udp] %s <- %s\n%s", conn.RemoteAddr(), socksAddr, reply)
+			log.Logf("[socks5] udp-tun %s <- %s\n%s", conn.RemoteAddr(), socksAddr, reply)
 		}
-		log.Logf("[socks5-udp] %s <-> %s", conn.RemoteAddr(), socksAddr)
+		log.Logf("[socks5] udp-tun %s <-> %s", conn.RemoteAddr(), socksAddr)
 		h.tunnelServerUDP(conn, uc)
-		log.Logf("[socks5-udp] %s >-< %s", conn.RemoteAddr(), socksAddr)
+		log.Logf("[socks5] udp-tun %s >-< %s", conn.RemoteAddr(), socksAddr)
 		return
 	}
 
 	cc, err := h.options.Chain.Conn()
 	// connection error
 	if err != nil {
-		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+		log.Logf("[socks5] udp-tun %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
 		reply.Write(conn)
-		log.Logf("[socks5-udp] %s -> %s\n%s", conn.RemoteAddr(), req.Addr, reply)
+		log.Logf("[socks5] udp-tun %s -> %s\n%s", conn.RemoteAddr(), req.Addr, reply)
 		return
 	}
 	defer cc.Close()
 
 	cc, err = socks5Handshake(cc, userSocks5HandshakeOption(h.options.Chain.LastNode().User))
 	if err != nil {
-		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
+		log.Logf("[socks5] udp-tun %s -> %s : %s", conn.RemoteAddr(), req.Addr, err)
 		return
 	}
 	// tunnel <-> tunnel, direct forwarding
@@ -1449,9 +1449,9 @@ func (h *socks5Handler) handleUDPTunnel(conn net.Conn, req *gosocks5.Request) {
 	// so we don't need to authenticate it, as it's as explicit as whitelisting
 	req.Write(cc)
 
-	log.Logf("[socks5-udp] %s <-> %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
+	log.Logf("[socks5] udp-tun %s <-> %s", conn.RemoteAddr(), cc.RemoteAddr())
 	transport(conn, cc)
-	log.Logf("[socks5-udp] %s >-< %s [tun]", conn.RemoteAddr(), cc.RemoteAddr())
+	log.Logf("[socks5] udp-tun %s >-< %s", conn.RemoteAddr(), cc.RemoteAddr())
 }
 
 func (h *socks5Handler) tunnelServerUDP(cc net.Conn, pc net.PacketConn) (err error) {
@@ -1469,7 +1469,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, pc net.PacketConn) (err err
 				return
 			}
 			if h.options.Bypass.Contains(addr.String()) {
-				log.Log("[udp-tun] [bypass] read from", addr)
+				log.Log("[socks5] udp-tun bypass read from", addr)
 				continue // bypass
 			}
 
@@ -1477,12 +1477,12 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, pc net.PacketConn) (err err
 			dgram := gosocks5.NewUDPDatagram(
 				gosocks5.NewUDPHeader(uint16(n), 0, toSocksAddr(addr)), b[:n])
 			if err := dgram.Write(cc); err != nil {
-				log.Logf("[udp-tun] %s <- %s : %s", cc.RemoteAddr(), dgram.Header.Addr, err)
+				log.Logf("[socks5] udp-tun %s <- %s : %s", cc.RemoteAddr(), dgram.Header.Addr, err)
 				errc <- err
 				return
 			}
 			if Debug {
-				log.Logf("[udp-tun] %s <<< %s length: %d", cc.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
+				log.Logf("[socks5] udp-tun %s <<< %s length: %d", cc.RemoteAddr(), dgram.Header.Addr, len(dgram.Data))
 			}
 		}
 	}()
@@ -1502,16 +1502,16 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, pc net.PacketConn) (err err
 				continue // drop silently
 			}
 			if h.options.Bypass.Contains(addr.String()) {
-				log.Log("[udp-tun] [bypass] write to", addr)
+				log.Log("[socks5] udp-tun bypass write to", addr)
 				continue // bypass
 			}
 			if _, err := pc.WriteTo(dgram.Data, addr); err != nil {
-				log.Logf("[udp-tun] %s -> %s : %s", cc.RemoteAddr(), addr, err)
+				log.Logf("[socks5] udp-tun %s -> %s : %s", cc.RemoteAddr(), addr, err)
 				errc <- err
 				return
 			}
 			if Debug {
-				log.Logf("[udp-tun] %s >>> %s length: %d", cc.RemoteAddr(), addr, len(dgram.Data))
+				log.Logf("[socks5] udp-tun %s >>> %s length: %d", cc.RemoteAddr(), addr, len(dgram.Data))
 			}
 		}
 	}()
@@ -1895,7 +1895,7 @@ func getSocks5UDPTunnel(chain *Chain, addr net.Addr) (net.Conn, error) {
 	if err != nil {
 		c.Close()
 	}
-	return conn, nil
+	return conn, err
 }
 
 type socks5UDPTunnelConn struct {
