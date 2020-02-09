@@ -557,6 +557,8 @@ func (r *route) GenRouters() ([]router, error) {
 				gost.ChainResolverOption(chain),
 				gost.TimeoutResolverOption(timeout),
 				gost.TTLResolverOption(ttl),
+				gost.PreferResolverOption(node.Get("prefer")),
+				gost.SrcIPResolverOption(net.ParseIP(node.Get("ip"))),
 			)
 		}
 
