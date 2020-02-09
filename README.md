@@ -49,7 +49,9 @@ Google讨论组: <https://groups.google.com/d/forum/go-gost>
 #### 源码编译
 
 ```bash
-go get -u github.com/ginuerzh/gost/cmd/gost
+git clone https://github.com/ginuerzh/gost.git
+cd gost/cmd/gost
+go build
 ```
 
 #### Docker
@@ -61,6 +63,7 @@ docker pull ginuerzh/gost
 #### Ubuntu商店
 
 ```bash
+sudo snap install core
 sudo snap install gost
 ```
 
