@@ -345,7 +345,7 @@ func (c *udpClientConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 }
 
 func (c *udpClientConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
-	n, err = c.Read(b)
+	n, err = c.UDPConn.Read(b)
 	addr = c.RemoteAddr()
 	return
 }
