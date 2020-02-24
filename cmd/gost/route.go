@@ -137,8 +137,6 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 
 	timeout := node.GetDuration("timeout")
 
-	var host string
-
 	var tr gost.Transporter
 	switch node.Transport {
 	case "tls":
@@ -195,8 +193,9 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	case "obfs4":
 		tr = gost.Obfs4Transporter()
 	case "ohttp":
-		host = node.Get("host")
 		tr = gost.ObfsHTTPTransporter()
+	case "otls":
+		tr = gost.ObfsTLSTransporter()
 	case "ftcp":
 		tr = gost.FakeTCPTransporter()
 	case "udp":
@@ -240,8 +239,10 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	node.ConnectOptions = []gost.ConnectOption{
 		gost.UserAgentConnectOption(node.Get("agent")),
 		gost.NoTLSConnectOption(node.GetBool("notls")),
+		gost.NoDelayConnectOption(node.GetBool("nodelay")),
 	}
 
+	host := node.Get("host")
 	if host == "" {
 		host = node.Host
 	}
@@ -441,6 +442,8 @@ func (r *route) GenRouters() ([]router, error) {
 			ln, err = gost.Obfs4Listener(node.Addr)
 		case "ohttp":
 			ln, err = gost.ObfsHTTPListener(node.Addr)
+		case "otls":
+			ln, err = gost.ObfsTLSListener(node.Addr)
 		case "tun":
 			cfg := gost.TunConfig{
 				Name:    node.Get("name"),

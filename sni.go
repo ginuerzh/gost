@@ -270,7 +270,7 @@ func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, str
 	if err != nil {
 		return nil, "", err
 	}
-	clientHello := &dissector.ClientHelloHandshake{}
+	clientHello := &dissector.ClientHelloMsg{}
 	if err := clientHello.Decode(record.Opaque); err != nil {
 		return nil, "", err
 	}
@@ -280,7 +280,8 @@ func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, str
 
 		for _, ext := range clientHello.Extensions {
 			if ext.Type() == 0xFFFE {
-				if host, err = decodeServerName(string(ext.Bytes()[4:])); err == nil {
+				b, _ := ext.Encode()
+				if host, err = decodeServerName(string(b)); err == nil {
 					continue
 				}
 			}
@@ -296,8 +297,8 @@ func readClientHelloRecord(r io.Reader, host string, isClient bool) ([]byte, str
 				host = snExtension.Name
 			}
 			if isClient {
-				clientHello.Extensions = append(clientHello.Extensions,
-					dissector.NewExtension(0xFFFE, []byte(encodeServerName(snExtension.Name))))
+				e, _ := dissector.NewExtension(0xFFFE, []byte(encodeServerName(snExtension.Name)))
+				clientHello.Extensions = append(clientHello.Extensions, e)
 			}
 			if host != "" {
 				snExtension.Name = host

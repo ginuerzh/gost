@@ -197,6 +197,7 @@ type ConnectOptions struct {
 	Selector  gosocks5.Selector
 	UserAgent string
 	NoTLS     bool
+	NoDelay   bool
 }
 
 // ConnectOption allows a common way to set ConnectOptions.
@@ -241,5 +242,12 @@ func UserAgentConnectOption(ua string) ConnectOption {
 func NoTLSConnectOption(b bool) ConnectOption {
 	return func(opts *ConnectOptions) {
 		opts.NoTLS = b
+	}
+}
+
+// NoDelayConnectOption specifies the NoDelay option for ss.Connect.
+func NoDelayConnectOption(b bool) ConnectOption {
+	return func(opts *ConnectOptions) {
+		opts.NoDelay = b
 	}
 }
