@@ -20,7 +20,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.10.2-dev"
+const Version = "2.11.0-dev"
 
 // Debug is a flag that enables the debug log.
 var Debug bool

@@ -111,6 +111,7 @@ func ParseNode(s string) (node Node, err error) {
 	case "tun", "tap": // tun/tap device
 	case "ftcp": // fake TCP
 	case "dns", "dot", "doh":
+	case "relay":
 	default:
 		node.Protocol = ""
 	}

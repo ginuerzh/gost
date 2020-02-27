@@ -40,6 +40,7 @@ func ipProtocol(p waterutil.IPProtocol) string {
 	return fmt.Sprintf("unknown(%d)", p)
 }
 
+// IPRoute is an IP routing entry.
 type IPRoute struct {
 	Dest    *net.IPNet
 	Gateway net.IP

@@ -24,7 +24,7 @@ func ForwardConnector() Connector {
 }
 
 func (c *forwardConnector) Connect(conn net.Conn, address string, options ...ConnectOption) (net.Conn, error) {
-	return conn, nil
+	return c.ConnectContext(context.Background(), conn, "tcp", address, options...)
 }
 
 func (c *forwardConnector) ConnectContext(ctx context.Context, conn net.Conn, network, address string, options ...ConnectOption) (net.Conn, error) {
@@ -74,13 +74,6 @@ func (h *baseForwardHandler) Init(options ...HandlerOption) {
 
 		n++
 	}
-	if len(h.group.Nodes()) == 0 {
-		h.group.AddNode(Node{ // dummy address
-			ID:   n,
-			Addr: ":0",
-			Host: ":0",
-		})
-	}
 }
 
 type tcpDirectForwardHandler struct {
@@ -113,6 +106,8 @@ func (h *tcpDirectForwardHandler) Init(options ...HandlerOption) {
 func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
+	log.Logf("[tcp] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
+
 	retries := 1
 	if h.options.Chain != nil && h.options.Chain.Retries > 0 {
 		retries = h.options.Chain.Retries
@@ -125,19 +120,20 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 	var node Node
 	var err error
 	for i := 0; i < retries; i++ {
-		node, err = h.group.Next()
-		if err != nil {
-			log.Logf("[tcp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
-			return
+		if len(h.group.Nodes()) > 0 {
+			node, err = h.group.Next()
+			if err != nil {
+				log.Logf("[tcp] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+				return
+			}
 		}
 
-		log.Logf("[tcp] %s - %s", conn.RemoteAddr(), node.Addr)
 		cc, err = h.options.Chain.Dial(node.Addr,
 			RetryChainOption(h.options.Retries),
 			TimeoutChainOption(h.options.Timeout),
 		)
 		if err != nil {
-			log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), node.Addr, err)
+			log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 			node.MarkDead()
 		} else {
 			break
@@ -150,9 +146,13 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 	node.ResetDead()
 	defer cc.Close()
 
-	log.Logf("[tcp] %s <-> %s", conn.RemoteAddr(), node.Addr)
+	addr := node.Addr
+	if addr == "" {
+		addr = conn.LocalAddr().String()
+	}
+	log.Logf("[tcp] %s <-> %s", conn.RemoteAddr(), addr)
 	transport(conn, cc)
-	log.Logf("[tcp] %s >-< %s", conn.RemoteAddr(), node.Addr)
+	log.Logf("[tcp] %s >-< %s", conn.RemoteAddr(), addr)
 }
 
 type udpDirectForwardHandler struct {
@@ -185,24 +185,34 @@ func (h *udpDirectForwardHandler) Init(options ...HandlerOption) {
 func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	node, err := h.group.Next()
-	if err != nil {
-		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
-		return
+	log.Logf("[udp] %s - %s", conn.RemoteAddr(), conn.LocalAddr())
+
+	var node Node
+	var err error
+	if len(h.group.Nodes()) > 0 {
+		node, err = h.group.Next()
+		if err != nil {
+			log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+			return
+		}
 	}
 
 	cc, err := h.options.Chain.DialContext(context.Background(), "udp", node.Addr)
 	if err != nil {
 		node.MarkDead()
-		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), node.Addr, err)
+		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		return
 	}
 	defer cc.Close()
 	node.ResetDead()
 
-	log.Logf("[udp] %s <-> %s", conn.RemoteAddr(), node.Addr)
+	addr := node.Addr
+	if addr == "" {
+		addr = conn.LocalAddr().String()
+	}
+	log.Logf("[udp] %s <-> %s", conn.RemoteAddr(), addr)
 	transport(conn, cc)
-	log.Logf("[udp] %s >-< %s", conn.RemoteAddr(), node.Addr)
+	log.Logf("[udp] %s >-< %s", conn.RemoteAddr(), addr)
 }
 
 type tcpRemoteForwardHandler struct {
@@ -244,10 +254,12 @@ func (h *tcpRemoteForwardHandler) Handle(conn net.Conn) {
 	var node Node
 	var err error
 	for i := 0; i < retries; i++ {
-		node, err = h.group.Next()
-		if err != nil {
-			log.Logf("[rtcp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
-			return
+		if len(h.group.Nodes()) > 0 {
+			node, err = h.group.Next()
+			if err != nil {
+				log.Logf("[rtcp] %s - %s : %s", conn.LocalAddr(), h.raddr, err)
+				return
+			}
 		}
 		cc, err = net.DialTimeout("tcp", node.Addr, h.options.Timeout)
 		if err != nil {
@@ -299,10 +311,14 @@ func (h *udpRemoteForwardHandler) Init(options ...HandlerOption) {
 func (h *udpRemoteForwardHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	node, err := h.group.Next()
-	if err != nil {
-		log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
-		return
+	var node Node
+	var err error
+	if len(h.group.Nodes()) > 0 {
+		node, err = h.group.Next()
+		if err != nil {
+			log.Logf("[rudp] %s - %s : %s", conn.RemoteAddr(), h.raddr, err)
+			return
+		}
 	}
 
 	raddr, err := net.ResolveUDPAddr("udp", node.Addr)

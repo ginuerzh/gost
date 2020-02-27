@@ -28,6 +28,8 @@ github.com/ginuerzh/gosocks4 v0.0.1 h1:ojDKUyz+uaEeRm2usY1cyQiXTqJqrKxfeE6SVBXq4
 github.com/ginuerzh/gosocks4 v0.0.1/go.mod h1:8SdwBMKjfJ9+BfP2vDJM1jcrgWUbWV6qxBPHHVrwptY=
 github.com/ginuerzh/gosocks5 v0.2.0 h1:K0Ua23U9LU3BZrf3XpGDcs0mP8DiEpa6PJE4TA/MU3s=
 github.com/ginuerzh/gosocks5 v0.2.0/go.mod h1:qp22mr6tH/prEoaN0pFukq76LlScIE+F2rP2ZP5ZHno=
+github.com/ginuerzh/relay v0.0.0-20200226123819-7f0ae19c2e02 h1:+TjDSHAHDdhoWaZ/8oArW+ANz4St2Jb8xc5/YtfMBP0=
+github.com/ginuerzh/relay v0.0.0-20200226123819-7f0ae19c2e02/go.mod h1:VLcyv9iIjbxHOSJ3bCUPyc/AXSsMf8ZlX2M1xIvAlFQ=
 github.com/ginuerzh/tls-dissector v0.0.1 h1:yF6fIt78TO4CdjiLLn6R8r0XajQJE1Lbnuq6rP8mGW8=
 github.com/ginuerzh/tls-dissector v0.0.1/go.mod h1:u/kbBOqIOgJv39gywuUb3VwyzdZG5DKquOqfToKE6lk=
 github.com/ginuerzh/tls-dissector v0.0.2-0.20200223041816-c0cb3da7ea91 h1:bFBTbZglO4xNVWSLwDEcVKBIurTXGL2sNKi9UuQima4=

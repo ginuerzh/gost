@@ -321,6 +321,7 @@ type obfsTLSConn struct {
 	handshakeMutex sync.Mutex
 }
 
+// ClientObfsTLSConn creates a connection for obfs-tls client.
 func ClientObfsTLSConn(conn net.Conn, host string) net.Conn {
 	return &obfsTLSConn{
 		Conn:       conn,
@@ -329,6 +330,7 @@ func ClientObfsTLSConn(conn net.Conn, host string) net.Conn {
 	}
 }
 
+// ServerObfsTLSConn creates a connection for obfs-tls server.
 func ServerObfsTLSConn(conn net.Conn, host string) net.Conn {
 	return &obfsTLSConn{
 		Conn:       conn,

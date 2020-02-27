@@ -228,6 +228,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		connector = gost.SNIConnector(node.Get("host"))
 	case "http":
 		connector = gost.HTTPConnector(node.User)
+	case "relay":
+		connector = gost.RelayConnector(node.User)
 	default:
 		connector = gost.AutoConnector(node.User)
 	}
@@ -529,6 +531,8 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.TapHandler()
 		case "dns":
 			handler = gost.DNSHandler(node.Remote)
+		case "relay":
+			handler = gost.RelayHandler(node.Remote)
 		default:
 			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
 			if node.Remote != "" {
