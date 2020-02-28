@@ -173,7 +173,13 @@ func (h *tunHandler) Handle(conn net.Conn) {
 				if err != nil {
 					return err
 				}
-				pc = cc.(net.PacketConn)
+				var ok bool
+				pc, ok = cc.(net.PacketConn)
+				if !ok {
+					err = errors.New("not a packet connection")
+					log.Logf("[tun] %s - %s: %s", conn.LocalAddr(), raddr, err)
+					return err
+				}
 			} else {
 				if h.options.TCPMode {
 					if raddr != nil {

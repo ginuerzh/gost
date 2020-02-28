@@ -271,16 +271,20 @@ func (c *relayConn) Read(b []byte) (n int, err error) {
 		resp := new(relay.Response)
 		_, err = resp.ReadFrom(c.Conn)
 		if err != nil {
+			log.Log("[relay] read:", err)
 			return
 		}
 		if resp.Version != relay.Version1 {
 			err = relay.ErrBadVersion
+			log.Log("[relay] read:", err)
 			return
 		}
 		if resp.Status != relay.StatusOK {
 			err = fmt.Errorf("status %d", resp.Status)
+			log.Log("[relay] read:", err)
 			return
 		}
+		log.Log("[relay] read response OK")
 	})
 
 	if !c.udp {
@@ -292,12 +296,19 @@ func (c *relayConn) Read(b []byte) (n int, err error) {
 		return
 	}
 	dlen := int(binary.BigEndian.Uint16(bb[:]))
+	log.Log("[relay] read udp", dlen)
 	if len(b) >= dlen {
 		return io.ReadFull(c.Conn, b[:dlen])
 	}
 	buf := make([]byte, dlen)
 	_, err = io.ReadFull(c.Conn, buf)
 	n = copy(b, buf)
+	return
+}
+
+func (c *relayConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+	n, err = c.Read(b)
+	addr = c.Conn.RemoteAddr()
 	return
 }
 
@@ -314,6 +325,7 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 			c.wbuf.Write(bb[:])
 		}
 		c.wbuf.Write(b) // append the data to the cached header
+		log.Log("[relay] write wbuf", len(b))
 		// _, err = c.Conn.Write(c.wbuf.Bytes())
 		// c.wbuf.Reset()
 		_, err = c.wbuf.WriteTo(c.Conn)
@@ -327,5 +339,10 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 	binary.BigEndian.PutUint16(buf[:2], uint16(len(b)))
 	n = copy(buf[2:], b)
 	_, err = c.Conn.Write(buf)
+	log.Log("[relay] write", n)
 	return
+}
+
+func (c *relayConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+	return c.Write(b)
 }

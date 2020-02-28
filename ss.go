@@ -302,7 +302,13 @@ func (h *shadowUDPHandler) Handle(conn net.Conn) {
 		log.Logf("[ssu] %s: %s", conn.LocalAddr(), err)
 		return
 	}
-	cc = c.(net.PacketConn)
+	var ok bool
+	cc, ok = c.(net.PacketConn)
+	if !ok {
+		log.Logf("[ssu] %s: not a packet connection", conn.LocalAddr())
+		return
+	}
+
 	defer cc.Close()
 
 	pc, ok := conn.(net.PacketConn)
