@@ -284,7 +284,7 @@ func (c *relayConn) Read(b []byte) (n int, err error) {
 	})
 
 	if err != nil {
-		log.Log("[relay] %s <- %s: %s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), err)
+		log.Logf("[relay] %s <- %s: %s", c.Conn.LocalAddr(), c.Conn.RemoteAddr(), err)
 		return
 	}
 
@@ -334,7 +334,13 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 	if !c.udp {
 		return c.Conn.Write(b)
 	}
-	buf := make([]byte, 2+len(b))
+	var buf []byte
+	if 2+len(b) <= mediumBufferSize {
+		buf = mPool.Get().([]byte)
+		defer mPool.Put(buf)
+	} else {
+		buf = make([]byte, 2+len(b))
+	}
 	binary.BigEndian.PutUint16(buf[:2], uint16(len(b)))
 	n = copy(buf[2:], b)
 	_, err = c.Conn.Write(buf)
