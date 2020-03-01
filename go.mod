@@ -14,8 +14,8 @@ require (
 	github.com/docker/libcontainer v2.2.1+incompatible
 	github.com/ginuerzh/gosocks4 v0.0.1
 	github.com/ginuerzh/gosocks5 v0.2.0
-	github.com/ginuerzh/relay v0.0.0-20200226123819-7f0ae19c2e02
 	github.com/ginuerzh/tls-dissector v0.0.2-0.20200224064855-24ab2b3a3796
+	github.com/go-gost/relay v0.1.0
 	github.com/go-log/log v0.1.0
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/mock v1.2.0 // indirect

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ginuerzh/relay"
+	"github.com/go-gost/relay"
 	"github.com/go-log/log"
 )
 
