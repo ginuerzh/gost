@@ -334,16 +334,18 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 	if !c.udp {
 		return c.Conn.Write(b)
 	}
+
+	nsize := 2 + len(b)
 	var buf []byte
-	if 2+len(b) <= mediumBufferSize {
+	if nsize <= mediumBufferSize {
 		buf = mPool.Get().([]byte)
 		defer mPool.Put(buf)
 	} else {
-		buf = make([]byte, 2+len(b))
+		buf = make([]byte, nsize)
 	}
 	binary.BigEndian.PutUint16(buf[:2], uint16(len(b)))
 	n = copy(buf[2:], b)
-	_, err = c.Conn.Write(buf)
+	_, err = c.Conn.Write(buf[:nsize])
 	return
 }
 
