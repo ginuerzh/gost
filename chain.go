@@ -240,14 +240,15 @@ func (c *Chain) getConn(ctx context.Context) (conn net.Conn, err error) {
 	nodes := c.Nodes()
 	node := nodes[0]
 
-	cn, err := node.Client.Dial(node.Addr, node.DialOptions...)
+	cc, err := node.Client.Dial(node.Addr, node.DialOptions...)
 	if err != nil {
 		node.MarkDead()
 		return
 	}
 
-	cn, err = node.Client.Handshake(cn, node.HandshakeOptions...)
+	cn, err := node.Client.Handshake(cc, node.HandshakeOptions...)
 	if err != nil {
+		cc.Close()
 		node.MarkDead()
 		return
 	}

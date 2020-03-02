@@ -114,6 +114,7 @@ type HandshakeOptions struct {
 	WSOptions  *WSOptions
 	KCPConfig  *KCPConfig
 	QUICConfig *QUICConfig
+	SSHConfig  *SSHConfig
 }
 
 // HandshakeOption allows a common way to set HandshakeOptions.
@@ -186,6 +187,13 @@ func KCPConfigHandshakeOption(config *KCPConfig) HandshakeOption {
 func QUICConfigHandshakeOption(config *QUICConfig) HandshakeOption {
 	return func(opts *HandshakeOptions) {
 		opts.QUICConfig = config
+	}
+}
+
+// SSHConfigHandshakeOption specifies the ssh config used by SSH client handshake.
+func SSHConfigHandshakeOption(config *SSHConfig) HandshakeOption {
+	return func(opts *HandshakeOptions) {
+		opts.SSHConfig = config
 	}
 }
 

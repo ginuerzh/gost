@@ -248,6 +248,15 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	if host == "" {
 		host = node.Host
 	}
+
+	sshConfig := &gost.SSHConfig{}
+	if s := node.Get("ssh_key"); s != "" {
+		key, err := gost.ParseSSHKeyFile(s)
+		if err != nil {
+			return nil, err
+		}
+		sshConfig.Key = key
+	}
 	handshakeOptions := []gost.HandshakeOption{
 		gost.AddrHandshakeOption(node.Addr),
 		gost.HostHandshakeOption(host),
@@ -256,7 +265,9 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		gost.IntervalHandshakeOption(node.GetDuration("ping")),
 		gost.TimeoutHandshakeOption(timeout),
 		gost.RetryHandshakeOption(node.GetInt("retry")),
+		gost.SSHConfigHandshakeOption(sshConfig),
 	}
+
 	node.Client = &gost.Client{
 		Connector:   connector,
 		Transporter: tr,
@@ -384,6 +395,20 @@ func (r *route) GenRouters() ([]router, error) {
 			config := &gost.SSHConfig{
 				Authenticator: authenticator,
 				TLSConfig:     tlsCfg,
+			}
+			if s := node.Get("ssh_key"); s != "" {
+				key, err := gost.ParseSSHKeyFile(s)
+				if err != nil {
+					return nil, err
+				}
+				config.Key = key
+			}
+			if s := node.Get("ssh_authorized_keys"); s != "" {
+				keys, err := gost.ParseSSHAuthorizedKeysFile(s)
+				if err != nil {
+					return nil, err
+				}
+				config.AuthorizedKeys = keys
 			}
 			if node.Protocol == "forward" {
 				ln, err = gost.TCPListener(node.Addr)
