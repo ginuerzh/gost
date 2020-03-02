@@ -85,6 +85,8 @@ github.com/ryanuber/go-glob v0.0.0-20170128012129-256dc444b735 h1:7YvPJVmEeFHR1T
 github.com/ryanuber/go-glob v0.0.0-20170128012129-256dc444b735/go.mod h1:807d1WSdnB0XRJzKNil9Om6lcp/3a0v4qIHxIXzX/Yc=
 github.com/shadowsocks/go-shadowsocks2 v0.0.12-0.20191211020244-a57bc393e43a h1:cxYYZwo6iuuJ/5f8x1mHnya7xvSF3cDrOh8Pqh7RZ/w=
 github.com/shadowsocks/go-shadowsocks2 v0.0.12-0.20191211020244-a57bc393e43a/go.mod h1:/0aFGbhK8mtOX4J/6kTJsPLZlEs9KnzKoWCOCvjd7vk=
+github.com/shadowsocks/go-shadowsocks2 v0.1.0 h1:jQhkjAmMuOTQ7B04bnrRJ5IAoZEwoaXXkKspE7rQ6ck=
+github.com/shadowsocks/go-shadowsocks2 v0.1.0/go.mod h1:/0aFGbhK8mtOX4J/6kTJsPLZlEs9KnzKoWCOCvjd7vk=
 github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba h1:tJgNXb3S+RkB4kNPi6N5OmEWe3m+Y3Qs6LUMiNDAONM=
 github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba/go.mod h1:mttDPaeLm87u74HMrP+n2tugXvIKWcwff/cqSX0lehY=
 github.com/songgao/water v0.0.0-20190725173103-fd331bda3f4b h1:+y4hCMc/WKsDbAPsOQZgBSaSZ26uh2afyaWeVg/3s/c=
