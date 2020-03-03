@@ -25,6 +25,10 @@ import (
 	dissector "github.com/ginuerzh/tls-dissector"
 )
 
+const (
+	maxTLSDataLen = 16384
+)
+
 type obfsHTTPTransporter struct {
 	tcpTransporter
 }
@@ -544,21 +548,30 @@ func (c *obfsTLSConn) Write(b []byte) (n int, err error) {
 		}
 	}
 
-	record := &dissector.Record{
-		Type:    dissector.AppData,
-		Version: tls.VersionTLS12,
-		Opaque:  b,
-	}
+	for len(b) > 0 {
+		data := b
+		if len(b) > maxTLSDataLen {
+			data = b[:maxTLSDataLen]
+			b = b[maxTLSDdataLen:]
+		} else {
+			b = b[:0]
+		}
+		record := &dissector.Record{
+			Type:    dissector.AppData,
+			Version: tls.VersionTLS12,
+			Opaque:  data,
+		}
 
-	if c.wbuf.Len() > 0 {
-		record.Type = dissector.Handshake
-		record.WriteTo(&c.wbuf)
-		_, err = c.wbuf.WriteTo(c.Conn)
-		return
-	}
+		if c.wbuf.Len() > 0 {
+			record.Type = dissector.Handshake
+			record.WriteTo(&c.wbuf)
+			_, err = c.wbuf.WriteTo(c.Conn)
+			return
+		}
 
-	if _, err = record.WriteTo(c.Conn); err != nil {
-		return
+		if _, err = record.WriteTo(c.Conn); err != nil {
+			return
+		}
 	}
 	return
 }
