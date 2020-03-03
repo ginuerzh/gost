@@ -552,7 +552,7 @@ func (c *obfsTLSConn) Write(b []byte) (n int, err error) {
 		data := b
 		if len(b) > maxTLSDataLen {
 			data = b[:maxTLSDataLen]
-			b = b[maxTLSDdataLen:]
+			b = b[maxTLSDataLen:]
 		} else {
 			b = b[:0]
 		}
