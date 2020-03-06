@@ -40,7 +40,7 @@ func init() {
 	flag.Parse()
 
 	if printVersion {
-		fmt.Fprintf(os.Stderr, "gost %s (%s %s/%s)\n",
+		fmt.Fprintf(os.Stdout, "gost %s (%s %s/%s)\n",
 			gost.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
 	}
