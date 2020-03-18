@@ -83,6 +83,7 @@ type Transporter interface {
 type DialOptions struct {
 	Timeout time.Duration
 	Chain   *Chain
+	Host    string
 }
 
 // DialOption allows a common way to set DialOptions.
@@ -99,6 +100,13 @@ func TimeoutDialOption(timeout time.Duration) DialOption {
 func ChainDialOption(chain *Chain) DialOption {
 	return func(opts *DialOptions) {
 		opts.Chain = chain
+	}
+}
+
+// HostDialOption specifies the host used by Transporter.Dial
+func HostDialOption(host string) DialOption {
+	return func(opts *DialOptions) {
+		opts.Host = host
 	}
 }
 

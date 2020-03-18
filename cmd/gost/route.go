@@ -234,19 +234,20 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		connector = gost.AutoConnector(node.User)
 	}
 
+	host := node.Get("host")
+	if host == "" {
+		host = node.Host
+	}
+
 	node.DialOptions = append(node.DialOptions,
 		gost.TimeoutDialOption(timeout),
+		gost.HostDialOption(host),
 	)
 
 	node.ConnectOptions = []gost.ConnectOption{
 		gost.UserAgentConnectOption(node.Get("agent")),
 		gost.NoTLSConnectOption(node.GetBool("notls")),
 		gost.NoDelayConnectOption(node.GetBool("nodelay")),
-	}
-
-	host := node.Get("host")
-	if host == "" {
-		host = node.Host
 	}
 
 	sshConfig := &gost.SSHConfig{}
