@@ -234,7 +234,7 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 
 		transport := http2.Transport{
 			TLSClientConfig: tr.tlsConfig,
-			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+			DialTLS: func(network, adr string, cfg *tls.Config) (net.Conn, error) {
 				conn, err := opts.Chain.Dial(addr)
 				if err != nil {
 					return nil, err
@@ -256,13 +256,13 @@ func (tr *h2Transporter) Dial(addr string, options ...DialOption) (net.Conn, err
 	pr, pw := io.Pipe()
 	req := &http.Request{
 		Method:        http.MethodConnect,
-		URL:           &url.URL{Scheme: "https", Host: addr},
+		URL:           &url.URL{Scheme: "https", Host: opts.Host},
 		Header:        make(http.Header),
 		Proto:         "HTTP/2.0",
 		ProtoMajor:    2,
 		ProtoMinor:    0,
 		Body:          pr,
-		Host:          addr,
+		Host:          opts.Host,
 		ContentLength: -1,
 	}
 	if tr.path != "" {
