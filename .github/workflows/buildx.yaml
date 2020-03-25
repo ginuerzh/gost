@@ -19,8 +19,7 @@ jobs:
           echo ::set-output name=version::snapshot
         fi
 
-        echo ::set-output name=build_date::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-        echo ::set-output name=docker_platforms::linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/386
+        echo ::set-output name=docker_platforms::linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/386
         echo ::set-output name=docker_image::${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}
 
       # https://github.com/crazy-max/ghaction-docker-buildx
@@ -36,7 +35,6 @@ jobs:
         echo git_ref=$GITHUB_REF
         echo git_sha=$GITHUB_SHA
         echo version=${{ steps.prepare.outputs.version }}
-        echo date=${{ steps.prepare.outputs.build_date }}
         echo image=${{ steps.prepare.outputs.docker_image }}
         echo platforms=${{ steps.prepare.outputs.docker_platforms }}
         echo avail_platforms=${{ steps.buildx.outputs.platforms }}
@@ -50,9 +48,6 @@ jobs:
         docker buildx bake \
           --set ${{ github.event.repository.name }}.platform=${{ steps.prepare.outputs.docker_platforms }} \
           --set ${{ github.event.repository.name }}.output=type=image,push=false \
-          --set ${{ github.event.repository.name }}.args.VERSION=${{ steps.prepare.outputs.version }} \
-          --set ${{ github.event.repository.name }}.args.BUILD_DATE=${{ steps.prepare.outputs.build_date }} \
-          --set ${{ github.event.repository.name }}.args.VCS_REF=${GITHUB_SHA::8} \
           --set ${{ github.event.repository.name }}.tags="${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }}" \
           --file docker-compose.yaml
 
@@ -69,9 +64,6 @@ jobs:
         docker buildx bake \
           --set ${{ github.event.repository.name }}.platform=${{ steps.prepare.outputs.docker_platforms }} \
           --set ${{ github.event.repository.name }}.output=type=image,push=true \
-          --set ${{ github.event.repository.name }}.args.VERSION=${{ steps.prepare.outputs.version }} \
-          --set ${{ github.event.repository.name }}.args.BUILD_DATE=${{ steps.prepare.outputs.build_date }} \
-          --set ${{ github.event.repository.name }}.args.VCS_REF=${GITHUB_SHA::8} \
           --set ${{ github.event.repository.name }}.tags="${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }}" \
           --file docker-compose.yaml
 
