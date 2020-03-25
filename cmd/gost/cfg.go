@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/ginuerzh/gost"
+	"github.com/go-gost/reload"
 )
 
 var (
@@ -130,7 +131,7 @@ func parseAuthenticator(s string) (gost.Authenticator, error) {
 	au := gost.NewLocalAuthenticator(nil)
 	au.Reload(f)
 
-	go gost.PeriodReload(au, s)
+	go reload.PeriodReload(au, s)
 
 	return au, nil
 }
@@ -200,7 +201,7 @@ func parseBypass(s string) *gost.Bypass {
 
 	bp := gost.NewBypass(reversed)
 	bp.Reload(f)
-	go gost.PeriodReload(bp, s)
+	go reload.PeriodReload(bp, s)
 
 	return bp
 }
@@ -257,7 +258,7 @@ func parseResolver(cfg string) gost.Resolver {
 	resolver := gost.NewResolver(0)
 	resolver.Reload(f)
 
-	go gost.PeriodReload(resolver, cfg)
+	go reload.PeriodReload(resolver, cfg)
 
 	return resolver
 }
@@ -272,7 +273,7 @@ func parseHosts(s string) *gost.Hosts {
 	hosts := gost.NewHosts()
 	hosts.Reload(f)
 
-	go gost.PeriodReload(hosts, s)
+	go reload.PeriodReload(hosts, s)
 
 	return hosts
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-gost/log"
+	"github.com/go-gost/reload"
 	"github.com/miekg/dns"
 )
 
@@ -180,8 +181,8 @@ type Resolver interface {
 // ReloadResolver is resolover that support live reloading.
 type ReloadResolver interface {
 	Resolver
-	Reloader
-	Stoppable
+	reload.Reloader
+	reload.Stoppable
 }
 
 type resolver struct {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ginuerzh/gost"
 	"github.com/go-gost/log"
+	"github.com/go-gost/reload"
 )
 
 type stringList []string
@@ -76,7 +77,7 @@ func (r *route) parseChain() (*gost.Chain, error) {
 			peerCfg.Reload(f)
 			f.Close()
 
-			go gost.PeriodReload(peerCfg, cfg)
+			go reload.PeriodReload(peerCfg, cfg)
 		}
 
 		chain.AddNodeGroup(ngroup)
