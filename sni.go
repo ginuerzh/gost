@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	dissector "github.com/ginuerzh/tls-dissector"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 type sniConnector struct {

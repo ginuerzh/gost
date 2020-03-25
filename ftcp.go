@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/xtaci/tcpraw"
 )
 

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 // Host is a static mapping from hostname to IP.

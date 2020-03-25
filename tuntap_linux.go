@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/docker/libcontainer/netlink"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/milosgajdos83/tenus"
 	"github.com/songgao/water"
 )

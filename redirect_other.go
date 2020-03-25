@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 type tcpRedirectHandler struct {

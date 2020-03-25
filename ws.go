@@ -14,7 +14,7 @@ import (
 
 	"net/url"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"gopkg.in/gorilla/websocket.v1"
 	smux "gopkg.in/xtaci/smux.v1"
 )

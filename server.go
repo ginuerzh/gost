@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-gost/bpool"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 // Accepter represents a network endpoint that can accept connection from peer.

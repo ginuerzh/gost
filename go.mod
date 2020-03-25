@@ -16,8 +16,8 @@ require (
 	github.com/ginuerzh/gosocks5 v0.2.0
 	github.com/ginuerzh/tls-dissector v0.0.2-0.20200224064855-24ab2b3a3796
 	github.com/go-gost/bpool v1.0.0
+	github.com/go-gost/log v1.0.0
 	github.com/go-gost/relay v0.1.0
-	github.com/go-log/log v0.1.0
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/mock v1.2.0 // indirect
 	github.com/google/gopacket v1.1.17 // indirect

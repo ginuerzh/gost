@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 // Reloader is the interface for objects that support live reloading.

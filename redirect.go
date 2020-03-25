@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/LiamHaworth/go-tproxy"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 type tcpRedirectHandler struct {

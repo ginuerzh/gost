@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/songgao/water"
 )
 

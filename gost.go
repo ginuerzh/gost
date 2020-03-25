@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 // Version is the gost version.

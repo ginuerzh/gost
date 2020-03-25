@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/ginuerzh/gost"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 type stringList []string

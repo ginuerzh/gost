@@ -12,7 +12,7 @@ import (
 
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-gost/bpool"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )

@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/miekg/dns"
 )
 

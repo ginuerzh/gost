@@ -5,14 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	stdlog "log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 
-	_ "net/http/pprof"
-
 	"github.com/ginuerzh/gost"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 var (
@@ -23,7 +23,8 @@ var (
 )
 
 func init() {
-	gost.SetLogger(&gost.LogLogger{})
+	stdlog.SetFlags(stdlog.LstdFlags | stdlog.Lshortfile)
+	gost.SetLogger(&log.StdLogger{})
 
 	var (
 		printVersion bool

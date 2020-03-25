@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
 	"git.torproject.org/pluggable-transports/obfs4.git/transports/base"

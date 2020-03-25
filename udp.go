@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-gost/bpool"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 // udpTransporter is a raw UDP transporter.

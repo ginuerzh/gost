@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/go-gost/bpool"
+	"github.com/go-gost/log"
 	"github.com/go-gost/relay"
-	"github.com/go-log/log"
 )
 
 type relayConnector struct {

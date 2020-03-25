@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	quic "github.com/lucas-clemente/quic-go"
 )
 

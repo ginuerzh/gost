@@ -13,7 +13,7 @@ import (
 
 	"sync"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/klauspost/compress/snappy"
 	"github.com/xtaci/tcpraw"
 	"gopkg.in/xtaci/kcp-go.v4"

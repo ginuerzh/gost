@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 
 	smux "gopkg.in/xtaci/smux.v1"
 )

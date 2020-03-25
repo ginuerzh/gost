@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 type httpConnector struct {

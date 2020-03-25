@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/go-gost/bpool"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	"github.com/shadowsocks/go-shadowsocks2/shadowaead"
 	"github.com/songgao/water"

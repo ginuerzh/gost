@@ -16,7 +16,7 @@ import (
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-gost/bpool"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	smux "gopkg.in/xtaci/smux.v1"
 )
 

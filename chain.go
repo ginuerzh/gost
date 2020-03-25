@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 )
 
 var (

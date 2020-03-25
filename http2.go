@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"golang.org/x/net/http2"
 )
 

@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	"gopkg.in/xtaci/kcp-go.v4"
 )
 

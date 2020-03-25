@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/ginuerzh/gosocks5"
-	"github.com/go-log/log"
+	"github.com/go-gost/log"
 	smux "gopkg.in/xtaci/smux.v1"
 )
 
