@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-gost/bpool"
 	"github.com/go-log/log"
 )
 
@@ -120,8 +121,8 @@ func transport(rw1, rw2 io.ReadWriter) error {
 }
 
 func copyBuffer(dst io.Writer, src io.Reader) error {
-	buf := lPool.Get().([]byte)
-	defer lPool.Put(buf)
+	buf := bpool.Get(largeBufferSize)
+	defer bpool.Put(buf)
 
 	_, err := io.CopyBuffer(dst, src, buf)
 	return err

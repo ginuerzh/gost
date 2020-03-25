@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-gost/bpool"
 	"github.com/go-gost/relay"
 	"github.com/go-log/log"
 )
@@ -338,8 +339,8 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 	nsize := 2 + len(b)
 	var buf []byte
 	if nsize <= mediumBufferSize {
-		buf = mPool.Get().([]byte)
-		defer mPool.Put(buf)
+		buf = bpool.Get(mediumBufferSize)
+		defer bpool.Put(buf)
 	} else {
 		buf = make([]byte, nsize)
 	}

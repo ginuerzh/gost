@@ -1,6 +1,6 @@
 FROM golang:1-alpine as builder
 
-RUN apk add --no-cache musl-dev git gcc
+RUN apk add --no-cache musl-dev gcc
 
 ADD . /src
 

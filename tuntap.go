@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-gost/bpool"
 	"github.com/go-log/log"
 	"github.com/shadowsocks/go-shadowsocks2/core"
 	"github.com/shadowsocks/go-shadowsocks2/shadowaead"
@@ -260,8 +261,8 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 	go func() {
 		for {
 			err := func() error {
-				b := sPool.Get().([]byte)
-				defer sPool.Put(b)
+				b := bpool.Get(smallBufferSize)
+				defer bpool.Put(b)
 
 				n, err := tun.Read(b)
 				if err != nil {
@@ -334,8 +335,8 @@ func (h *tunHandler) transportTun(tun net.Conn, conn net.PacketConn, raddr net.A
 	go func() {
 		for {
 			err := func() error {
-				b := sPool.Get().([]byte)
-				defer sPool.Put(b)
+				b := bpool.Get(smallBufferSize)
+				defer bpool.Put(b)
 
 				n, addr, err := conn.ReadFrom(b)
 				if err != nil &&
@@ -636,8 +637,8 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 	go func() {
 		for {
 			err := func() error {
-				b := sPool.Get().([]byte)
-				defer sPool.Put(b)
+				b := bpool.Get(smallBufferSize)
+				defer bpool.Put(b)
 
 				n, err := tap.Read(b)
 				if err != nil {
@@ -696,8 +697,8 @@ func (h *tapHandler) transportTap(tap net.Conn, conn net.PacketConn, raddr net.A
 	go func() {
 		for {
 			err := func() error {
-				b := sPool.Get().([]byte)
-				defer sPool.Put(b)
+				b := bpool.Get(smallBufferSize)
+				defer bpool.Put(b)
 
 				n, addr, err := conn.ReadFrom(b)
 				if err != nil &&

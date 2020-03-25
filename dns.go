@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-gost/bpool"
 	"github.com/go-log/log"
 	"github.com/miekg/dns"
 )
@@ -59,8 +60,8 @@ func (h *dnsHandler) Init(opts ...HandlerOption) {
 func (h *dnsHandler) Handle(conn net.Conn) {
 	defer conn.Close()
 
-	b := mPool.Get().([]byte)
-	defer mPool.Put(b)
+	b := bpool.Get(mediumBufferSize)
+	defer bpool.Put(b)
 
 	n, err := conn.Read(b)
 	if err != nil {
