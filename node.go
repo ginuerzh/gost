@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-gost/bypass"
 )
 
 var (
@@ -31,7 +33,7 @@ type Node struct {
 	ConnectOptions   []ConnectOption
 	Client           *Client
 	marker           *failMarker
-	Bypass           *Bypass
+	Bypasser         bypass.Bypasser
 }
 
 // ParseNode parses the node info.

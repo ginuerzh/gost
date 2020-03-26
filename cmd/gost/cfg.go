@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/ginuerzh/gost"
+	"github.com/go-gost/bypass"
 	"github.com/go-gost/reload"
 )
 
@@ -175,11 +176,11 @@ func parseIP(s string, port string) (ips []string) {
 	return
 }
 
-func parseBypass(s string) *gost.Bypass {
+func parseBypasser(s string) bypass.Bypasser {
 	if s == "" {
 		return nil
 	}
-	var matchers []gost.Matcher
+	var matchers []bypass.Matcher
 	var reversed bool
 	if strings.HasPrefix(s, "~") {
 		reversed = true
@@ -193,15 +194,17 @@ func parseBypass(s string) *gost.Bypass {
 			if s == "" {
 				continue
 			}
-			matchers = append(matchers, gost.NewMatcher(s))
+			matchers = append(matchers, bypass.NewMatcher(s))
 		}
-		return gost.NewBypass(reversed, matchers...)
+		return bypass.NewBypasser(reversed, matchers...)
 	}
 	defer f.Close()
 
-	bp := gost.NewBypass(reversed)
-	bp.Reload(f)
-	go reload.PeriodReload(bp, s)
+	bp := bypass.NewBypasser(reversed)
+	if reloader, ok := bp.(reload.Reloader); ok {
+		reloader.Reload(f)
+		go reload.PeriodReload(reloader, s)
+	}
 
 	return bp
 }

@@ -302,7 +302,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 			return
 		}
 
-		if node.Bypass.Contains(addr) {
+		if node.Bypasser.Bypass(addr) {
 			break
 		}
 

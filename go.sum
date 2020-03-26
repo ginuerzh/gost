@@ -31,6 +31,8 @@ github.com/ginuerzh/tls-dissector v0.0.2-0.20200224064855-24ab2b3a3796 h1:VPXbYR
 github.com/ginuerzh/tls-dissector v0.0.2-0.20200224064855-24ab2b3a3796/go.mod h1:YyzP8PQrGwDH/XsfHJXwqdHLwWvBYxu77YVKm0+68f0=
 github.com/go-gost/bpool v1.0.0 h1:Og+6SH6SooHqf8CIwuxcPRHq8k0Si4YEfO2mBEi3/Uk=
 github.com/go-gost/bpool v1.0.0/go.mod h1:y/Pywm22A4OrJqNF/mL4nW7yb9fCdhlO8cxjyparkFI=
+github.com/go-gost/bypass v1.0.0 h1:ZhLzA3WY9JDxmpyuGwVUH0ubaFOmWWzNpejzwExvhMA=
+github.com/go-gost/bypass v1.0.0/go.mod h1:r2MYlxn1/fs24NFs+h/m9HiZKfckBrTnONXklxRUwcE=
 github.com/go-gost/log v1.0.0 h1:maSjjMvQqLSQYb0Ta5nJTdlRI+aiLMt6WIBYVxajJgs=
 github.com/go-gost/log v1.0.0/go.mod h1:FCOaaJQ7moHTlLxYk7dsFewlS68U9A1GG3OR+yXkF6s=
 github.com/go-gost/relay v0.1.0 h1:UOf2YwAzzaUjY5mdpMuLfSw0vz62iIFYk7oJQkuhlGw=

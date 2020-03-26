@@ -900,7 +900,7 @@ func (h *socks5Handler) handleConnect(conn net.Conn, req *gosocks5.Request) {
 		}
 		return
 	}
-	if h.options.Bypass.Contains(host) {
+	if h.options.Bypasser.Bypass(host) {
 		log.Logf("[socks5] %s - %s : Bypass %s",
 			conn.RemoteAddr(), conn.LocalAddr(), host)
 		rep := gosocks5.NewReply(gosocks5.NotAllowed, nil)
@@ -1261,7 +1261,7 @@ func (h *socks5Handler) transportUDP(relay, peer net.PacketConn) (err error) {
 			if err != nil {
 				continue // drop silently
 			}
-			if h.options.Bypass.Contains(raddr.String()) {
+			if h.options.Bypasser.Bypass(raddr.String()) {
 				log.Log("[socks5-udp] [bypass] write to", raddr)
 				continue // bypass
 			}
@@ -1288,7 +1288,7 @@ func (h *socks5Handler) transportUDP(relay, peer net.PacketConn) (err error) {
 			if clientAddr == nil {
 				continue
 			}
-			if h.options.Bypass.Contains(raddr.String()) {
+			if h.options.Bypasser.Bypass(raddr.String()) {
 				log.Log("[socks5-udp] [bypass] read from", raddr)
 				continue // bypass
 			}
@@ -1341,7 +1341,7 @@ func (h *socks5Handler) tunnelClientUDP(uc *net.UDPConn, cc net.Conn) (err error
 				clientAddr = addr
 			}
 			raddr := dgram.Header.Addr.String()
-			if h.options.Bypass.Contains(raddr) {
+			if h.options.Bypasser.Bypass(raddr) {
 				log.Log("[udp-tun] [bypass] write to", raddr)
 				continue // bypass
 			}
@@ -1370,7 +1370,7 @@ func (h *socks5Handler) tunnelClientUDP(uc *net.UDPConn, cc net.Conn) (err error
 				continue
 			}
 			raddr := dgram.Header.Addr.String()
-			if h.options.Bypass.Contains(raddr) {
+			if h.options.Bypasser.Bypass(raddr) {
 				log.Log("[udp-tun] [bypass] read from", raddr)
 				continue // bypass
 			}
@@ -1469,7 +1469,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, pc net.PacketConn) (err err
 				errc <- err
 				return
 			}
-			if h.options.Bypass.Contains(addr.String()) {
+			if h.options.Bypasser.Bypass(addr.String()) {
 				log.Log("[socks5] udp-tun bypass read from", addr)
 				continue // bypass
 			}
@@ -1502,7 +1502,7 @@ func (h *socks5Handler) tunnelServerUDP(cc net.Conn, pc net.PacketConn) (err err
 			if err != nil {
 				continue // drop silently
 			}
-			if h.options.Bypass.Contains(addr.String()) {
+			if h.options.Bypasser.Bypass(addr.String()) {
 				log.Log("[socks5] udp-tun bypass write to", addr)
 				continue // bypass
 			}
@@ -1715,7 +1715,7 @@ func (h *socks4Handler) handleConnect(conn net.Conn, req *gosocks4.Request) {
 		}
 		return
 	}
-	if h.options.Bypass.Contains(addr) {
+	if h.options.Bypasser.Bypass(addr) {
 		log.Log("[socks4] %s - %s : Bypass %s",
 			conn.RemoteAddr(), conn.LocalAddr(), addr)
 		rep := gosocks4.NewReply(gosocks4.Rejected, nil)

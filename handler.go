@@ -9,6 +9,7 @@ import (
 
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
+	"github.com/go-gost/bypass"
 	"github.com/go-gost/log"
 )
 
@@ -30,7 +31,7 @@ type HandlerOptions struct {
 	Strategy      Strategy
 	MaxFails      int
 	FailTimeout   time.Duration
-	Bypass        *Bypass
+	Bypasser      bypass.Bypasser
 	Retries       int
 	Timeout       time.Duration
 	Resolver      Resolver
@@ -107,9 +108,9 @@ func BlacklistHandlerOption(blacklist *Permissions) HandlerOption {
 }
 
 // BypassHandlerOption sets the bypass option of HandlerOptions.
-func BypassHandlerOption(bypass *Bypass) HandlerOption {
+func BypasserHandlerOption(bypasser bypass.Bypasser) HandlerOption {
 	return func(opts *HandlerOptions) {
-		opts.Bypass = bypass
+		opts.Bypasser = bypasser
 	}
 }
 

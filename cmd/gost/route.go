@@ -275,7 +275,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		Transporter: tr,
 	}
 
-	node.Bypass = parseBypass(node.Get("bypass"))
+	node.Bypasser = parseBypasser(node.Get("bypass"))
 
 	ips := parseIP(node.Get("ip"), sport)
 	for _, ip := range ips {
@@ -581,7 +581,7 @@ func (r *route) GenRouters() ([]router, error) {
 			}
 		}
 
-		node.Bypass = parseBypass(node.Get("bypass"))
+		node.Bypasser = parseBypasser(node.Get("bypass"))
 		hosts := parseHosts(node.Get("hosts"))
 		ips := parseIP(node.Get("ip"), "")
 
@@ -607,7 +607,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.StrategyHandlerOption(gost.NewStrategy(node.Get("strategy"))),
 			gost.MaxFailsHandlerOption(node.GetInt("max_fails")),
 			gost.FailTimeoutHandlerOption(node.GetDuration("fail_timeout")),
-			gost.BypassHandlerOption(node.Bypass),
+			gost.BypasserHandlerOption(node.Bypasser),
 			gost.ResolverHandlerOption(resolver),
 			gost.HostsHandlerOption(hosts),
 			gost.RetryHandlerOption(node.GetInt("retry")), // override the global retry option.

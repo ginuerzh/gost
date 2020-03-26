@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ginuerzh/gost"
+	"github.com/go-gost/reload"
 )
 
 type peerConfig struct {
@@ -74,8 +75,8 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 
 	nodes := group.SetNodes(gNodes...)
 	for _, node := range nodes[len(cfg.baseNodes):] {
-		if node.Bypass != nil {
-			node.Bypass.Stop() // clear the old nodes
+		if s, ok := node.Bypasser.(reload.Stoppable); ok {
+			s.Stop() // clear the old nodes
 		}
 	}
 

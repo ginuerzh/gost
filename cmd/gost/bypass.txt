@@ -1,0 +1,5 @@
+reload 3s
+
+reverse true
+
+.baidu.com
