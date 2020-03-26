@@ -19,7 +19,7 @@ require (
 	github.com/go-gost/bypass v1.0.0
 	github.com/go-gost/log v1.0.0
 	github.com/go-gost/relay v0.1.0
-	github.com/go-gost/reload v1.0.0
+	github.com/go-gost/reloader v1.1.0
 	github.com/golang/mock v1.2.0 // indirect
 	github.com/google/gopacket v1.1.17 // indirect
 	github.com/gorilla/websocket v1.4.0 // indirect
