@@ -47,14 +47,14 @@ jobs:
 
     - name: Docker Buildx (no push)
       run: |
-        docker buildx build \
-          --platform ${{ steps.prepare.outputs.docker_platforms }} \
-          --output "type=image,push=false" \
-          --build-arg "VERSION=${{ steps.prepare.outputs.version }}" \
-          --build-arg "BUILD_DATE=${{ steps.prepare.outputs.build_date }}" \
-          --build-arg "VCS_REF=${GITHUB_SHA::8}" \
-          --tag "${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }}" \
-          --file Dockerfile .
+        docker buildx bake \
+          --set ${{ github.event.repository.name }}.platform=${{ steps.prepare.outputs.docker_platforms }} \
+          --set ${{ github.event.repository.name }}.output=type=image,push=false \
+          --set ${{ github.event.repository.name }}.args.VERSION=${{ steps.prepare.outputs.version }} \
+          --set ${{ github.event.repository.name }}.args.BUILD_DATE=${{ steps.prepare.outputs.build_date }} \
+          --set ${{ github.event.repository.name }}.args.VCS_REF=${GITHUB_SHA::8} \
+          --set ${{ github.event.repository.name }}.tags="${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }}" \
+          --file docker-compose.yaml
 
     - name: Docker Login
       if: success()
@@ -66,14 +66,14 @@ jobs:
     - name: Docker Buildx (push)
       if: success()
       run: |
-        docker buildx build \
-          --platform ${{ steps.prepare.outputs.docker_platforms }} \
-          --output "type=image,push=true" \
-          --build-arg "VERSION=${{ steps.prepare.outputs.version }}" \
-          --build-arg "BUILD_DATE=${{ steps.prepare.outputs.build_date }}" \
-          --build-arg "VCS_REF=${GITHUB_SHA::8}" \
-          --tag "${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }}" \
-          --file Dockerfile .
+        docker buildx bake \
+          --set ${{ github.event.repository.name }}.platform=${{ steps.prepare.outputs.docker_platforms }} \
+          --set ${{ github.event.repository.name }}.output=type=image,push=true \
+          --set ${{ github.event.repository.name }}.args.VERSION=${{ steps.prepare.outputs.version }} \
+          --set ${{ github.event.repository.name }}.args.BUILD_DATE=${{ steps.prepare.outputs.build_date }} \
+          --set ${{ github.event.repository.name }}.args.VCS_REF=${GITHUB_SHA::8} \
+          --set ${{ github.event.repository.name }}.tags="${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }}" \
+          --file docker-compose.yaml
 
     - name: Clear
       if: always()
