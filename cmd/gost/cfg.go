@@ -14,6 +14,7 @@ import (
 
 	"github.com/ginuerzh/gost"
 	"github.com/go-gost/bypass"
+	"github.com/go-gost/hosts"
 	"github.com/go-gost/reloader"
 )
 
@@ -266,19 +267,20 @@ func parseResolver(cfg string) gost.Resolver {
 	return resolver
 }
 
-func parseHosts(s string) *gost.Hosts {
+func parseHosts(s string) hosts.Hosts {
 	f, err := os.Open(s)
 	if err != nil {
 		return nil
 	}
 	defer f.Close()
 
-	hosts := gost.NewHosts()
-	hosts.Reload(f)
+	hsts := hosts.NewHosts()
+	if r, ok := hsts.(reloader.Reloader); ok {
+		r.Reload(f)
+		go reloader.PeriodReload(r, s)
+	}
 
-	go reloader.PeriodReload(hosts, s)
-
-	return hosts
+	return hsts
 }
 
 func parseIPRoutes(s string) (routes []gost.IPRoute) {

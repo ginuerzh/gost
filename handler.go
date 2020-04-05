@@ -10,6 +10,7 @@ import (
 	"github.com/ginuerzh/gosocks4"
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-gost/bypass"
+	"github.com/go-gost/hosts"
 	"github.com/go-gost/log"
 )
 
@@ -35,7 +36,7 @@ type HandlerOptions struct {
 	Retries       int
 	Timeout       time.Duration
 	Resolver      Resolver
-	Hosts         *Hosts
+	Hosts         hosts.Hosts
 	ProbeResist   string
 	KnockingHost  string
 	Node          Node
@@ -157,7 +158,7 @@ func ResolverHandlerOption(resolver Resolver) HandlerOption {
 }
 
 // HostsHandlerOption sets the Hosts option of HandlerOptions.
-func HostsHandlerOption(hosts *Hosts) HandlerOption {
+func HostsHandlerOption(hosts hosts.Hosts) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.Hosts = hosts
 	}

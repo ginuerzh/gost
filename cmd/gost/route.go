@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ginuerzh/gost"
+	"github.com/go-gost/hosts"
 	"github.com/go-gost/log"
 	"github.com/go-gost/reloader"
 )
@@ -640,7 +641,7 @@ type router struct {
 	handler  gost.Handler
 	chain    *gost.Chain
 	resolver gost.Resolver
-	hosts    *gost.Hosts
+	hosts    hosts.Hosts
 }
 
 func (r *router) Serve() error {

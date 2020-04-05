@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-gost/hosts"
 	"github.com/go-gost/log"
 )
 
@@ -179,14 +180,16 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 	return cc, nil
 }
 
-func (*Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
+func (*Chain) resolve(addr string, resolver Resolver, hosts hosts.Hosts) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr
 	}
 
-	if ip := hosts.Lookup(host); ip != nil {
-		return net.JoinHostPort(ip.String(), port)
+	if hosts != nil {
+		if ip := hosts.Lookup(host); ip != nil {
+			return net.JoinHostPort(ip.String(), port)
+		}
 	}
 	if resolver != nil {
 		ips, err := resolver.Resolve(host)
@@ -326,7 +329,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 type ChainOptions struct {
 	Retries  int
 	Timeout  time.Duration
-	Hosts    *Hosts
+	Hosts    hosts.Hosts
 	Resolver Resolver
 }
 
@@ -348,7 +351,7 @@ func TimeoutChainOption(timeout time.Duration) ChainOption {
 }
 
 // HostsChainOption specifies the hosts used by Chain.Dial.
-func HostsChainOption(hosts *Hosts) ChainOption {
+func HostsChainOption(hosts hosts.Hosts) ChainOption {
 	return func(opts *ChainOptions) {
 		opts.Hosts = hosts
 	}

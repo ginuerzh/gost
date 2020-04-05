@@ -17,6 +17,7 @@ require (
 	github.com/ginuerzh/tls-dissector v0.0.2-0.20200224064855-24ab2b3a3796
 	github.com/go-gost/bpool v1.0.0
 	github.com/go-gost/bypass v1.0.0
+	github.com/go-gost/hosts v1.0.0
 	github.com/go-gost/log v1.0.0
 	github.com/go-gost/relay v0.1.0
 	github.com/go-gost/reloader v1.1.0
