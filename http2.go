@@ -374,7 +374,7 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.options.Bypasser.Bypass(host) {
+	if h.options.Bypasser != nil && h.options.Bypasser.Bypass(host) {
 		log.Logf("[http2] %s - %s bypass %s",
 			r.RemoteAddr, laddr, host)
 		w.WriteHeader(http.StatusForbidden)

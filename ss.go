@@ -149,7 +149,7 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 		return
 	}
 
-	if h.options.Bypasser.Bypass(host) {
+	if h.options.Bypasser != nil && h.options.Bypasser.Bypass(host) {
 		log.Logf("[ss] %s - %s : Bypass %s",
 			conn.RemoteAddr(), conn.LocalAddr(), host)
 		return
@@ -435,7 +435,7 @@ func (h *shadowUDPHandler) transportUDP(conn net.Conn, cc net.PacketConn) error 
 				if err != nil {
 					return
 				}
-				if h.options.Bypasser.Bypass(addr.String()) {
+				if h.options.Bypasser != nil && h.options.Bypasser.Bypass(addr.String()) {
 					log.Log("[ssu] bypass", addr)
 					return // bypass
 				}
@@ -463,7 +463,7 @@ func (h *shadowUDPHandler) transportUDP(conn net.Conn, cc net.PacketConn) error 
 				if Debug {
 					log.Logf("[ssu] %s <<< %s length: %d", conn.RemoteAddr(), addr, n)
 				}
-				if h.options.Bypasser.Bypass(addr.String()) {
+				if h.options.Bypasser != nil && h.options.Bypasser.Bypass(addr.String()) {
 					log.Log("[ssu] bypass", addr)
 					return // bypass
 				}

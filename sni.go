@@ -113,7 +113,7 @@ func (h *sniHandler) Handle(conn net.Conn) {
 			conn.RemoteAddr(), conn.LocalAddr(), host)
 		return
 	}
-	if h.options.Bypasser.Bypass(host) {
+	if h.options.Bypasser != nil && h.options.Bypasser.Bypass(host) {
 		log.Log("[sni] %s - %s bypass %s",
 			conn.RemoteAddr(), conn.LocalAddr(), host)
 		return

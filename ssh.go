@@ -608,7 +608,7 @@ func (h *sshForwardHandler) directPortForwardChannel(channel ssh.Channel, raddr 
 		return
 	}
 
-	if h.options.Bypasser.Bypass(raddr) {
+	if h.options.Bypasser != nil && h.options.Bypasser.Bypass(raddr) {
 		log.Logf("[ssh-tcp] [bypass] %s", raddr)
 		return
 	}
