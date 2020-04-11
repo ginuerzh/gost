@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/asaskevich/govalidator"
 	dissector "github.com/ginuerzh/tls-dissector"
 	"github.com/go-log/log"
 )
@@ -84,6 +85,10 @@ func (h *sniHandler) Handle(conn net.Conn) {
 			log.Logf("[sni] %s -> %s : %s",
 				conn.RemoteAddr(), conn.LocalAddr(), err)
 			return
+		}
+
+		if !req.URL.IsAbs() && govalidator.IsDNSName(req.Host) {
+			req.URL.Scheme = "http"
 		}
 
 		handler := &httpHandler{options: h.options}
