@@ -7,6 +7,7 @@ require (
 	git.torproject.org/pluggable-transports/obfs4.git v0.0.0-20181103133120-08f4d470188e
 	github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed
 	github.com/Yawning/chacha20 v0.0.0-20170904085104-e3b1f968fc63 // indirect
+	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/coreos/go-iptables v0.4.5 // indirect
