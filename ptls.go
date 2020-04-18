@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-log/log"
 	ss_core "github.com/shadowsocks/go-shadowsocks2/core"
+	"github.com/xtaci/smux"
 )
 
 const TIMESTAMP_TOLERANCE = 180 * time.Second
@@ -27,20 +28,22 @@ const TIMESTAMP_TOLERANCE = 180 * time.Second
 const CACHE_CLEAN_INTERVAL = 12 * time.Hour
 
 type PTLSOptions struct {
-	Key        string
-	Host       string
-	BrowserSig string
+	Key             string
+	Host            string
+	BrowserSig      string
+	EnableMultiplex bool
 }
 
 type ptlsTransporter struct {
 	tcpTransporter
 	host string
 	browser
-	key        [16]byte
-	connCipher ss_core.StreamConnCipher
+	key             [16]byte
+	enableMultiplex bool
+	connCipher      ss_core.StreamConnCipher
 }
 
-func PTLSTransporter(opts PTLSOptions) Transporter {
+func PTLSTransporter(opts PTLSOptions) (tr Transporter) {
 	var browser browser
 	switch opts.BrowserSig {
 	case "chrome":
@@ -60,13 +63,24 @@ func PTLSTransporter(opts PTLSOptions) Transporter {
 	if err != nil {
 		panic(err)
 	}
-	return &ptlsTransporter{host: host, browser: browser, key: key, connCipher: cipher}
+	tr = &ptlsTransporter{
+		host:            host,
+		browser:         browser,
+		key:             key,
+		enableMultiplex: opts.EnableMultiplex,
+		connCipher:      cipher,
+	}
+	if opts.EnableMultiplex {
+		tr = newMuxTransport(tr)
+	}
+	return tr
 }
 
 func (tr *ptlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
 	var random [32]byte
 	cryptoRandRead(random[:])
-	authPayload := makeAuthenticationPayload(tr.key, random)
+	ai := authenticationInfo{EnableMultiplex: tr.enableMultiplex}
+	authPayload := makeAuthenticationPayload(tr.key, random, ai)
 	ch := tr.browser.composeClientHello(clientHelloFields{
 		random:         random[:],
 		sessionId:      authPayload.ciphertextWithTag[:32],
@@ -104,6 +118,132 @@ func (tr *ptlsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) 
 	}
 
 	return tr.connCipher.StreamConn(&ptlsConn{Conn: conn}), nil
+}
+
+type muxTransport struct {
+	originTr   Transporter
+	sessionsMu sync.Mutex
+	sessions   map[string]*muxTransportSession
+}
+
+func newMuxTransport(tr Transporter) *muxTransport {
+	if tr.Multiplex() {
+		panic("cannot multiplex transport that has already support multiplex")
+	}
+	return &muxTransport{
+		originTr: tr,
+		sessions: make(map[string]*muxTransportSession),
+	}
+}
+
+func (tr *muxTransport) Multiplex() bool {
+	return true
+}
+
+func (tr *muxTransport) Dial(addr string, options ...DialOption) (conn net.Conn, err error) {
+	tr.sessionsMu.Lock()
+	defer tr.sessionsMu.Unlock()
+
+	session, ok := tr.sessions[addr]
+	if session != nil && session.IsClosed() {
+		delete(tr.sessions, addr)
+		ok = false // session is dead
+	}
+	if !ok {
+		conn, err = tr.originTr.Dial(addr, options...)
+		if err != nil {
+			return
+		}
+		session = &muxTransportSession{conn: conn}
+		tr.sessions[addr] = session
+	}
+	return session.conn, nil
+}
+
+func (tr *muxTransport) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
+	opts := &HandshakeOptions{}
+	for _, option := range options {
+		option(opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = HandshakeTimeout
+	}
+
+	tr.sessionsMu.Lock()
+	defer tr.sessionsMu.Unlock()
+
+	conn.SetDeadline(time.Now().Add(timeout))
+	defer conn.SetDeadline(time.Time{})
+
+	session, ok := tr.sessions[opts.Addr]
+	if !ok || session.session == nil {
+		s, err := tr.initSession(opts.Addr, conn, options...)
+		if err != nil {
+			conn.Close()
+			delete(tr.sessions, opts.Addr)
+			return nil, err
+		}
+		session = s
+		tr.sessions[opts.Addr] = session
+	}
+	cc, err := session.GetConn()
+	if err != nil {
+		session.Close()
+		delete(tr.sessions, opts.Addr)
+		return nil, err
+	}
+
+	return cc, nil
+}
+
+func (tr *muxTransport) initSession(addr string, conn net.Conn, options ...HandshakeOption) (*muxTransportSession, error) {
+	prepared, err := tr.originTr.Handshake(conn, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	// stream multiplex
+	smuxConfig := smux.DefaultConfig()
+	smuxConfig.Version = 2
+	session, err := smux.Client(prepared, smuxConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &muxTransportSession{conn: prepared, session: session}, nil
+}
+
+type muxTransportSession struct {
+	conn    net.Conn
+	session *smux.Session
+}
+
+func (s *muxTransportSession) Close() error {
+	if s.session == nil {
+		return nil
+	}
+	return s.session.Close()
+}
+
+func (s *muxTransportSession) IsClosed() bool {
+	if s.session == nil {
+		return true
+	}
+	return s.session.IsClosed()
+}
+
+func (session *muxTransportSession) GetConn() (net.Conn, error) {
+	stream, err := session.session.OpenStream()
+	if err != nil {
+		return nil, err
+	}
+	return &muxTransportStreamConn{conn: session.conn, Stream: stream}, nil
+}
+
+type muxTransportStreamConn struct {
+	conn net.Conn
+	*smux.Stream
 }
 
 type ptlsListener struct {
@@ -147,60 +287,72 @@ func PTLSListener(addr string, opts PTLSOptions) (Listener, error) {
 	return ln, nil
 }
 
-func (ln *ptlsListener) handshake(conn net.Conn) (net.Conn, error) {
+func (ln *ptlsListener) handshake(conn net.Conn) (prepared net.Conn, ai authenticationInfo, err error) {
 	firstPacket, err := readFirstPacket(conn)
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed to read first packet: %s", err)
+		err = fmt.Errorf("failed to read first packet: %s", err)
+		return
 	}
 
 	ch, err := parseClientHello(firstPacket)
 	if err != nil {
 		go ln.redirect(conn, firstPacket)
-		return nil, fmt.Errorf("non (or malformed) ClientHello: %s", err)
+		err = fmt.Errorf("non (or malformed) ClientHello: %s", err)
+		return
 	}
 
-	if err := ln.auth(ch, time.Now()); err != nil {
+	ai, err = ln.auth(ch, time.Now())
+	if err != nil {
 		go ln.redirect(conn, firstPacket)
-		return nil, err
+		return
 	}
 
 	reply, err := composeReply(ch, ln.key[:])
 	if err != nil {
-		return nil, fmt.Errorf("failed to compose TLS reply: %s", err)
+		err = fmt.Errorf("failed to compose TLS reply: %s", err)
+		return
 	}
 	conn.Write(reply)
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed to write TLS reploy: %s", err)
+		err = fmt.Errorf("failed to write TLS reploy: %s", err)
+		return
 	}
 	if Debug {
 		log.Logf("[ptls] handshake completed")
 	}
-	return ln.connCipher.StreamConn(&ptlsConn{Conn: conn}), nil
+	prepared = ln.connCipher.StreamConn(&ptlsConn{Conn: conn})
+	return
 }
 
-func (ln *ptlsListener) auth(ch *ClientHello, serverTime time.Time) error {
+func (ln *ptlsListener) auth(ch *ClientHello, serverTime time.Time) (ai authenticationInfo, err error) {
 	authPayload, err := unmarshalClientHello(ch, ln.key)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal ClientHello into authenticationPayload")
+		err = fmt.Errorf("failed to unmarshal ClientHello into authenticationPayload")
+		return
 	}
 
 	_, loaded := ln.usedRandom.LoadOrStore(authPayload.random, time.Now().Unix())
 	if loaded {
-		return fmt.Errorf("duplicate random")
+		err = fmt.Errorf("duplicate random")
+		return
 	}
 
-	plaintext, err := aesGCMDecrypt(authPayload.random[0:12], ln.key[:], authPayload.ciphertextWithTag[:])
+	var plaintext []byte
+	plaintext, err = aesGCMDecrypt(authPayload.random[0:12], ln.key[:], authPayload.ciphertextWithTag[:])
 	if err != nil {
-		return err
+		return
 	}
 	timestamp := int64(binary.BigEndian.Uint64(plaintext[1:9]))
 	clientTime := time.Unix(timestamp, 0)
 	if !(clientTime.After(serverTime.Truncate(TIMESTAMP_TOLERANCE)) && clientTime.Before(serverTime.Add(TIMESTAMP_TOLERANCE))) {
-		return fmt.Errorf("timestamp is outside of the accepting window: received timestamp %d", timestamp)
+		err = fmt.Errorf("timestamp is outside of the accepting window: received timestamp %d", timestamp)
+		return
 	}
-	return nil
+	flags := plaintext[10]
+	ai.EnableMultiplex = flags&EnableMultiplex == EnableMultiplex
+	return
 }
 
 func (ln *ptlsListener) cleanupRandoms(deadline time.Time) {
@@ -263,18 +415,52 @@ func (ln *ptlsListener) acceptLoop() {
 			}
 			return
 		}
+		log.Logf("[ptls] %s - %s", conn.RemoteAddr(), ln.Listener.Addr())
 		go func(conn net.Conn) {
-			preparedConn, err := ln.handshake(conn)
+			preparedConn, ai, err := ln.handshake(conn)
 			if err != nil {
 				log.Logf("[ptls] failed to handshake conn from %s: %s", conn.RemoteAddr().String(), err)
 				return
 			}
-			if atomic.LoadInt32(&ln.closed) != 0 {
-				return
+			if ai.EnableMultiplex {
+				conf := smux.DefaultConfig()
+				conf.Version = 2
+				sess, err := smux.Server(preparedConn, conf)
+				if err != nil {
+					panic(err)
+				}
+				defer sess.Close()
+				if Debug {
+					log.Logf("[ptls] new smux session created for %s", preparedConn.RemoteAddr())
+				}
+				log.Logf("[ptls] %s <-> %s", conn.RemoteAddr(), ln.Listener.Addr())
+				defer log.Logf("[ptls] %s >-< %s", conn.RemoteAddr(), ln.Listener.Addr())
+				for {
+					if Debug {
+						log.Logf("[ptls] accepting streams")
+					}
+					stream, err := sess.AcceptStream()
+					if err != nil {
+						if err != io.EOF {
+							log.Logf("[ptls] failed to accept stream from %s: %s", preparedConn.RemoteAddr(), err)
+						}
+						return
+					}
+					if Debug {
+						log.Logf("[ptls] accpet stream  from %s", stream.RemoteAddr())
+					}
+					if atomic.LoadInt32(&ln.closed) != 0 {
+						return
+					}
+					ln.conns <- stream
+				}
+			} else {
+				if atomic.LoadInt32(&ln.closed) != 0 {
+					return
+				}
+				ln.conns <- preparedConn
 			}
-			ln.conns <- preparedConn
 		}(conn)
-
 	}
 }
 
@@ -339,22 +525,35 @@ type authenticationPayload struct {
 	ciphertextWithTag [64]byte
 }
 
-func makeAuthenticationPayload(key [16]byte, random [32]byte) (payload authenticationPayload) {
+const (
+	EnableMultiplex = 0x1
+)
+
+func makeAuthenticationPayload(key [16]byte, random [32]byte, ai authenticationInfo) (payload authenticationPayload) {
 	/*
 		Version: 0
 
 		Authentication data (48 bytes):
-		+--------------+-------------+------------+
-		| _Version_    | _Timestamp_ | _reserved_ |
-		+--------------+-------------+------------+
-		| 1 byte (0x0) | 8 bytes     | 39 bytes   |
-		+--------------+-------------+------------+
+		+--------------+-------------+---------+------------+
+		| _Version_    | _Timestamp_ | _Flags_ | _reserved_ |
+		+--------------+-------------+---------+------------+
+		| 1 byte (0x0) | 8 bytes     | 1 byte  | 38 bytes   |
+		+--------------+-------------+---------+------------+
+
+		Flags:
+
+		Currently only EnableMultiplex are specified, that's 0x1
 	*/
 	timestamp := uint64(time.Now().Unix())
 
 	plaintext := make([]byte, 48)
-	plaintext[0] = 0x0
-	binary.BigEndian.PutUint64(plaintext[1:9], timestamp)
+	plaintext[0] = 0x0                                    // Version
+	binary.BigEndian.PutUint64(plaintext[1:9], timestamp) // Timestamp
+	flags := byte(0x0)
+	if ai.EnableMultiplex {
+		flags |= EnableMultiplex
+	}
+	plaintext[10] = flags
 	ciphertextWithTag, _ := aesGCMEncrypt(random[:12], key[:], plaintext)
 	copy(payload.ciphertextWithTag[:], ciphertextWithTag[:])
 	return
@@ -381,6 +580,10 @@ type clientHelloFields struct {
 	sessionId      []byte
 	x25519KeyShare []byte
 	sni            []byte
+}
+
+type authenticationInfo struct {
+	EnableMultiplex bool
 }
 
 type browser interface {

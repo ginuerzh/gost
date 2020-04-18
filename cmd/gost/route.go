@@ -205,6 +205,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		opts.Host = node.Get("host")
 		opts.BrowserSig = node.Get("browser_sig")
 		opts.Key = node.Get("key")
+		opts.EnableMultiplex = node.GetBool("mux")
 		tr = gost.PTLSTransporter(opts)
 	default:
 		tr = gost.TCPTransporter()
