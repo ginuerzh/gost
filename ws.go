@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ type WSOptions struct {
 	EnableCompression bool
 	UserAgent         string
 	Path              string
+	Reverse           string
 }
 
 type wsTransporter struct {
@@ -64,6 +66,29 @@ func (tr *wsTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (n
 	}
 	url := url.URL{Scheme: "ws", Host: opts.Host, Path: path}
 	return websocketClientConn(url.String(), conn, nil, wsOptions)
+}
+
+func forword(opts *WSOptions) func(w http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+
+		urlStr := opts.Reverse
+		if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+			urlStr = "http://" + urlStr
+		}
+
+		reqURL, err := url.ParseRequestURI(urlStr)
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		req.URL.Host = reqURL.Host
+		req.URL.Scheme = reqURL.Scheme
+		req.Host = reqURL.Host
+
+		httputil.NewSingleHostReverseProxy(reqURL).ServeHTTP(w, req)
+
+	}
 }
 
 type mwsTransporter struct {
@@ -381,6 +406,9 @@ func WSListener(addr string, options *WSOptions) (Listener, error) {
 	}
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(l.upgrade))
+	if options.Reverse != "" {
+		mux.HandleFunc("/", forword(options))
+	}
 	l.srv = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -479,6 +507,9 @@ func MWSListener(addr string, options *WSOptions) (Listener, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(l.upgrade))
+	if options.Reverse != "" {
+		mux.HandleFunc("/", forword(options))
+	}
 	l.srv = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -604,6 +635,9 @@ func WSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Listen
 
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(l.upgrade))
+	if options.Reverse != "" {
+		mux.HandleFunc("/", forword(options))
+	}
 	l.srv = &http.Server{
 		Addr:              addr,
 		TLSConfig:         tlsConfig,
@@ -670,6 +704,9 @@ func MWSSListener(addr string, tlsConfig *tls.Config, options *WSOptions) (Liste
 
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(l.upgrade))
+	if options.Reverse != "" {
+		mux.HandleFunc("/", forword(options))
+	}
 	l.srv = &http.Server{
 		Addr:              addr,
 		TLSConfig:         tlsConfig,
