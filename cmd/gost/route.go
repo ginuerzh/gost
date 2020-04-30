@@ -200,6 +200,13 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.FakeTCPTransporter()
 	case "udp":
 		tr = gost.UDPTransporter()
+	case "ptls":
+		opts := gost.PTLSOptions{}
+		opts.Host = node.Get("host")
+		opts.BrowserSig = node.Get("browser_sig")
+		opts.Key = node.Get("key")
+		opts.EnableMultiplex = node.GetBool("mux")
+		tr = gost.PTLSTransporter(opts)
 	default:
 		tr = gost.TCPTransporter()
 	}
@@ -513,6 +520,12 @@ func (r *route) GenRouters() ([]router, error) {
 				Backlog:   node.GetInt("backlog"),
 				QueueSize: node.GetInt("queue"),
 			})
+		case "ptls":
+			opts := gost.PTLSOptions{}
+			opts.Host = node.Get("host")
+			opts.BrowserSig = node.Get("browser_sig")
+			opts.Key = node.Get("key")
+			ln, err = gost.PTLSListener(node.Addr, opts)
 		default:
 			ln, err = gost.TCPListener(node.Addr)
 		}
