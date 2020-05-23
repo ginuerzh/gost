@@ -44,8 +44,9 @@ var (
 	defaultKeyFile  = "key.pem"
 )
 
-// Load the certificate from cert and key files, will use the default certificate if the provided info are invalid.
-func tlsConfig(certFile, keyFile string) (*tls.Config, error) {
+// Load the certificate from cert & key files and optional client CA file,
+// will use the default certificate if the provided info are invalid.
+func tlsConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 	if certFile == "" || keyFile == "" {
 		certFile, keyFile = defaultCertFile, defaultKeyFile
 	}
@@ -54,7 +55,15 @@ func tlsConfig(certFile, keyFile string) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
+
+	cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
+
+	if pool, _ := loadCA(caFile); pool != nil {
+		cfg.ClientCAs = pool
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	return cfg, nil
 }
 
 func loadCA(caFile string) (cp *x509.CertPool, err error) {

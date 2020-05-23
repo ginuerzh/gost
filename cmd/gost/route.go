@@ -128,6 +128,10 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		InsecureSkipVerify: !node.GetBool("secure"),
 		RootCAs:            rootCAs,
 	}
+	if cert, err := tls.LoadX509KeyPair(node.Get("cert"), node.Get("key")); err == nil {
+		tlsCfg.Certificates = []tls.Certificate{cert}
+	}
+
 	wsOpts := &gost.WSOptions{}
 	wsOpts.EnableCompression = node.GetBool("compression")
 	wsOpts.ReadBufferSize = node.GetInt("rbuf")
@@ -343,7 +347,7 @@ func (r *route) GenRouters() ([]router, error) {
 			}
 		}
 		certFile, keyFile := node.Get("cert"), node.Get("key")
-		tlsCfg, err := tlsConfig(certFile, keyFile)
+		tlsCfg, err := tlsConfig(certFile, keyFile, node.Get("ca"))
 		if err != nil && certFile != "" && keyFile != "" {
 			return nil, err
 		}

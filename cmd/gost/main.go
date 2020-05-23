@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// NOTE: as of 2.6, you can use custom cert/key files to initialize the default certificate.
-	tlsConfig, err := tlsConfig(defaultCertFile, defaultKeyFile)
+	tlsConfig, err := tlsConfig(defaultCertFile, defaultKeyFile, "")
 	if err != nil {
 		// generate random self-signed certificate.
 		cert, err := gost.GenCertificate()
