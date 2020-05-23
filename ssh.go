@@ -31,6 +31,7 @@ var (
 	errSessionDead = errors.New("session is dead")
 )
 
+// ParseSSHKeyFile parses ssh key file.
 func ParseSSHKeyFile(fp string) (ssh.Signer, error) {
 	key, err := ioutil.ReadFile(fp)
 	if err != nil {
@@ -39,6 +40,7 @@ func ParseSSHKeyFile(fp string) (ssh.Signer, error) {
 	return ssh.ParsePrivateKey(key)
 }
 
+// ParseSSHAuthorizedKeysFile parses ssh Authorized Keys file.
 func ParseSSHAuthorizedKeysFile(fp string) (map[string]bool, error) {
 	authorizedKeysBytes, err := ioutil.ReadFile(fp)
 	if err != nil {
