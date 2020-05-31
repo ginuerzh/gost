@@ -3,7 +3,30 @@ package gost
 import (
 	"fmt"
 	"log"
+	"strings"
+	"os"
 )
+
+//设置日志模式
+func SetLogMode(LogMode string) {
+	if LogMode != "" {
+	var split []string = strings.Split(LogMode, ":")
+	if split[0] == "file" {
+    logFile, err := os.OpenFile(split[1], os.O_RDWR | os.O_CREATE | os.O_APPEND, 0770)
+    if err != nil {
+        panic(err.Error())
+    } else {
+        log.SetOutput(logFile)
+    }
+    //defer logFile.Close()
+	}
+	if split[0] == "shell" {
+	if split[1] == "stdout" {
+	log.SetOutput(os.Stdout)
+	}
+	}
+	}
+}
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
