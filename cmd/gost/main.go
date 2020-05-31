@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	LogMode string
 	configureFile string
 	baseCfg       = &baseConfig{}
 	pprofAddr     string
@@ -31,6 +32,7 @@ func init() {
 
 	flag.Var(&baseCfg.route.ChainNodes, "F", "forward address, can make a forward chain")
 	flag.Var(&baseCfg.route.ServeNodes, "L", "listen address, can listen on multiple ports (required)")
+	flag.StringVar(&LogMode, "LM", "", "log mode")
 	flag.StringVar(&configureFile, "C", "", "configure file")
 	flag.BoolVar(&baseCfg.Debug, "D", false, "enable debug log")
 	flag.BoolVar(&printVersion, "V", false, "print version")
@@ -44,6 +46,8 @@ func init() {
 			gost.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
 	}
+
+	gost.SetLogMode(LogMode)
 
 	if configureFile != "" {
 		_, err := parseBaseConfig(configureFile)
