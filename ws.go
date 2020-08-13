@@ -788,12 +788,13 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 	if err != nil {
 		return nil, err
 	}
+	resp.Body.Close()
+
 	if verifyErr != nil {
 		c.Close()
 		return nil, verifyErr
 	}
 
-	resp.Body.Close()
 	return &websocketConn{conn: c}, nil
 }
 
