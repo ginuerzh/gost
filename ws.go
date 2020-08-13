@@ -753,10 +753,9 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 		header.Set("User-Agent", options.UserAgent)
 	}
 
-	var verifyErr error = nil
 	trace := &httptrace.ClientTrace{
 		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
-			if tlsConfig.RootCAs == nil {
+			if tlsConfig.RootCAs == nil || err != nil {
 				return
 			}
 
@@ -775,26 +774,32 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 				opts.Intermediates.AddCert(cert)
 			}
 
-			_, err = certs[0].Verify(opts)
-			if err != nil {
-				verifyErr = err
+			_, e := certs[0].Verify(opts)
+			if e != nil {
+				panic(e)
 			}
 		},
 	}
 	ctx := httptrace.WithClientTrace(context.Background(), trace)
 
-	c, resp, err := dialer.DialContext(ctx, url, header)
+	c, resp, err := func() (c *websocket.Conn, resp *http.Response, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				e, ok := r.(error)
+				if !ok {
+					panic(r)
+				} else {
+					c, resp, err = nil, nil, e
+				}
+			}
+		}()
+		return dialer.DialContext(ctx, url, header)
+	}()
 
 	if err != nil {
 		return nil, err
 	}
 	resp.Body.Close()
-
-	if verifyErr != nil {
-		c.Close()
-		return nil, verifyErr
-	}
-
 	return &websocketConn{conn: c}, nil
 }
 
