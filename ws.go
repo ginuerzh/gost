@@ -1,13 +1,16 @@
 package gost
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/http/httputil"
 	"sync"
 	"time"
@@ -749,10 +752,46 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 	if options.UserAgent != "" {
 		header.Set("User-Agent", options.UserAgent)
 	}
-	c, resp, err := dialer.Dial(url, header)
+
+	var verifyErr error = nil
+	trace := &httptrace.ClientTrace{
+		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
+			if tlsConfig.RootCAs == nil {
+				return
+			}
+
+			opts := x509.VerifyOptions{
+				Roots:         tlsConfig.RootCAs,
+				CurrentTime:   time.Now(),
+				DNSName:       "",
+				Intermediates: x509.NewCertPool(),
+			}
+
+			certs := state.PeerCertificates
+			for i, cert := range certs {
+				if i == 0 {
+					continue
+				}
+				opts.Intermediates.AddCert(cert)
+			}
+
+			_, err = certs[0].Verify(opts)
+			if err != nil {
+				verifyErr = err
+			}
+		},
+	}
+	ctx := httptrace.WithClientTrace(context.Background(), trace)
+
+	c, resp, err := dialer.DialContext(ctx, url, header)
+
 	if err != nil {
 		return nil, err
 	}
+	if verifyErr != nil {
+		return nil, verifyErr
+	}
+
 	resp.Body.Close()
 	return &websocketConn{conn: c}, nil
 }
