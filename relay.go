@@ -221,10 +221,24 @@ func (h *relayHandler) Handle(conn net.Conn) {
 		}
 
 		log.Logf("[relay] %s -> %s -> %s", conn.RemoteAddr(), conn.LocalAddr(), raddr)
+
+		//指定出口IP地址,没有绑定出口IP地址才考虑以入口网卡作为出口
+		var bindAddr net.IP
+		if h.options.Node.BindAddr == nil {
+			switch addr := conn.LocalAddr().(type) {
+			case *net.TCPAddr:
+				bindAddr = addr.IP
+			case *net.UDPAddr:
+				bindAddr = addr.IP
+			}
+		}else {
+			bindAddr = h.options.Node.BindAddr
+		}
 		cc, err = h.options.Chain.DialContext(ctx,
 			network, raddr,
 			RetryChainOption(h.options.Retries),
 			TimeoutChainOption(h.options.Timeout),
+			BindChainOption(bindAddr),
 		)
 		if err != nil {
 			log.Logf("[relay] %s -> %s : %s", conn.RemoteAddr(), raddr, err)

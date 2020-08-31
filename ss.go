@@ -181,10 +181,23 @@ func (h *shadowHandler) Handle(conn net.Conn) {
 		fmt.Fprintf(&buf, "%s", host)
 		log.Log("[route]", buf.String())
 
+		//指定出口IP地址,没有绑定出口IP地址才考虑以入口网卡作为出口
+		var bindAddr net.IP;
+		if h.options.Node.BindAddr == nil {
+			switch addr := conn.LocalAddr().(type) {
+			case *net.TCPAddr:
+				bindAddr = addr.IP
+			case *net.UDPAddr:
+				bindAddr = addr.IP
+			}
+		}else {
+			bindAddr = h.options.Node.BindAddr
+		}
 		cc, err = route.Dial(host,
 			TimeoutChainOption(h.options.Timeout),
 			HostsChainOption(h.options.Hosts),
 			ResolverChainOption(h.options.Resolver),
+			BindChainOption(bindAddr),
 		)
 		if err == nil {
 			break

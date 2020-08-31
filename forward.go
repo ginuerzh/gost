@@ -128,9 +128,17 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 			}
 		}
 
+		//指定出口IP地址,没有绑定出口IP地址才考虑以入口网卡作为出口
+		var bindAddr net.IP;
+		if h.options.Node.BindAddr == nil {
+			bindAddr = conn.LocalAddr().(*net.TCPAddr).IP
+		}else {
+			bindAddr = h.options.Node.BindAddr
+		}
 		cc, err = h.options.Chain.Dial(node.Addr,
 			RetryChainOption(h.options.Retries),
 			TimeoutChainOption(h.options.Timeout),
+			BindChainOption(bindAddr),
 		)
 		if err != nil {
 			log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
@@ -197,7 +205,17 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 		}
 	}
 
-	cc, err := h.options.Chain.DialContext(context.Background(), "udp", node.Addr)
+	//指定出口IP地址,没有绑定出口IP地址才考虑以入口网卡作为出口
+	var bindAddr net.IP;
+	if h.options.Node.BindAddr == nil {
+		bindAddr = conn.LocalAddr().(*net.UDPAddr).IP
+	}else {
+		bindAddr = h.options.Node.BindAddr
+	}
+	cc, err := h.options.Chain.DialContext(context.Background(),
+		"udp",
+		node.Addr,
+		BindChainOption(bindAddr),)
 	if err != nil {
 		node.MarkDead()
 		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)

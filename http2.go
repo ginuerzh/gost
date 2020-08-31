@@ -424,10 +424,18 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&buf, "%s", host)
 		log.Log("[route]", buf.String())
 
+		//指定出口IP地址,没有绑定出口IP地址才考虑以入口网卡作为出口
+		var bindAddr net.IP;
+		if h.options.Node.BindAddr == nil {
+			bindAddr = net.ParseIP(laddr)
+		}else {
+			bindAddr = h.options.Node.BindAddr
+		}
 		cc, err = route.Dial(host,
 			TimeoutChainOption(h.options.Timeout),
 			HostsChainOption(h.options.Hosts),
 			ResolverChainOption(h.options.Resolver),
+			BindChainOption(bindAddr),
 		)
 		if err == nil {
 			break

@@ -151,17 +151,24 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 	}
 
 	if route.IsEmpty() {
+		d := &net.Dialer{
+			Timeout: timeout,
+		}
 		switch network {
+		case "tcp", "tcp4", "tcp6":
+			d.LocalAddr = &net.TCPAddr{
+				IP: options.BindAddr,
+			}
 		case "udp", "udp4", "udp6":
 			if address == "" {
 				return net.ListenUDP(network, nil)
 			}
+			d.LocalAddr = &net.UDPAddr{
+				IP: options.BindAddr,
+			}
 		default:
 		}
-		d := &net.Dialer{
-			Timeout: timeout,
-			// LocalAddr: laddr, // TODO: optional local address
-		}
+
 		return d.DialContext(ctx, network, ipAddr)
 	}
 
@@ -325,6 +332,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 // ChainOptions holds options for Chain.
 type ChainOptions struct {
 	Retries  int
+	BindAddr net.IP //绑定地址
 	Timeout  time.Duration
 	Hosts    *Hosts
 	Resolver Resolver
@@ -358,5 +366,12 @@ func HostsChainOption(hosts *Hosts) ChainOption {
 func ResolverChainOption(resolver Resolver) ChainOption {
 	return func(opts *ChainOptions) {
 		opts.Resolver = resolver
+	}
+}
+
+// BindChainOption specifies tcp bind address used by Chain.Dial.
+func BindChainOption(bindAddr net.IP) ChainOption {
+	return func(opts *ChainOptions) {
+		opts.BindAddr = bindAddr
 	}
 }

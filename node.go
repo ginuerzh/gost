@@ -3,6 +3,7 @@ package gost
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +23,8 @@ type Node struct {
 	Host             string
 	Protocol         string
 	Transport        string
+	BindAddr         net.IP   // 绑定出口
+	OutFromIn        bool     // 是否使用入口IP网卡作为出口网卡，只有当没有绑定出口时才有效
 	Remote           string   // remote address, used by tcp/udp port forwarding
 	url              *url.URL // raw url
 	User             *url.Userinfo
@@ -54,12 +57,15 @@ func ParseNode(s string) (node Node, err error) {
 	node = Node{
 		Addr:   u.Host,
 		Host:   u.Host,
+		BindAddr: net.ParseIP(u.Query().Get("bind")),
 		Remote: strings.Trim(u.EscapedPath(), "/"),
 		Values: u.Query(),
 		User:   u.User,
 		marker: &failMarker{},
 		url:    u,
 	}
+	outFromIn, _ := strconv.ParseBool(u.Query().Get("outFromIn"))
+	node.OutFromIn = outFromIn
 
 	u.RawQuery = ""
 	u.User = nil
