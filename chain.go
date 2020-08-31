@@ -372,6 +372,9 @@ func ResolverChainOption(resolver Resolver) ChainOption {
 // BindChainOption specifies tcp bind address used by Chain.Dial.
 func BindChainOption(bindAddr net.IP) ChainOption {
 	return func(opts *ChainOptions) {
-		opts.BindAddr = bindAddr
+		if !bindAddr.IsLoopback(){
+			//只要非本地回环地址才能指定，否则会无法连接网络。当为空的时候，自动使用主网卡。
+			opts.BindAddr = bindAddr
+		}
 	}
 }
