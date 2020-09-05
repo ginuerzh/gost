@@ -2,7 +2,6 @@ package gost
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"net"
 	"sync"
@@ -290,36 +289,40 @@ func wrapTLSClient(conn net.Conn, tlsConfig *tls.Config, timeout time.Duration) 
 		return nil, err
 	}
 
-	// If crypto/tls is doing verification, there's no need to do our own.
-	if tlsConfig.InsecureSkipVerify == false {
-		return tlsConn, nil
-	}
-
-	// Similarly if we use host's CA, we can do full handshake
-	if tlsConfig.RootCAs == nil {
-		return tlsConn, nil
-	}
-
-	opts := x509.VerifyOptions{
-		Roots:         tlsConfig.RootCAs,
-		CurrentTime:   time.Now(),
-		DNSName:       "",
-		Intermediates: x509.NewCertPool(),
-	}
-
-	certs := tlsConn.ConnectionState().PeerCertificates
-	for i, cert := range certs {
-		if i == 0 {
-			continue
+	// We can do this in `tls.Config.VerifyConnection`, which effective for
+	// other TLS protocols such as WebSocket. See `route.go:parseChainNode`
+	/*
+		// If crypto/tls is doing verification, there's no need to do our own.
+		if tlsConfig.InsecureSkipVerify == false {
+			return tlsConn, nil
 		}
-		opts.Intermediates.AddCert(cert)
-	}
 
-	_, err = certs[0].Verify(opts)
-	if err != nil {
-		tlsConn.Close()
-		return nil, err
-	}
+		// Similarly if we use host's CA, we can do full handshake
+		if tlsConfig.RootCAs == nil {
+			return tlsConn, nil
+		}
+
+		opts := x509.VerifyOptions{
+			Roots:         tlsConfig.RootCAs,
+			CurrentTime:   time.Now(),
+			DNSName:       "",
+			Intermediates: x509.NewCertPool(),
+		}
+
+		certs := tlsConn.ConnectionState().PeerCertificates
+		for i, cert := range certs {
+			if i == 0 {
+				continue
+			}
+			opts.Intermediates.AddCert(cert)
+		}
+
+		_, err = certs[0].Verify(opts)
+		if err != nil {
+			tlsConn.Close()
+			return nil, err
+		}
+	*/
 
 	return tlsConn, err
 }
