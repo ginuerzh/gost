@@ -57,6 +57,12 @@ go build
 docker pull ginuerzh/gost
 ```
 
+#### Homebrew
+
+```bash
+brew install gost
+```
+
 #### Ubuntu store
 
 ```bash
