@@ -363,6 +363,12 @@ func (h *httpHandler) authenticate(conn net.Conn, req *http.Request, resp *http.
 			conn.RemoteAddr(), conn.LocalAddr())
 		resp.StatusCode = http.StatusProxyAuthRequired
 		resp.Header.Add("Proxy-Authenticate", "Basic realm=\"gost\"")
+		if strings.ToLower(req.Header.Get("Proxy-Connection")) == "keep-alive" {
+			// XXX libcurl will keep sending auth request in same conn
+			// which we don't supported yet.
+			resp.Header.Add("Connection", "close")
+			resp.Header.Add("Proxy-Connection", "close")
+		}
 	} else {
 		resp.Header = http.Header{}
 		resp.Header.Set("Server", "nginx/1.14.1")
