@@ -257,10 +257,11 @@ func (h *relayHandler) Handle(conn net.Conn) {
 
 type relayConn struct {
 	net.Conn
-	isServer bool
-	udp      bool
-	wbuf     bytes.Buffer
-	once     sync.Once
+	isServer   bool
+	udp        bool
+	wbuf       bytes.Buffer
+	once       sync.Once
+	headerSent bool
 }
 
 func (c *relayConn) Read(b []byte) (n int, err error) {
@@ -323,6 +324,7 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 			var bb [2]byte
 			binary.BigEndian.PutUint16(bb[:2], uint16(len(b)))
 			c.wbuf.Write(bb[:])
+			c.headerSent = true
 		}
 		c.wbuf.Write(b) // append the data to the cached header
 		// _, err = c.Conn.Write(c.wbuf.Bytes())
@@ -334,7 +336,13 @@ func (c *relayConn) Write(b []byte) (n int, err error) {
 	if !c.udp {
 		return c.Conn.Write(b)
 	}
-
+	if !c.headerSent {
+		c.headerSent = true
+		b2 := make([]byte, len(b)+2)
+		copy(b2, b)
+		_, err = c.Conn.Write(b2)
+		return
+	}
 	nsize := 2 + len(b)
 	var buf []byte
 	if nsize <= mediumBufferSize {
