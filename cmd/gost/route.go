@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -67,18 +68,31 @@ func (r *route) parseChain() (*gost.Chain, error) {
 		)
 
 		if cfg := nodes[0].Get("peer"); cfg != "" {
-			f, err := os.Open(cfg)
-			if err != nil {
-				return nil, err
-			}
-
 			peerCfg := newPeerConfig()
 			peerCfg.group = ngroup
 			peerCfg.baseNodes = nodes
-			peerCfg.Reload(f)
-			f.Close()
 
-			go gost.PeriodReload(peerCfg, cfg)
+			if strings.HasPrefix(cfg, "http") {
+				client := http.Client{}
+				resp, err := client.Get(cfg)
+				if err != nil {
+					return nil, err
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != 200 {
+					return nil, fmt.Errorf("fetch remote resource error, reply status code is not equals to 200")
+				}
+				peerCfg.Reload(resp.Body)
+				go gost.PeriodReloadRemote(peerCfg, cfg)
+			} else {
+				f, err := os.Open(cfg)
+				defer f.Close()
+				if err != nil {
+					return nil, err
+				}
+				peerCfg.Reload(f)
+				go gost.PeriodReload(peerCfg, cfg)
+			}
 		}
 
 		chain.AddNodeGroup(ngroup)

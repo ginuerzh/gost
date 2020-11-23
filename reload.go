@@ -1,7 +1,9 @@
 package gost
 
 import (
+	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -55,6 +57,42 @@ func PeriodReload(r Reloader, configFile string) error {
 		period := r.Period()
 		if period == 0 {
 			log.Log("[reload] disabled:", configFile)
+			return nil
+		}
+		if period < time.Second {
+			period = time.Second
+		}
+		<-time.After(period)
+	}
+}
+
+// PeriodReloadRemote reloads the remote configFile periodically according to the period of the Reloader r.
+func PeriodReloadRemote(r Reloader, cfg string) error {
+	if r == nil || cfg == "" {
+		return nil
+	}
+
+	client := http.Client{}
+	for {
+		if r.Period() < 0 {
+			log.Log("[reload] stopped:", cfg)
+			return nil
+		}
+		resp, err := client.Get(cfg)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("fetch remote resource error, reply status code is not equals to 200")
+		}
+		if err := r.Reload(resp.Body); err != nil {
+			log.Logf("[reload] %s: %s", cfg, err)
+		}
+
+		period := r.Period()
+		if period == 0 {
+			log.Log("[reload] disabled:", cfg)
 			return nil
 		}
 		if period < time.Second {
