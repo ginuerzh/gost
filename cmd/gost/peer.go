@@ -14,14 +14,14 @@ import (
 )
 
 type peerConfig struct {
-	Strategy    string `json:"strategy"`
-	MaxFails    int    `json:"max_fails"`
-	FailTimeout time.Duration
-	period      time.Duration // the period for live reloading
-	Nodes       []string      `json:"nodes"`
-	group       *gost.NodeGroup
-	baseNodes   []gost.Node
-	stopped     chan struct{}
+	Strategy     string        `json:"strategy"`
+	MaxFails     int           `json:"max_fails"`
+	FailTimeout  time.Duration `json:"fail_timeout"`
+	ReloadPeriod time.Duration `json:"reload"`
+	Nodes        []string      `json:"nodes"`
+	group        *gost.NodeGroup
+	baseNodes    []gost.Node
+	stopped      chan struct{}
 }
 
 func newPeerConfig() *peerConfig {
@@ -129,7 +129,7 @@ func (cfg *peerConfig) parse(r io.Reader) error {
 		case "fail_timeout":
 			cfg.FailTimeout, _ = time.ParseDuration(ss[1])
 		case "reload":
-			cfg.period, _ = time.ParseDuration(ss[1])
+			cfg.ReloadPeriod, _ = time.ParseDuration(ss[1])
 		case "peer":
 			cfg.Nodes = append(cfg.Nodes, ss[1])
 		}
@@ -142,7 +142,7 @@ func (cfg *peerConfig) Period() time.Duration {
 	if cfg.Stopped() {
 		return -1
 	}
-	return cfg.period
+	return cfg.ReloadPeriod
 }
 
 // Stop stops reloading.
