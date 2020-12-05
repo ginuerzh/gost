@@ -12,7 +12,7 @@ import (
 
 	"github.com/ginuerzh/gosocks5"
 	"github.com/go-log/log"
-	smux "gopkg.in/xtaci/smux.v1"
+	smux "github.com/xtaci/smux"
 )
 
 type forwardConnector struct {
