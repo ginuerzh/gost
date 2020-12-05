@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-log/log"
 
-	smux "gopkg.in/xtaci/smux.v1"
+	smux "github.com/xtaci/smux"
 )
 
 type tlsTransporter struct {

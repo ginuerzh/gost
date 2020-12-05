@@ -15,8 +15,8 @@ import (
 	"net/url"
 
 	"github.com/go-log/log"
-	"gopkg.in/gorilla/websocket.v1"
-	smux "gopkg.in/xtaci/smux.v1"
+	"github.com/gorilla/websocket"
+	smux "github.com/xtaci/smux"
 )
 
 const (

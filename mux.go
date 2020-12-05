@@ -3,7 +3,7 @@ package gost
 import (
 	"net"
 
-	smux "gopkg.in/xtaci/smux.v1"
+	smux "github.com/xtaci/smux"
 )
 
 type muxStreamConn struct {
