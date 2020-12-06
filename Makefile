@@ -6,6 +6,7 @@ GOFILES=cmd/gost/*
 
 PLATFORM_LIST = \
 	darwin-amd64 \
+	darwin-arm64 \
 	linux-386 \
 	linux-amd64 \
 	linux-armv5 \
@@ -29,6 +30,9 @@ all: linux-amd64 darwin-amd64 windows-amd64 # Most used
 
 darwin-amd64:
 	GOARCH=amd64 GOOS=darwin $(GOBUILD) -o $(BINDIR)/$(NAME)-$@ $(GOFILES)
+
+darwin-arm64:
+	GOARCH=arm64 GOOS=darwin $(GOBUILD) -o $(BINDIR)/$(NAME)-$@ $(GOFILES)
 
 linux-386:
 	GOARCH=386 GOOS=linux $(GOBUILD) -o $(BINDIR)/$(NAME)-$@ $(GOFILES)
