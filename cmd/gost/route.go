@@ -182,6 +182,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.WSSTransporter(wsOpts)
 	case "mwss":
 		tr = gost.MWSSTransporter(wsOpts)
+	case "mtws":
+		tr = gost.MTWSTransporter(wsOpts)
 	case "kcp":
 		config, err := parseKCPConfig(node.Get("c"))
 		if err != nil {
@@ -231,8 +233,10 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.FakeTCPTransporter()
 	case "udp":
 		tr = gost.UDPTransporter()
-	default:
+	case "tcp":
 		tr = gost.TCPTransporter()
+	default:
+		return nil, fmt.Errorf("unknown transport: %s", node.Transport)
 	}
 
 	var connector gost.Connector
@@ -261,8 +265,10 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		connector = gost.HTTPConnector(node.User)
 	case "relay":
 		connector = gost.RelayConnector(node.User)
-	default:
+	case "auto":
 		connector = gost.AutoConnector(node.User)
+	default:
+		return nil, fmt.Errorf("unknown connector: %s", node.Protocol)
 	}
 
 	host := node.Get("host")
@@ -546,7 +552,7 @@ func (r *route) GenRouters() ([]router, error) {
 				QueueSize: node.GetInt("queue"),
 			})
 		default:
-			ln, err = gost.TCPListener(node.Addr)
+			return nil, fmt.Errorf("unknown transport:%s", node.Transport)
 		}
 		if err != nil {
 			return nil, err
@@ -590,13 +596,10 @@ func (r *route) GenRouters() ([]router, error) {
 			handler = gost.DNSHandler(node.Remote)
 		case "relay":
 			handler = gost.RelayHandler(node.Remote)
+		case "auto":
+			handler = gost.AutoHandler()
 		default:
-			// start from 2.5, if remote is not empty, then we assume that it is a forward tunnel.
-			if node.Remote != "" {
-				handler = gost.TCPDirectForwardHandler(node.Remote)
-			} else {
-				handler = gost.AutoHandler()
-			}
+			return nil, fmt.Errorf("unknown protocol:%s", node.Protocol)
 		}
 
 		var whitelist, blacklist *gost.Permissions

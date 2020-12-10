@@ -67,11 +67,13 @@ func ParseNode(s string) (node Node, err error) {
 	schemes := strings.Split(u.Scheme, "+")
 	if len(schemes) == 1 {
 		node.Protocol = schemes[0]
-		node.Transport = schemes[0]
 	}
 	if len(schemes) == 2 {
 		node.Protocol = schemes[0]
 		node.Transport = schemes[1]
+	}
+	if len(schemes) > 2 {
+		return node, fmt.Errorf("unknown scheme:%s", u.Scheme)
 	}
 
 	switch node.Transport {
@@ -79,7 +81,7 @@ func ParseNode(s string) (node Node, err error) {
 		node.Transport = "tls"
 	case "tls", "mtls":
 	case "http2", "h2", "h2c":
-	case "ws", "mws", "wss", "mwss":
+	case "ws", "mws", "wss", "mwss", "mtws":
 	case "kcp", "ssh", "quic":
 	case "ssu":
 		node.Transport = "udp"
@@ -90,8 +92,10 @@ func ParseNode(s string) (node Node, err error) {
 	case "ftcp": // fake TCP
 	case "dns":
 	case "redu", "redirectu": // UDP tproxy
-	default:
+	case "":
 		node.Transport = "tcp"
+	default:
+		return Node{}, fmt.Errorf("unknown transport:%s", node.Transport)
 	}
 
 	switch node.Protocol {
@@ -112,8 +116,11 @@ func ParseNode(s string) (node Node, err error) {
 	case "ftcp": // fake TCP
 	case "dns", "dot", "doh":
 	case "relay":
+	case "":
+	case "auto":
+		node.Protocol = "auto"
 	default:
-		node.Protocol = ""
+		return Node{}, fmt.Errorf("unknown protocol:%s", node.Protocol)
 	}
 
 	return
@@ -172,12 +179,7 @@ func (node *Node) GetDuration(key string) time.Duration {
 
 func (node Node) String() string {
 	var scheme string
-	if node.url != nil {
-		scheme = node.url.Scheme
-	}
-	if scheme == "" {
-		scheme = fmt.Sprintf("%s+%s", node.Protocol, node.Transport)
-	}
+	scheme = fmt.Sprintf("%s+%s", node.Protocol, node.Transport)
 	return fmt.Sprintf("%s://%s",
 		scheme, node.Addr)
 }
