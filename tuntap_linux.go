@@ -6,7 +6,7 @@ import (
 
 	"github.com/docker/libcontainer/netlink"
 	"github.com/go-log/log"
-	"github.com/milosgajdos83/tenus"
+	"github.com/milosgajdos/tenus"
 	"github.com/songgao/water"
 )
 

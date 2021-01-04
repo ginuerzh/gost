@@ -53,6 +53,8 @@ github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cce
 github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cced/go.mod h1:NCcRLrOTZbzhZvixZLlERbJtDtYsmMw8Jc4vS8Z0g58=
 github.com/miekg/dns v1.1.35 h1:oTfOaDH+mZkdcgdIjH6yBajRGtIwcwcaR+rt23ZSrJs=
 github.com/miekg/dns v1.1.35/go.mod h1:KNUDUusw/aVsxyTYZM1oqvCicbwhgbNgztCETuNZ7xM=
+github.com/milosgajdos/tenus v0.0.3 h1:jmaJzwaY1DUyYVD0lM4U+uvP2kkEg1VahDqRFxIkVBE=
+github.com/milosgajdos/tenus v0.0.3/go.mod h1:eIjx29vNeDOYWJuCnaHY2r4fq5egetV26ry3on7p8qY=
 github.com/milosgajdos83/tenus v0.0.0-20190415114537-1f3ed00ae7d8 h1:4WFQEfEJ7zaHYViIVM2Cd6tnQOOhiEHbmQtlcV7aOpc=
 github.com/milosgajdos83/tenus v0.0.0-20190415114537-1f3ed00ae7d8/go.mod h1:G95Wwn625/q6JCCytI4VR/a5VtPwrtI0B+Q1Gi38QLA=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

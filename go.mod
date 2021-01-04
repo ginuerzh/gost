@@ -27,7 +27,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.10.0
 	github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cced // indirect
 	github.com/miekg/dns v1.1.35
-	github.com/milosgajdos83/tenus v0.0.0-20190415114537-1f3ed00ae7d8
+	github.com/milosgajdos/tenus v0.0.3
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/shadowsocks/go-shadowsocks2 v0.1.3
