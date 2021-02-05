@@ -203,6 +203,13 @@ func (h *relayHandler) Handle(conn net.Conn) {
 	if udp {
 		network = "udp"
 	}
+	if !Can(network, raddr, h.options.Whitelist, h.options.Blacklist) {
+		resp.Status = relay.StatusForbidden
+		resp.WriteTo(conn)
+		log.Logf("[relay] %s -> %s : relay to %s is forbidden",
+			conn.RemoteAddr(), conn.LocalAddr(), raddr)
+		return
+	}
 
 	ctx := context.TODO()
 	var cc net.Conn
