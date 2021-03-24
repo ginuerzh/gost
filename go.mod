@@ -33,6 +33,7 @@ require (
 	github.com/shadowsocks/go-shadowsocks2 v0.1.4
 	github.com/shadowsocks/shadowsocks-go v0.0.0-20170121203516-97a5c71f80ba
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.4.0 // indirect
 	github.com/xtaci/kcp-go v5.4.20+incompatible
