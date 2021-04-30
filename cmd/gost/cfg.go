@@ -25,18 +25,18 @@ type baseConfig struct {
 	Debug  bool
 }
 
-func parseBaseConfig(s string) (*baseConfig, error) {
+func parseBaseConfig(s string, baseCfg *baseConfig) error {
 	file, err := os.Open(s)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer file.Close()
 
 	if err := json.NewDecoder(file).Decode(baseCfg); err != nil {
-		return nil, err
+		return err
 	}
 
-	return baseCfg, nil
+	return nil
 }
 
 var (
