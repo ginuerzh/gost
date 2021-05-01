@@ -29,6 +29,7 @@ Features
 * [Routing control](https://docs.ginuerzh.xyz/gost/en/bypass/)
 * DNS [resolver](https://docs.ginuerzh.xyz/gost/resolver/) and [proxy](https://docs.ginuerzh.xyz/gost/dns/)
 * [TUN/TAP device](https://docs.ginuerzh.xyz/gost/en/tuntap/)
+* [Multi-Instance](#Multi-Instance)
 
 Wiki: <https://docs.ginuerzh.xyz/gost/en/>
 
@@ -419,3 +420,47 @@ gost -L=:8080 -F="http2://:443?ca=ca.pem"
 ```
 
 Certificate Pinning is contributed by [@sheerun](https://github.com/sheerun).
+
+Multi-Instance
+------
+
+Run multiple gost instances with different rules and configuration files by separating each with `--`
+
+#### Reverse SOCKS5 over SSH tunnel
+```bash
+# Server
+gost -L forward+ssh://:2222
+
+# Client
+gost -L socks5://127.0.0.1:1111 -- -L rtcp://127.0.0.1:3333/127.0.0.1:1111 -F forward+ssh://<server-ip>:2222
+
+# Test from Server
+curl -s -L -x socks5://127.0.0.1:3333 https://example.com
+```
+
+#### Multiple port-forwarding through different proxies
+```bash
+gost -- -L tcp://:2222/192.168.1.9:22 -F forward+ssh://172.25.10.3:22 -F forward+ssh://70.9.17.2:22 \
+     -- -L tcp://:8080/10.10.10.10:80 -F forward+tls://90.33.2.11:443                               \
+     -- -L udp://:5353/192.10.16.8:53 -F socks5://189.155.221.25:1080
+```
+
+#### Multiple configuration files
+```bash
+gost -C tls.json -- -C hyper-proxy.json -- -C reverse-nc.json -- -C happy-vpn.json
+```
+
+#### A mix of everything
+```bash
+gost -L rudp://:5353/192.168.1.1:53?ttl=60s -F socks5://172.24.10.1:1080    -- \
+     -C my-proxy.json                                                       -- \
+     -L redirect://:1234 -F 1.2.3.4:1080                                    -- \
+     -L udp://:5353 -C forward-servers.json                                 -- \
+     -L :8080 -F http://localhost:8080?ip=192.168.1.2:8081,192.168.1.3:8082    \
+              -F socks5://localhost:1080?ip=172.20.1.1:1080,172.20.1.2:1081 -- \
+     -L socks5://localhost:1080                                             -- \
+     -L :2020 -F kcp://10.16.1.10:8388?peer=peer1.txt                          \
+              -F http2://12.20.1.3:443?peer=peer2.txt
+```
+
+Multi-Instance was contributed by [@caribpa](https://github.com/caribpa).
