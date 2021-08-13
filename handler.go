@@ -42,7 +42,6 @@ type HandlerOptions struct {
 	IPs           []string
 	TCPMode       bool
 	IPRoutes      []IPRoute
-	Mark          int
 }
 
 // HandlerOption allows a common way to set handler options.

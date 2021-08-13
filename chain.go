@@ -162,9 +162,9 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 			return cc.Control(func(fd uintptr) {
 				ex := setSocketMark(int(fd), c.Mark)
 				if ex != nil {
-					log.Logf("net dialer set mark %d error: %s", options.Mark, ex)
+					log.Logf("net dialer set mark %d error: %s", c.Mark, ex)
 				} else {
-					log.Logf("net dialer set mark %d success", options.Mark)
+					// log.Logf("net dialer set mark %d success", options.Mark)
 				}
 			})
 		}
