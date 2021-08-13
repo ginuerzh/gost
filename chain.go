@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"syscall"
 	"time"
 
 	"github.com/go-log/log"
@@ -18,6 +19,7 @@ var (
 type Chain struct {
 	isRoute    bool
 	Retries    int
+	Mark       int
 	nodeGroups []*NodeGroup
 	route      []Node // nodes in the selected route
 }
@@ -131,6 +133,10 @@ func (c *Chain) DialContext(ctx context.Context, network, address string, opts .
 	return
 }
 
+func setSocketMark(fd int, value int) (e error) {
+	return syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, value)
+}
+
 func (c *Chain) dialWithOptions(ctx context.Context, network, address string, options *ChainOptions) (net.Conn, error) {
 	if options == nil {
 		options = &ChainOptions{}
@@ -150,6 +156,20 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 		timeout = DialTimeout
 	}
 
+	var controlFunction func(_ string, _ string, c syscall.RawConn) error = nil
+	if c.Mark > 0 {
+		controlFunction = func(_, _ string, cc syscall.RawConn) error {
+			return cc.Control(func(fd uintptr) {
+				ex := setSocketMark(int(fd), c.Mark)
+				if ex != nil {
+					log.Logf("net dialer set mark %d error: %s", options.Mark, ex)
+				} else {
+					log.Logf("net dialer set mark %d success", options.Mark)
+				}
+			})
+		}
+	}
+
 	if route.IsEmpty() {
 		switch network {
 		case "udp", "udp4", "udp6":
@@ -160,6 +180,7 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 		}
 		d := &net.Dialer{
 			Timeout: timeout,
+			Control: controlFunction,
 			// LocalAddr: laddr, // TODO: optional local address
 		}
 		return d.DialContext(ctx, network, ipAddr)
@@ -328,6 +349,7 @@ type ChainOptions struct {
 	Timeout  time.Duration
 	Hosts    *Hosts
 	Resolver Resolver
+	Mark     int
 }
 
 // ChainOption allows a common way to set chain options.
