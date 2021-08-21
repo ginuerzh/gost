@@ -1,8 +1,10 @@
 package gost
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"syscall"
 
 	"github.com/docker/libcontainer/netlink"
 	"github.com/go-log/log"
@@ -149,7 +151,7 @@ func addTunRoutes(ifName string, routes ...IPRoute) error {
 		}
 		cmd := fmt.Sprintf("ip route add %s dev %s", route.Dest.String(), ifName)
 		log.Logf("[tun] %s", cmd)
-		if err := netlink.AddRoute(route.Dest.String(), "", "", ifName); err != nil {
+		if err := netlink.AddRoute(route.Dest.String(), "", "", ifName); err != nil && !errors.Is(err, syscall.EEXIST) {
 			return fmt.Errorf("%s: %v", cmd, err)
 		}
 	}
