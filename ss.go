@@ -580,7 +580,7 @@ func (c *shadowCipher) StreamConn(conn net.Conn) net.Conn {
 }
 
 func (c *shadowCipher) PacketConn(conn net.PacketConn) net.PacketConn {
-	return ss.NewSecurePacketConn(conn, c.cipher.Copy(), false)
+	return ss.NewSecurePacketConn(conn, c.cipher.Copy())
 }
 
 func initShadowCipher(info *url.Userinfo) (cipher core.Cipher) {

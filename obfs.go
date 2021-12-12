@@ -20,8 +20,8 @@ import (
 	"github.com/go-log/log"
 
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
-	"git.torproject.org/pluggable-transports/obfs4.git/transports/base"
-	"git.torproject.org/pluggable-transports/obfs4.git/transports/obfs4"
+	"gitlab.com/yawning/obfs4.git/transports/base"
+	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 	dissector "github.com/ginuerzh/tls-dissector"
 )
 
