@@ -10,7 +10,7 @@ import (
 
 	"fmt"
 
-	"github.com/ginuerzh/gosocks5"
+	"github.com/go-gost/gosocks5"
 	"github.com/go-log/log"
 	smux "github.com/xtaci/smux"
 )
