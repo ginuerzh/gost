@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ginuerzh/gosocks4"
-	"github.com/ginuerzh/gosocks5"
+	"github.com/go-gost/gosocks4"
+	"github.com/go-gost/gosocks5"
 	"github.com/go-log/log"
 	smux "github.com/xtaci/smux"
 )

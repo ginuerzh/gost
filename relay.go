@@ -84,7 +84,7 @@ func (c *relayConnector) ConnectContext(ctx context.Context, conn net.Conn, netw
 				atype = relay.AddrIPv4
 			}
 
-			req.Features = append(req.Features, &relay.TargetAddrFeature{
+			req.Features = append(req.Features, &relay.AddrFeature{
 				AType: atype,
 				Host:  host,
 				Port:  uint16(nport),
@@ -155,8 +155,8 @@ func (h *relayHandler) Handle(conn net.Conn) {
 			feature := f.(*relay.UserAuthFeature)
 			user, pass = feature.Username, feature.Password
 		}
-		if f.Type() == relay.FeatureTargetAddr {
-			feature := f.(*relay.TargetAddrFeature)
+		if f.Type() == relay.FeatureAddr {
+			feature := f.(*relay.AddrFeature)
 			raddr = net.JoinHostPort(feature.Host, strconv.Itoa(int(feature.Port)))
 		}
 	}
