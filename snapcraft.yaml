@@ -1,6 +1,6 @@
 name: gost
 type: app
-version: '2.11.1'
+version: '2.11.2'
 title: GO Simple Tunnel
 summary: A simple security tunnel written in golang
 description: |
@@ -12,7 +12,7 @@ license: MIT
 parts:
   gost:
     plugin: nil
-    build-snaps: [go/1.13/stable]
+    build-snaps: [go/1.18/stable]
     source: https://github.com/ginuerzh/gost.git
     source-subdir: cmd/gost
     source-type: git
