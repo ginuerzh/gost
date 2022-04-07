@@ -4,33 +4,31 @@ gost - GO Simple Tunnel
 ### A simple security tunnel written in Golang
 
 [![GoDoc](https://godoc.org/github.com/ginuerzh/gost?status.svg)](https://godoc.org/github.com/ginuerzh/gost)
-[![Build Status](https://travis-ci.org/ginuerzh/gost.svg?branch=master)](https://travis-ci.org/ginuerzh/gost)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ginuerzh/gost)](https://goreportcard.com/report/github.com/ginuerzh/gost)
 [![codecov](https://codecov.io/gh/ginuerzh/gost/branch/master/graphs/badge.svg)](https://codecov.io/gh/ginuerzh/gost/branch/master)
 [![GitHub release](https://img.shields.io/github/release/ginuerzh/gost.svg)](https://github.com/ginuerzh/gost/releases/latest)
-[![Snap Status](https://build.snapcraft.io/badge/ginuerzh/gost.svg)](https://build.snapcraft.io/user/ginuerzh/gost)
-[![Docker Build Status](https://img.shields.io/docker/build/ginuerzh/gost.svg)](https://hub.docker.com/r/ginuerzh/gost/)
-
+[![Docker](https://img.shields.io/docker/pulls/ginuerzh/gost.svg)](https://hub.docker.com/r/ginuerzh/gost/)
+ 
 Features
 ------
 * Listening on multiple ports
 * Multi-level forward proxy - proxy chain
 * Standard HTTP/HTTPS/HTTP2/SOCKS4(A)/SOCKS5 proxy protocols support
-* [Probing resistance](https://docs.ginuerzh.xyz/gost/en/probe_resist/) support for web proxy
-* [Support multiple tunnel types](https://docs.ginuerzh.xyz/gost/en/configuration/)
-* [TLS encryption via negotiation support for SOCKS5 proxy](https://docs.ginuerzh.xyz/gost/en/socks/)
-* [Tunnel UDP over TCP](https://docs.ginuerzh.xyz/gost/en/socks/)
-* [TCP/UDP Transparent proxy](https://docs.ginuerzh.xyz/gost/en/redirect/)
-* [Local/remote TCP/UDP port forwarding](https://docs.ginuerzh.xyz/gost/en/port-forwarding/)
-* [Shadowsocks protocol](https://docs.ginuerzh.xyz/gost/en/ss/)
-* [SNI proxy](https://docs.ginuerzh.xyz/gost/en/sni/)
-* [Permission control](https://docs.ginuerzh.xyz/gost/en/permission/)
-* [Load balancing](https://docs.ginuerzh.xyz/gost/en/load-balancing/)
-* [Routing control](https://docs.ginuerzh.xyz/gost/en/bypass/)
-* DNS [resolver](https://docs.ginuerzh.xyz/gost/resolver/) and [proxy](https://docs.ginuerzh.xyz/gost/dns/)
-* [TUN/TAP device](https://docs.ginuerzh.xyz/gost/en/tuntap/)
+* [Probing resistance](https://v2.gost.run/en/probe_resist/) support for web proxy
+* [Support multiple tunnel types](https://v2.gost.run/en/configuration/)
+* [TLS encryption via negotiation support for SOCKS5 proxy](https://v2.gost.run/en/socks/)
+* [Tunnel UDP over TCP](https://v2.gost.run/en/socks/)
+* [TCP/UDP Transparent proxy](https://v2.gost.run/en/redirect/)
+* [Local/remote TCP/UDP port forwarding](https://v2.gost.run/en/port-forwarding/)
+* [Shadowsocks protocol](https://v2.gost.run/en/ss/)
+* [SNI proxy](https://v2.gost.run/en/sni/)
+* [Permission control](https://v2.gost.run/en/permission/)
+* [Load balancing](https://v2.gost.run/en/load-balancing/)
+* [Routing control](https://v2.gost.run/en/bypass/)
+* DNS [resolver](https://v2.gost.run/resolver/) and [proxy](https://v2.gost.run/dns/)
+* [TUN/TAP device](https://v2.gost.run/en/tuntap/)
 
-Wiki: <https://docs.ginuerzh.xyz/gost/en/>
+Wiki: [v2.gost.run](https://v2.gost.run/en/)
 
 Telegram group: <https://t.me/gogost>
 
