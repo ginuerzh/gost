@@ -2,7 +2,7 @@ NAME=gost
 BINDIR=bin
 VERSION=$(shell cat gost.go | grep 'Version =' | sed 's/.*\"\(.*\)\".*/\1/g')
 GOBUILD=CGO_ENABLED=0 go build --ldflags="-s -w" -v -x -a
-GOFILES=cmd/gost/*
+GOFILES=cmd/gost/*.go
 
 PLATFORM_LIST = \
 	darwin-amd64 \

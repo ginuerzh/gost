@@ -133,10 +133,6 @@ func (c *Chain) DialContext(ctx context.Context, network, address string, opts .
 	return
 }
 
-func setSocketMark(fd int, value int) (e error) {
-	return syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, value)
-}
-
 func (c *Chain) dialWithOptions(ctx context.Context, network, address string, options *ChainOptions) (net.Conn, error) {
 	if options == nil {
 		options = &ChainOptions{}
