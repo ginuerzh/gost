@@ -8,6 +8,7 @@ gost - GO Simple Tunnel
 [![codecov](https://codecov.io/gh/ginuerzh/gost/branch/master/graphs/badge.svg)](https://codecov.io/gh/ginuerzh/gost/branch/master)
 [![GitHub release](https://img.shields.io/github/release/ginuerzh/gost.svg)](https://github.com/ginuerzh/gost/releases/latest)
 [![Docker](https://img.shields.io/docker/pulls/ginuerzh/gost.svg)](https://hub.docker.com/r/ginuerzh/gost/)
+[![gost](https://snapcraft.io/gost/badge.svg)](https://snapcraft.io/gost)
  
 Features
 ------

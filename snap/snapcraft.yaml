@@ -5,8 +5,10 @@ summary: A simple security tunnel written in golang
 description: |
   Project: https://github.com/ginuerzh/gost
   Wiki: https://v2.gost.run
-
 icon: gost.png
+website: https://v2.gost.run
+
+
 confinement: strict
 grade: stable
 
