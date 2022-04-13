@@ -1,0 +1,31 @@
+name: gost
+base: core20
+version: '2.11.2'
+summary: A simple security tunnel written in golang
+description: |
+  Project: https://github.com/ginuerzh/gost
+  Wiki: https://v2.gost.run
+
+icon: gost.png
+confinement: strict
+grade: stable
+
+parts:
+  gost:
+    plugin: go
+    go-channel: latest/stable
+    source: https://github.com/ginuerzh/gost
+    source-subdir: cmd/gost
+    source-type: git
+    source-tag: v2.11.2
+    build-packages:
+    - gcc
+
+apps:
+  gost:
+    command: bin/gost
+    plugs: 
+    - home
+    - network
+    - network-bind
+

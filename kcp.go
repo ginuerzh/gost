@@ -15,9 +15,9 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/klauspost/compress/snappy"
-	"github.com/xtaci/tcpraw"
-	"github.com/xtaci/kcp-go"
+	"github.com/xtaci/kcp-go/v5"
 	"github.com/xtaci/smux"
+	"github.com/xtaci/tcpraw"
 )
 
 var (
