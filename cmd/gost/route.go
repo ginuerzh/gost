@@ -31,12 +31,14 @@ type route struct {
 	ChainNodes stringList
 	Retries    int
 	Mark       int
+	Interface  string
 }
 
 func (r *route) parseChain() (*gost.Chain, error) {
 	chain := gost.NewChain()
 	chain.Retries = r.Retries
 	chain.Mark = r.Mark
+	chain.Interface = r.Interface
 	gid := 1 // group ID
 
 	for _, ns := range r.ChainNodes {
