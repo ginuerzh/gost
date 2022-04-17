@@ -20,6 +20,7 @@ type Chain struct {
 	isRoute    bool
 	Retries    int
 	Mark       int
+	Interface  string
 	nodeGroups []*NodeGroup
 	route      []Node // nodes in the selected route
 }
@@ -36,9 +37,11 @@ func NewChain(nodes ...Node) *Chain {
 
 // newRoute creates a chain route.
 // a chain route is the final route after node selection.
-func newRoute(nodes ...Node) *Chain {
+func (c *Chain) newRoute(nodes ...Node) *Chain {
 	chain := NewChain(nodes...)
 	chain.isRoute = true
+	chain.Interface = c.Interface
+	chain.Mark = c.Mark
 	return chain
 }
 
@@ -161,6 +164,18 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 					log.Logf("net dialer set mark %d error: %s", c.Mark, ex)
 				} else {
 					// log.Logf("net dialer set mark %d success", options.Mark)
+				}
+			})
+		}
+	}
+
+	if c.Interface != "" {
+		controlFunction = func(_, _ string, cc syscall.RawConn) error {
+			return cc.Control(func(fd uintptr) {
+				err := setSocketInterface(int(fd), c.Interface)
+
+				if err != nil {
+					log.Logf("net dialer set interface %s error: %s", c.Interface, err)
 				}
 			})
 		}
@@ -303,13 +318,13 @@ func (c *Chain) selectRoute() (route *Chain, err error) {
 // selectRouteFor selects route with bypass testing.
 func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 	if c.IsEmpty() {
-		return newRoute(), nil
+		return c.newRoute(), nil
 	}
 	if c.isRoute {
 		return c, nil
 	}
 
-	route = newRoute()
+	route = c.newRoute()
 	var nl []Node
 
 	for _, group := range c.nodeGroups {
@@ -327,7 +342,7 @@ func (c *Chain) selectRouteFor(addr string) (route *Chain, err error) {
 			node.DialOptions = append(node.DialOptions,
 				ChainDialOption(route),
 			)
-			route = newRoute() // cutoff the chain for multiplex node.
+			route = c.newRoute() // cutoff the chain for multiplex node.
 		}
 
 		route.AddNode(node)
