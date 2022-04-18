@@ -148,6 +148,26 @@ func parseAuthenticator(s string) (gost.Authenticator, error) {
 	return au, nil
 }
 
+func parseLimiter(s string) (gost.Limiter, error) {
+	if s == "" {
+		return nil, nil
+	}
+	f, err := os.Open(s)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	l, _ := gost.NewLocalLimiter("", "")
+	err = l.Reload(f)
+	if err != nil {
+		return nil, err
+	}
+	go gost.PeriodReload(l, s)
+
+	return l, nil
+}
+
 func parseIP(s string, port string) (ips []string) {
 	if s == "" {
 		return
