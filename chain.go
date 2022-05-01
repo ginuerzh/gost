@@ -3,6 +3,7 @@ package gost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"syscall"
 	"time"
@@ -38,11 +39,13 @@ func NewChain(nodes ...Node) *Chain {
 // newRoute creates a chain route.
 // a chain route is the final route after node selection.
 func (c *Chain) newRoute(nodes ...Node) *Chain {
-	chain := NewChain(nodes...)
-	chain.isRoute = true
-	chain.Interface = c.Interface
-	chain.Mark = c.Mark
-	return chain
+	route := NewChain(nodes...)
+	route.isRoute = true
+	if !c.IsEmpty() {
+		route.Interface = c.Interface
+		route.Mark = c.Mark
+	}
+	return route
 }
 
 // Nodes returns the proxy nodes that the chain holds.
@@ -140,6 +143,9 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 	if options == nil {
 		options = &ChainOptions{}
 	}
+	if c == nil {
+		c = &Chain{}
+	}
 	route, err := c.selectRouteFor(address)
 	if err != nil {
 		return nil, err
@@ -148,6 +154,9 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 	ipAddr := address
 	if address != "" {
 		ipAddr = c.resolve(address, options.Resolver, options.Hosts)
+	}
+	if ipAddr == "" {
+		return nil, fmt.Errorf("resolver: domain %s does not exists", address)
 	}
 
 	timeout := options.Timeout
@@ -225,9 +234,11 @@ func (*Chain) resolve(addr string, resolver Resolver, hosts *Hosts) string {
 		if err != nil {
 			log.Logf("[resolver] %s: %v", host, err)
 		}
-		if len(ips) > 0 {
-			return net.JoinHostPort(ips[0].String(), port)
+		if len(ips) == 0 {
+			log.Logf("[resolver] %s: domain does not exists", host)
+			return ""
 		}
+		return net.JoinHostPort(ips[0].String(), port)
 	}
 	return addr
 }
