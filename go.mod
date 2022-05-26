@@ -25,7 +25,7 @@ require (
 	github.com/xtaci/kcp-go/v5 v5.6.1
 	github.com/xtaci/smux v1.5.16
 	github.com/xtaci/tcpraw v1.2.25
-	gitlab.com/yawning/obfs4.git v0.0.0-20210511220700-e330d1b7024b
+	gitlab.com/yawning/obfs4.git v0.0.0-20220204003609-77af0cba934d
 	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
 	golang.org/x/net v0.0.0-20220325170049-de3da57026de
 )
