@@ -20,12 +20,14 @@ PLATFORM_LIST = \
 	linux-mips64 \
 	linux-mips64le \
 	linux-s390x \
+	linux-riscv64 \
 	freebsd-386 \
 	freebsd-amd64
 
 WINDOWS_ARCH_LIST = \
 	windows-386 \
-	windows-amd64
+	windows-amd64 \
+	windows-arm64
 
 all: linux-amd64 darwin-amd64 windows-amd64 # Most used
 
@@ -74,6 +76,9 @@ linux-mips64le:
 linux-s390x:
 	GOARCH=s390x GOOS=linux $(GOBUILD) -o $(BINDIR)/$(NAME)-$@ $(GOFILES)
 
+linux-riscv64:
+	GOARCH=riscv64 GOOS=linux $(GOBUILD) -o $(BINDIR)/$(NAME)-$@ $(GOFILES)
+
 freebsd-386:
 	GOARCH=386 GOOS=freebsd $(GOBUILD) -o $(BINDIR)/$(NAME)-$@ $(GOFILES)
 
@@ -85,6 +90,9 @@ windows-386:
 
 windows-amd64:
 	GOARCH=amd64 GOOS=windows $(GOBUILD) -o $(BINDIR)/$(NAME)-$@.exe $(GOFILES)
+
+windows-arm64:
+	GOARCH=arm64 GOOS=windows $(GOBUILD) -o $(BINDIR)/$(NAME)-$@.exe $(GOFILES)
 
 gz_releases=$(addsuffix .gz, $(PLATFORM_LIST))
 zip_releases=$(addsuffix .zip, $(WINDOWS_ARCH_LIST))

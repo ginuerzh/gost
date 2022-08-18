@@ -17,8 +17,7 @@ import (
 )
 
 type quicSession struct {
-	conn    net.Conn
-	session quic.Session
+	session quic.EarlyConnection
 }
 
 func (session *quicSession) GetConn() (*quicConn, error) {
@@ -60,100 +59,71 @@ func (tr *quicTransporter) Dial(addr string, options ...DialOption) (conn net.Co
 		option(opts)
 	}
 
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+
 	tr.sessionMutex.Lock()
 	defer tr.sessionMutex.Unlock()
 
 	session, ok := tr.sessions[addr]
 	if !ok {
-		var cc *net.UDPConn
-		cc, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+		var pc net.PacketConn
+		pc, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 		if err != nil {
 			return
 		}
-		conn = cc
 
 		if tr.config != nil && tr.config.Key != nil {
-			conn = &quicCipherConn{UDPConn: cc, key: tr.config.Key}
+			pc = &quicCipherConn{PacketConn: pc, key: tr.config.Key}
 		}
 
-		session = &quicSession{conn: conn}
+		session, err = tr.initSession(udpAddr, pc)
+		if err != nil {
+			pc.Close()
+			return nil, err
+		}
 		tr.sessions[addr] = session
 	}
-	return session.conn, nil
+
+	conn, err = session.GetConn()
+	if err != nil {
+		session.Close()
+		delete(tr.sessions, addr)
+		return nil, err
+	}
+	return conn, nil
 }
 
 func (tr *quicTransporter) Handshake(conn net.Conn, options ...HandshakeOption) (net.Conn, error) {
-	opts := &HandshakeOptions{}
-	for _, option := range options {
-		option(opts)
-	}
+	return conn, nil
+}
+
+func (tr *quicTransporter) initSession(addr net.Addr, conn net.PacketConn) (*quicSession, error) {
 	config := tr.config
-	if opts.QUICConfig != nil {
-		config = opts.QUICConfig
+	if config == nil {
+		config = &QUICConfig{}
 	}
 	if config.TLSConfig == nil {
 		config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	tr.sessionMutex.Lock()
-	defer tr.sessionMutex.Unlock()
-
-	timeout := opts.Timeout
-	if timeout <= 0 {
-		timeout = HandshakeTimeout
-	}
-	conn.SetDeadline(time.Now().Add(timeout))
-	defer conn.SetDeadline(time.Time{})
-
-	session, ok := tr.sessions[opts.Addr]
-	if session != nil && session.conn != conn {
-		conn.Close()
-		return nil, errors.New("quic: unrecognized connection")
-	}
-	if !ok || session.session == nil {
-		s, err := tr.initSession(opts.Addr, conn, config)
-		if err != nil {
-			conn.Close()
-			delete(tr.sessions, opts.Addr)
-			return nil, err
-		}
-		session = s
-		tr.sessions[opts.Addr] = session
-	}
-	cc, err := session.GetConn()
-	if err != nil {
-		session.Close()
-		delete(tr.sessions, opts.Addr)
-		return nil, err
-	}
-
-	return cc, nil
-}
-
-func (tr *quicTransporter) initSession(addr string, conn net.Conn, config *QUICConfig) (*quicSession, error) {
-	udpConn, ok := conn.(net.PacketConn)
-	if !ok {
-		return nil, errors.New("quic: wrong connection type")
-	}
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout: config.Timeout,
-		KeepAlive:            config.KeepAlive,
+		MaxIdleTimeout:       config.IdleTimeout,
+		KeepAlivePeriod:      config.KeepAlivePeriod,
 		Versions: []quic.VersionNumber{
 			quic.Version1,
 			quic.VersionDraft29,
 		},
-		MaxIdleTimeout: config.IdleTimeout,
 	}
-	session, err := quic.Dial(udpConn, udpAddr, addr, tlsConfigQUICALPN(config.TLSConfig), quicConfig)
+	session, err := quic.DialEarly(conn, addr, addr.String(), tlsConfigQUICALPN(config.TLSConfig), quicConfig)
 	if err != nil {
 		log.Logf("quic dial %s: %v", addr, err)
 		return nil, err
 	}
-	return &quicSession{conn: conn, session: session}, nil
+	return &quicSession{session: session}, nil
 }
 
 func (tr *quicTransporter) Multiplex() bool {
@@ -162,15 +132,16 @@ func (tr *quicTransporter) Multiplex() bool {
 
 // QUICConfig is the config for QUIC client and server
 type QUICConfig struct {
-	TLSConfig   *tls.Config
-	Timeout     time.Duration
-	KeepAlive   bool
-	IdleTimeout time.Duration
-	Key         []byte
+	TLSConfig       *tls.Config
+	Timeout         time.Duration
+	KeepAlive       bool
+	KeepAlivePeriod time.Duration
+	IdleTimeout     time.Duration
+	Key             []byte
 }
 
 type quicListener struct {
-	ln       quic.Listener
+	ln       quic.EarlyListener
 	connChan chan net.Conn
 	errChan  chan error
 }
@@ -182,7 +153,7 @@ func QUICListener(addr string, config *QUICConfig) (Listener, error) {
 	}
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout: config.Timeout,
-		KeepAlive:            config.KeepAlive,
+		KeepAlivePeriod:      config.KeepAlivePeriod,
 		MaxIdleTimeout:       config.IdleTimeout,
 		Versions: []quic.VersionNumber{
 			quic.Version1,
@@ -200,17 +171,16 @@ func QUICListener(addr string, config *QUICConfig) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	lconn, err := net.ListenUDP("udp", udpAddr)
+	conn, err = net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return nil, err
 	}
-	conn = lconn
 
 	if config.Key != nil {
-		conn = &quicCipherConn{UDPConn: lconn, key: config.Key}
+		conn = &quicCipherConn{PacketConn: conn, key: config.Key}
 	}
 
-	ln, err := quic.Listen(conn, tlsConfigQUICALPN(tlsConfig), quicConfig)
+	ln, err := quic.ListenEarly(conn, tlsConfigQUICALPN(tlsConfig), quicConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +208,7 @@ func (l *quicListener) listenLoop() {
 	}
 }
 
-func (l *quicListener) sessionLoop(session quic.Session) {
+func (l *quicListener) sessionLoop(session quic.Connection) {
 	log.Logf("[quic] %s <-> %s", session.RemoteAddr(), session.LocalAddr())
 	defer log.Logf("[quic] %s >-< %s", session.RemoteAddr(), session.LocalAddr())
 
@@ -295,12 +265,12 @@ func (c *quicConn) RemoteAddr() net.Addr {
 }
 
 type quicCipherConn struct {
-	*net.UDPConn
+	net.PacketConn
 	key []byte
 }
 
 func (conn *quicCipherConn) ReadFrom(data []byte) (n int, addr net.Addr, err error) {
-	n, addr, err = conn.UDPConn.ReadFrom(data)
+	n, addr, err = conn.PacketConn.ReadFrom(data)
 	if err != nil {
 		return
 	}
@@ -320,7 +290,7 @@ func (conn *quicCipherConn) WriteTo(data []byte, addr net.Addr) (n int, err erro
 		return
 	}
 
-	_, err = conn.UDPConn.WriteTo(b, addr)
+	_, err = conn.PacketConn.WriteTo(b, addr)
 	if err != nil {
 		return
 	}

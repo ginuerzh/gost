@@ -212,6 +212,12 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 			Timeout:     timeout,
 			IdleTimeout: node.GetDuration("idle"),
 		}
+		if config.KeepAlive {
+			config.KeepAlivePeriod = node.GetDuration("ttl")
+			if config.KeepAlivePeriod == 0 {
+				config.KeepAlivePeriod = 10 * time.Second
+			}
+		}
 
 		if cipher := node.Get("cipher"); cipher != "" {
 			sum := sha256.Sum256([]byte(cipher))
@@ -457,6 +463,12 @@ func (r *route) GenRouters() ([]router, error) {
 				KeepAlive:   node.GetBool("keepalive"),
 				Timeout:     timeout,
 				IdleTimeout: node.GetDuration("idle"),
+			}
+			if config.KeepAlive {
+				config.KeepAlivePeriod = node.GetDuration("ttl")
+				if config.KeepAlivePeriod == 0 {
+					config.KeepAlivePeriod = 10 * time.Second
+				}
 			}
 			if cipher := node.Get("cipher"); cipher != "" {
 				sum := sha256.Sum256([]byte(cipher))

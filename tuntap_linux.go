@@ -1,19 +1,17 @@
 package gost
 
 import (
-	"errors"
 	"fmt"
 	"net"
-	"syscall"
+	"os/exec"
+	"strings"
 
-	"github.com/docker/libcontainer/netlink"
 	"github.com/go-log/log"
-	"github.com/milosgajdos/tenus"
 	"github.com/songgao/water"
 )
 
 func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
-	ip, ipNet, err := net.ParseCIDR(cfg.Addr)
+	ip, _, err := net.ParseCIDR(cfg.Addr)
 	if err != nil {
 		return
 	}
@@ -28,35 +26,21 @@ func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
 		return
 	}
 
-	link, err := tenus.NewLinkFrom(ifce.Name())
-	if err != nil {
-		return
-	}
-
 	mtu := cfg.MTU
 	if mtu <= 0 {
 		mtu = DefaultMTU
 	}
 
-	cmd := fmt.Sprintf("ip link set dev %s mtu %d", ifce.Name(), mtu)
-	log.Log("[tun]", cmd)
-	if er := link.SetLinkMTU(mtu); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+	if err = exeCmd(fmt.Sprintf("ip link set dev %s mtu %d", ifce.Name(), mtu)); err != nil {
+		log.Log(err)
 	}
 
-	cmd = fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())
-	log.Log("[tun]", cmd)
-	if er := link.SetLinkIp(ip, ipNet); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+	if err = exeCmd(fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())); err != nil {
+		log.Log(err)
 	}
 
-	cmd = fmt.Sprintf("ip link set dev %s up", ifce.Name())
-	log.Log("[tun]", cmd)
-	if er := link.SetLinkUp(); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+	if err = exeCmd(fmt.Sprintf("ip link set dev %s up", ifce.Name())); err != nil {
+		log.Log(err)
 	}
 
 	if err = addTunRoutes(ifce.Name(), cfg.Routes...); err != nil {
@@ -77,9 +61,8 @@ func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
 
 func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	var ip net.IP
-	var ipNet *net.IPNet
 	if cfg.Addr != "" {
-		ip, ipNet, err = net.ParseCIDR(cfg.Addr)
+		ip, _, err = net.ParseCIDR(cfg.Addr)
 		if err != nil {
 			return
 		}
@@ -95,37 +78,23 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 		return
 	}
 
-	link, err := tenus.NewLinkFrom(ifce.Name())
-	if err != nil {
-		return
-	}
-
 	mtu := cfg.MTU
 	if mtu <= 0 {
 		mtu = DefaultMTU
 	}
 
-	cmd := fmt.Sprintf("ip link set dev %s mtu %d", ifce.Name(), mtu)
-	log.Log("[tap]", cmd)
-	if er := link.SetLinkMTU(mtu); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+	if err = exeCmd(fmt.Sprintf("ip link set dev %s mtu %d", ifce.Name(), mtu)); err != nil {
+		log.Log(err)
 	}
 
 	if cfg.Addr != "" {
-		cmd = fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())
-		log.Log("[tap]", cmd)
-		if er := link.SetLinkIp(ip, ipNet); er != nil {
-			err = fmt.Errorf("%s: %v", cmd, er)
-			return
+		if err = exeCmd(fmt.Sprintf("ip address add %s dev %s", cfg.Addr, ifce.Name())); err != nil {
+			log.Log(err)
 		}
 	}
 
-	cmd = fmt.Sprintf("ip link set dev %s up", ifce.Name())
-	log.Log("[tap]", cmd)
-	if er := link.SetLinkUp(); er != nil {
-		err = fmt.Errorf("%s: %v", cmd, er)
-		return
+	if err = exeCmd(fmt.Sprintf("ip link set dev %s up", ifce.Name())); err != nil {
+		log.Log(err)
 	}
 
 	if err = addTapRoutes(ifce.Name(), cfg.Gateway, cfg.Routes...); err != nil {
@@ -151,8 +120,10 @@ func addTunRoutes(ifName string, routes ...IPRoute) error {
 		}
 		cmd := fmt.Sprintf("ip route add %s dev %s", route.Dest.String(), ifName)
 		log.Logf("[tun] %s", cmd)
-		if err := netlink.AddRoute(route.Dest.String(), "", "", ifName); err != nil && !errors.Is(err, syscall.EEXIST) {
-			return fmt.Errorf("%s: %v", cmd, err)
+
+		args := strings.Split(cmd, " ")
+		if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
+			log.Logf("[tun] %s: %v", cmd, er)
 		}
 	}
 	return nil
@@ -165,9 +136,22 @@ func addTapRoutes(ifName string, gw string, routes ...string) error {
 		}
 		cmd := fmt.Sprintf("ip route add %s via %s dev %s", route, gw, ifName)
 		log.Logf("[tap] %s", cmd)
-		if err := netlink.AddRoute(route, "", gw, ifName); err != nil {
-			return fmt.Errorf("%s: %v", cmd, err)
+
+		args := strings.Split(cmd, " ")
+		if er := exec.Command(args[0], args[1:]...).Run(); er != nil {
+			log.Logf("[tap] %s: %v", cmd, er)
 		}
 	}
+	return nil
+}
+
+func exeCmd(cmd string) error {
+	log.Log(cmd)
+
+	args := strings.Split(cmd, " ")
+	if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
+		return fmt.Errorf("%s: %v", cmd, err)
+	}
+
 	return nil
 }

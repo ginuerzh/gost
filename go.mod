@@ -1,12 +1,13 @@
 module github.com/ginuerzh/gost
 
-go 1.17
+go 1.18
+
+replace github.com/templexxx/cpu v0.0.7 => github.com/templexxx/cpu v0.0.10-0.20211111114238-98168dcec14a
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.2.0
 	github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
-	github.com/docker/libcontainer v2.2.1+incompatible
 	github.com/go-gost/gosocks4 v0.0.1
 	github.com/go-gost/gosocks5 v0.3.0
 	github.com/go-gost/relay v0.1.1-0.20211123134818-8ef7fd81ffd7
@@ -15,9 +16,8 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/gorilla/websocket v1.4.2
 	github.com/klauspost/compress v1.13.6
-	github.com/lucas-clemente/quic-go v0.26.0
+	github.com/lucas-clemente/quic-go v0.28.1
 	github.com/miekg/dns v1.1.47
-	github.com/milosgajdos/tenus v0.0.3
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5
 	github.com/shadowsocks/shadowsocks-go v0.0.0-20200409064450-3e585ff90601
@@ -26,23 +26,25 @@ require (
 	github.com/xtaci/smux v1.5.16
 	github.com/xtaci/tcpraw v1.2.25
 	gitlab.com/yawning/obfs4.git v0.0.0-20220204003609-77af0cba934d
-	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
-	golang.org/x/net v0.0.0-20220325170049-de3da57026de
+	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
+	golang.org/x/net v0.0.0-20220812174116-3211cb980234
 )
 
 require (
+	filippo.io/edwards25519 v1.0.0-rc.1.0.20210721174708-390f27c3be20 // indirect
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/coreos/go-iptables v0.6.0 // indirect
 	github.com/dchest/siphash v1.2.2 // indirect
-	github.com/fsnotify/fsnotify v1.5.1 // indirect
+	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/klauspost/reedsolomon v1.9.15 // indirect
 	github.com/marten-seemann/qtls-go1-16 v0.1.5 // indirect
-	github.com/marten-seemann/qtls-go1-17 v0.1.1 // indirect
-	github.com/marten-seemann/qtls-go1-18 v0.1.1 // indirect
+	github.com/marten-seemann/qtls-go1-17 v0.1.2 // indirect
+	github.com/marten-seemann/qtls-go1-18 v0.1.2 // indirect
+	github.com/marten-seemann/qtls-go1-19 v0.1.0 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -51,10 +53,10 @@ require (
 	github.com/templexxx/xorsimd v0.4.1 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/sys v0.0.0-20220325203850-36772127a21f // indirect
+	gitlab.com/yawning/edwards25519-extra.git v0.0.0-20211229043746-2f91fcc9fbdb // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/sys v0.0.0-20220817070843-5a390386f1f2 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.10 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/tools v0.1.12 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 )

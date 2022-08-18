@@ -1,6 +1,6 @@
 name: gost
 base: core20
-version: '2.11.2'
+version: '2.11.3'
 summary: A simple security tunnel written in golang
 description: |
   Project: https://github.com/ginuerzh/gost
