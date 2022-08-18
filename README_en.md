@@ -53,7 +53,7 @@ go build
 #### Docker
 
 ```bash
-docker pull ginuerzh/gost
+docker run --rm ginuerzh/gost -V
 ```
 
 #### Homebrew

@@ -12,7 +12,7 @@ import (
 
 var (
 	// ErrNoneAvailable indicates there is no node available.
-	ErrNoneAvailable = errors.New("none available")
+	ErrNoneAvailable = errors.New("none node available")
 )
 
 // NodeSelector as a mechanism to pick nodes and mark their status.
