@@ -1,5 +1,5 @@
 name: gost
-base: core22
+base: core20
 version: '2.11.3'
 summary: A simple security tunnel written in golang
 description: |
