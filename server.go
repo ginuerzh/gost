@@ -103,7 +103,7 @@ type Listener interface {
 }
 
 func transport(rw1, rw2 io.ReadWriter) error {
-	errc := make(chan error, 2)
+	errc := make(chan error, 1)
 	go func() {
 		errc <- copyBuffer(rw1, rw2)
 	}()
@@ -112,18 +112,11 @@ func transport(rw1, rw2 io.ReadWriter) error {
 		errc <- copyBuffer(rw2, rw1)
 	}()
 
-	err := <-errc
-	err2 := <-errc
-	if err != nil && err == io.EOF {
-		err = nil
-	}
-	if err != nil {
+	if err := <-errc; err != nil && err != io.EOF {
 		return err
 	}
-	if err2 != nil && err2 == io.EOF {
-		err2 = nil
-	}
-	return err2
+
+	return nil
 }
 
 func copyBuffer(dst io.Writer, src io.Reader) error {
