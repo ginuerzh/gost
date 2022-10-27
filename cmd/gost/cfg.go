@@ -152,17 +152,25 @@ func parseIP(s string, port string) (ips []string) {
 		port = "8080" // default port
 	}
 
+	addrFn := func(s, port string) string {
+		c := strings.Count(s, ":")
+		if c == 0 || //ipv4 or domain
+			s[len(s)-1] == ']' { //[ipv6]
+			return s + ":" + port
+		}
+		if c > 1 && s[0] != '[' { // ipv6
+			return "[" + s + "]:" + port
+		}
+		return s //ipv4:port or [ipv6]:port
+	}
+
 	file, err := os.Open(s)
 	if err != nil {
 		ss := strings.Split(s, ",")
 		for _, s := range ss {
 			s = strings.TrimSpace(s)
 			if s != "" {
-				// TODO: support IPv6
-				if !strings.Contains(s, ":") {
-					s = s + ":" + port
-				}
-				ips = append(ips, s)
+				ips = append(ips, addrFn(s, port))
 			}
 
 		}
@@ -175,10 +183,7 @@ func parseIP(s string, port string) (ips []string) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if !strings.Contains(line, ":") {
-			line = line + ":" + port
-		}
-		ips = append(ips, line)
+		ips = append(ips, addrFn(line, port))
 	}
 	return
 }
