@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -1630,17 +1631,21 @@ func (h *socks5Handler) muxBindOn(conn net.Conn, addr string) {
 	}
 }
 
-// TODO: support ipv6 and domain
+// TODO: support domain
 func toSocksAddr(addr net.Addr) *gosocks5.Addr {
 	host := "0.0.0.0"
 	port := 0
+	addrType := gosocks5.AddrIPv4
 	if addr != nil {
 		h, p, _ := net.SplitHostPort(addr.String())
 		host = h
 		port, _ = strconv.Atoi(p)
+		if strings.Count(host, ":") > 0 {
+			addrType = gosocks5.AddrIPv6
+		}
 	}
 	return &gosocks5.Addr{
-		Type: gosocks5.AddrIPv4,
+		Type: addrType,
 		Host: host,
 		Port: uint16(port),
 	}
