@@ -131,6 +131,7 @@ func (h *tcpDirectForwardHandler) Handle(conn net.Conn) {
 		cc, err = h.options.Chain.Dial(node.Addr,
 			RetryChainOption(h.options.Retries),
 			TimeoutChainOption(h.options.Timeout),
+			ResolverChainOption(h.options.Resolver),
 		)
 		if err != nil {
 			log.Logf("[tcp] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
@@ -197,7 +198,12 @@ func (h *udpDirectForwardHandler) Handle(conn net.Conn) {
 		}
 	}
 
-	cc, err := h.options.Chain.DialContext(context.Background(), "udp", node.Addr)
+	cc, err := h.options.Chain.DialContext(
+		context.Background(),
+		"udp",
+		node.Addr,
+		ResolverChainOption(h.options.Resolver),
+	)
 	if err != nil {
 		node.MarkDead()
 		log.Logf("[udp] %s - %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)

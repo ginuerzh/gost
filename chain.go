@@ -154,9 +154,9 @@ func (c *Chain) dialWithOptions(ctx context.Context, network, address string, op
 	ipAddr := address
 	if address != "" {
 		ipAddr = c.resolve(address, options.Resolver, options.Hosts)
-	}
-	if ipAddr == "" {
-		return nil, fmt.Errorf("resolver: domain %s does not exists", address)
+		if ipAddr == "" {
+			return nil, fmt.Errorf("resolver: domain %s does not exists", address)
+		}
 	}
 
 	timeout := options.Timeout
