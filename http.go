@@ -257,7 +257,9 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 
 		// forward http request
 		lastNode := route.LastNode()
-		if req.Method != http.MethodConnect && lastNode.Protocol == "http" {
+		if req.Method != http.MethodConnect &&
+			lastNode.Protocol == "http" &&
+			!h.options.HTTPTunnel {
 			err = h.forwardRequest(conn, req, route)
 			if err == nil {
 				return

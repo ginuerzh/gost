@@ -43,6 +43,7 @@ type HandlerOptions struct {
 	TCPMode       bool
 	IPRoutes      []IPRoute
 	ProxyAgent    string
+	HTTPTunnel    bool
 }
 
 // HandlerOption allows a common way to set handler options.
@@ -216,6 +217,13 @@ func IPRoutesHandlerOption(routes ...IPRoute) HandlerOption {
 func ProxyAgentHandlerOption(agent string) HandlerOption {
 	return func(opts *HandlerOptions) {
 		opts.ProxyAgent = agent
+	}
+}
+
+// HTTPTunnelHandlerOption sets the Tunnel mode for HTTP client used in HTTP handler.
+func HTTPTunnelHandlerOption(tunnelMode bool) HandlerOption {
+	return func(opts *HandlerOptions) {
+		opts.HTTPTunnel = tunnelMode
 	}
 }
 

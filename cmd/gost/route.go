@@ -665,6 +665,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.TCPModeHandlerOption(node.GetBool("tcp")),
 			gost.IPRoutesHandlerOption(tunRoutes...),
 			gost.ProxyAgentHandlerOption(node.Get("proxyAgent")),
+			gost.HTTPTunnelHandlerOption(node.GetBool("httpTunnel")),
 		)
 
 		rt := router{
