@@ -20,9 +20,9 @@ import (
 	"github.com/go-log/log"
 
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
+	dissector "github.com/go-gost/tls-dissector"
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
-	dissector "github.com/go-gost/tls-dissector"
 )
 
 const (
@@ -804,6 +804,16 @@ func Obfs4Listener(addr string) (Listener, error) {
 	return l, nil
 }
 
+// TempError satisfies the net.Error interface and presents itself
+// as temporary to make sure that it gets retried by the Accept loop
+// in server.go.
+type TempError struct {
+	error
+}
+
+func (e TempError) Timeout() bool   { return false }
+func (e TempError) Temporary() bool { return true }
+
 func (l *obfs4Listener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
@@ -812,7 +822,7 @@ func (l *obfs4Listener) Accept() (net.Conn, error) {
 	cc, err := obfs4ServerConn(l.addr, conn)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, TempError{err}
 	}
 	return cc, nil
 }
