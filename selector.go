@@ -240,7 +240,6 @@ func (f *FastestFilter) Filter(nodes []Node) []Node {
 
 	// get latency with ttl cache
 	now := time.Now().Unix()
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	var getNodeLatency = func(node Node) int {
 		if f.pingResultTTL[node.ID] < now {
@@ -251,7 +250,8 @@ func (f *FastestFilter) Filter(nodes []Node) []Node {
 			// get latency
 			go func(node Node) {
 				latency := f.doTcpPing(node.Addr)
-				ttl := 300 - int64(60*r.Float64())
+				r := rand.New(rand.NewSource(time.Now().UnixNano()))
+				ttl := 300 - int64(120*r.Float64())
 
 				f.mu.Lock()
 				f.pingResult[node.ID] = latency
