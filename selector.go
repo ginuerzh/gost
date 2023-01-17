@@ -242,10 +242,11 @@ func (f *FastestFilter) Filter(nodes []Node) []Node {
 	now := time.Now().Unix()
 
 	var getNodeLatency = func(node Node) int {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
 		if f.pingResultTTL[node.ID] < now {
-			f.mu.Lock()
 			f.pingResultTTL[node.ID] = now + 5 // tmp
-			defer f.mu.Unlock()
 
 			// get latency
 			go func(node Node) {
@@ -254,9 +255,10 @@ func (f *FastestFilter) Filter(nodes []Node) []Node {
 				ttl := 300 - int64(120*r.Float64())
 
 				f.mu.Lock()
+				defer f.mu.Unlock()
+
 				f.pingResult[node.ID] = latency
 				f.pingResultTTL[node.ID] = now + ttl
-				defer f.mu.Unlock()
 			}(node)
 		}
 		return f.pingResult[node.ID]
