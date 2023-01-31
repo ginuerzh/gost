@@ -9,6 +9,7 @@ _test
 release
 debian
 bin
+dist/
 
 # Architecture specific extensions/prefixes
 *.[568vq]
