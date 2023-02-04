@@ -218,7 +218,7 @@ gost -L=:8080 -F=h2://server_ip:443
 
 #### QUIC
 
-Support for QUIC is based on library [quic-go](https://github.com/lucas-clemente/quic-go).
+Support for QUIC is based on library [quic-go](https://github.com/quic-go/quic-go).
 
 Server:
 

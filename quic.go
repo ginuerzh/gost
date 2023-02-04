@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/go-log/log"
-	quic "github.com/lucas-clemente/quic-go"
+	quic "github.com/quic-go/quic-go"
 )
 
 type quicSession struct {

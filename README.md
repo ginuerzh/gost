@@ -195,7 +195,7 @@ gost -L=:8080 -F=h2://server_ip:443
 ```
 
 #### QUIC
-gost对QUIC的支持是基于[quic-go](https://github.com/lucas-clemente/quic-go)库。
+gost对QUIC的支持是基于[quic-go](https://github.com/quic-go/quic-go)库。
 
 服务端:
 ```bash
