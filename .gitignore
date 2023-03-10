@@ -9,6 +9,7 @@ _test
 release
 debian
 bin
+dist/
 
 # Architecture specific extensions/prefixes
 *.[568vq]
@@ -30,5 +31,5 @@ _testmain.go
 
 *.bak
 
+.vscode/
 cmd/gost/gost
-snap

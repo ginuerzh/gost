@@ -28,7 +28,7 @@ func createTun(cfg TunConfig) (conn net.Conn, itf *net.Interface, err error) {
 		return
 	}
 
-	cmd := fmt.Sprintf("netsh interface ip set address name=%s "+
+	cmd := fmt.Sprintf("netsh interface ip set address name=\"%s\" "+
 		"source=static addr=%s mask=%s gateway=none",
 		ifce.Name(), ip.String(), ipMask(ipNet.Mask))
 	log.Log("[tun]", cmd)
@@ -70,7 +70,7 @@ func createTap(cfg TapConfig) (conn net.Conn, itf *net.Interface, err error) {
 	}
 
 	if ip != nil && ipNet != nil {
-		cmd := fmt.Sprintf("netsh interface ip set address name=%s "+
+		cmd := fmt.Sprintf("netsh interface ip set address name=\"%s\" "+
 			"source=static addr=%s mask=%s gateway=none",
 			ifce.Name(), ip.String(), ipMask(ipNet.Mask))
 		log.Log("[tap]", cmd)
@@ -105,7 +105,7 @@ func addTunRoutes(ifName string, gw string, routes ...IPRoute) error {
 
 		deleteRoute(ifName, route.Dest.String())
 
-		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=%s store=active",
+		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=\"%s\" store=active",
 			route.Dest.String(), ifName)
 		if gw != "" {
 			cmd += " nexthop=" + gw
@@ -127,7 +127,7 @@ func addTapRoutes(ifName string, gw string, routes ...string) error {
 
 		deleteRoute(ifName, route)
 
-		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=%s store=active",
+		cmd := fmt.Sprintf("netsh interface ip add route prefix=%s interface=\"%s\" store=active",
 			route, ifName)
 		if gw != "" {
 			cmd += " nexthop=" + gw
@@ -142,7 +142,7 @@ func addTapRoutes(ifName string, gw string, routes ...string) error {
 }
 
 func deleteRoute(ifName string, route string) error {
-	cmd := fmt.Sprintf("netsh interface ip delete route prefix=%s interface=%s store=active",
+	cmd := fmt.Sprintf("netsh interface ip delete route prefix=%s interface=\"%s\" store=active",
 		route, ifName)
 	args := strings.Split(cmd, " ")
 	return exec.Command(args[0], args[1:]...).Run()

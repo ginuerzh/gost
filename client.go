@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ginuerzh/gosocks5"
+	"github.com/go-gost/gosocks5"
 )
 
 // Client is a proxy client.

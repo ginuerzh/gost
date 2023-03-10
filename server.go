@@ -112,11 +112,11 @@ func transport(rw1, rw2 io.ReadWriter) error {
 		errc <- copyBuffer(rw2, rw1)
 	}()
 
-	err := <-errc
-	if err != nil && err == io.EOF {
-		err = nil
+	if err := <-errc; err != nil && err != io.EOF {
+		return err
 	}
-	return err
+
+	return nil
 }
 
 func copyBuffer(dst io.Writer, src io.Reader) error {

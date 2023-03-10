@@ -15,9 +15,9 @@ import (
 
 	"github.com/go-log/log"
 	"github.com/klauspost/compress/snappy"
-	"github.com/xtaci/tcpraw"
-	"github.com/xtaci/kcp-go"
+	"github.com/xtaci/kcp-go/v5"
 	"github.com/xtaci/smux"
+	"github.com/xtaci/tcpraw"
 )
 
 var (
@@ -43,6 +43,9 @@ type KCPConfig struct {
 	Resend       int    `json:"resend"`
 	NoCongestion int    `json:"nc"`
 	SockBuf      int    `json:"sockbuf"`
+	SmuxBuf      int    `json:"smuxbuf"`
+	StreamBuf    int    `json:"streambuf"`
+	SmuxVer      int    `json:"smuxver"`
 	KeepAlive    int    `json:"keepalive"`
 	SnmpLog      string `json:"snmplog"`
 	SnmpPeriod   int    `json:"snmpperiod"`
@@ -62,6 +65,16 @@ func (c *KCPConfig) Init() {
 	case "fast3":
 		c.NoDelay, c.Interval, c.Resend, c.NoCongestion = 1, 10, 2, 1
 	}
+	if c.SmuxVer <= 0 {
+		c.SmuxVer = 1
+	}
+	if c.SmuxBuf <= 0 {
+		c.SmuxBuf = c.SockBuf
+	}
+	if c.StreamBuf <= 0 {
+		c.StreamBuf = c.SockBuf / 2
+	}
+	log.Logf("%#v", c)
 }
 
 var (
@@ -83,6 +96,9 @@ var (
 		Resend:       0,
 		NoCongestion: 0,
 		SockBuf:      4194304,
+		SmuxVer:      1,
+		SmuxBuf:      4194304,
+		StreamBuf:    2097152,
 		KeepAlive:    10,
 		SnmpLog:      "",
 		SnmpPeriod:   60,
@@ -231,8 +247,14 @@ func (tr *kcpTransporter) initSession(addr string, conn net.Conn, config *KCPCon
 
 	// stream multiplex
 	smuxConfig := smux.DefaultConfig()
-	smuxConfig.MaxReceiveBuffer = config.SockBuf
+	smuxConfig.Version = config.SmuxVer
+	smuxConfig.MaxReceiveBuffer = config.SmuxBuf
+	smuxConfig.MaxStreamBuffer = config.StreamBuf
 	smuxConfig.KeepAliveInterval = time.Duration(config.KeepAlive) * time.Second
+	if err := smux.VerifyConfig(smuxConfig); err != nil {
+		return nil, err
+	}
+
 	var cc net.Conn = kcpconn
 	if !config.NoComp {
 		cc = newCompStreamConn(kcpconn)
@@ -332,7 +354,9 @@ func (l *kcpListener) listenLoop() {
 
 func (l *kcpListener) mux(conn net.Conn) {
 	smuxConfig := smux.DefaultConfig()
-	smuxConfig.MaxReceiveBuffer = l.config.SockBuf
+	smuxConfig.Version = l.config.SmuxVer
+	smuxConfig.MaxReceiveBuffer = l.config.SmuxBuf
+	smuxConfig.MaxStreamBuffer = l.config.StreamBuf
 	smuxConfig.KeepAliveInterval = time.Duration(l.config.KeepAlive) * time.Second
 
 	log.Logf("[kcp] %s - %s", conn.RemoteAddr(), l.Addr())
@@ -473,9 +497,13 @@ func (c *compStreamConn) Read(b []byte) (n int, err error) {
 }
 
 func (c *compStreamConn) Write(b []byte) (n int, err error) {
-	n, err = c.w.Write(b)
-	err = c.w.Flush()
-	return n, err
+	if _, err = c.w.Write(b); err != nil {
+		return 0, err
+	}
+	if err = c.w.Flush(); err != nil {
+		return 0, err
+	}
+	return len(b), err
 }
 
 func (c *compStreamConn) Close() error {

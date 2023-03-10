@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package gost
@@ -8,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/go-log/log"
-	"github.com/xtaci/kcp-go"
+	"github.com/xtaci/kcp-go/v5"
 )
 
 func kcpSigHandler() {

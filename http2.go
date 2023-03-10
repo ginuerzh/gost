@@ -365,7 +365,11 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 		log.Logf("[http2] %s - %s\n%s", r.RemoteAddr, laddr, string(dump))
 	}
 
-	w.Header().Set("Proxy-Agent", "gost/"+Version)
+	proxyAgent := DefaultProxyAgent
+	if h.options.ProxyAgent != "" {
+		proxyAgent = h.options.ProxyAgent
+	}
+	w.Header().Set("Proxy-Agent", proxyAgent)
 
 	if !Can("tcp", host, h.options.Whitelist, h.options.Blacklist) {
 		log.Logf("[http2] %s - %s : Unauthorized to tcp connect to %s",
