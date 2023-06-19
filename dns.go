@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -267,7 +266,7 @@ func (l *dnsListener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		buf, err = ioutil.ReadAll(r.Body)
+		buf, err = io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return

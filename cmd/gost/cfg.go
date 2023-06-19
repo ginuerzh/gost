@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -71,7 +70,7 @@ func loadCA(caFile string) (cp *x509.CertPool, err error) {
 		return
 	}
 	cp = x509.NewCertPool()
-	data, err := ioutil.ReadFile(caFile)
+	data, err := os.ReadFile(caFile)
 	if err != nil {
 		return nil, err
 	}

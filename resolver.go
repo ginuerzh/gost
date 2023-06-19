@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -915,7 +914,7 @@ func (ex *dohExchanger) Exchange(ctx context.Context, query []byte) ([]byte, err
 	}
 
 	// Read wireformat response from the body
-	buf, err := ioutil.ReadAll(resp.Body)
+	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the response body: %s", err)
 	}

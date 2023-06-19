@@ -7,7 +7,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -69,7 +69,7 @@ func sniRoundtrip(client *Client, server *Server, targetURL string, data []byte)
 		return errors.New(resp.Status)
 	}
 
-	recv, err := ioutil.ReadAll(resp.Body)
+	recv, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}

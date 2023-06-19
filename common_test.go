@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,7 +35,7 @@ func init() {
 
 var (
 	httpTestHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, _ := ioutil.ReadAll(r.Body)
+		data, _ := io.ReadAll(r.Body)
 		if len(data) == 0 {
 			data = []byte("Hello World!")
 		}
@@ -87,7 +86,7 @@ func httpRoundtrip(conn net.Conn, targetURL string, data []byte) (err error) {
 		return errors.New(resp.Status)
 	}
 
-	recv, err := ioutil.ReadAll(resp.Body)
+	recv, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}

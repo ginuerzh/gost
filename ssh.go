@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"net"
 	"strconv"
 	"strings"
@@ -33,7 +33,7 @@ var (
 
 // ParseSSHKeyFile parses ssh key file.
 func ParseSSHKeyFile(fp string) (ssh.Signer, error) {
-	key, err := ioutil.ReadFile(fp)
+	key, err := os.ReadFile(fp)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func ParseSSHKeyFile(fp string) (ssh.Signer, error) {
 
 // ParseSSHAuthorizedKeysFile parses ssh Authorized Keys file.
 func ParseSSHAuthorizedKeysFile(fp string) (map[string]bool, error) {
-	authorizedKeysBytes, err := ioutil.ReadFile(fp)
+	authorizedKeysBytes, err := os.ReadFile(fp)
 	if err != nil {
 		return nil, err
 	}
