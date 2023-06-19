@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -997,7 +997,7 @@ func TestHTTP2ProxyWithWebProbeResist(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	recv, _ := ioutil.ReadAll(conn)
+	recv, _ := io.ReadAll(conn)
 	if !bytes.Equal(recv, []byte("Hello World!")) {
 		t.Error("data not equal")
 	}
@@ -1053,7 +1053,7 @@ func TestHTTP2ProxyWithHostProbeResist(t *testing.T) {
 		Proto:         "HTTP/2.0",
 		ProtoMajor:    2,
 		ProtoMinor:    0,
-		Body:          ioutil.NopCloser(bytes.NewReader(sendData)),
+		Body:          io.NopCloser(bytes.NewReader(sendData)),
 		Host:          "github.com:443",
 		ContentLength: int64(len(sendData)),
 	}
@@ -1068,7 +1068,7 @@ func TestHTTP2ProxyWithHostProbeResist(t *testing.T) {
 		t.Error("got non-200 status:", resp.Status)
 	}
 
-	recv, _ := ioutil.ReadAll(resp.Body)
+	recv, _ := io.ReadAll(resp.Body)
 	if !bytes.Equal(sendData, recv) {
 		t.Error("data not equal")
 	}
@@ -1105,7 +1105,7 @@ func TestHTTP2ProxyWithFileProbeResist(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	recv, _ := ioutil.ReadAll(conn)
+	recv, _ := io.ReadAll(conn)
 	if !bytes.Equal(recv, []byte("Hello World!")) {
 		t.Error("data not equal")
 	}

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"strconv"
 	"strings"
 	"time"
@@ -83,7 +82,7 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 }
 
 func (cfg *peerConfig) parse(r io.Reader) error {
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

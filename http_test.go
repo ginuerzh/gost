@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -249,7 +249,7 @@ func TestHTTPProxyWithWebProbeResist(t *testing.T) {
 		t.Error("got status:", resp.Status)
 	}
 
-	recv, _ := ioutil.ReadAll(resp.Body)
+	recv, _ := io.ReadAll(resp.Body)
 	if !bytes.Equal(recv, []byte("Hello World!")) {
 		t.Error("data not equal")
 	}
@@ -296,7 +296,7 @@ func TestHTTPProxyWithHostProbeResist(t *testing.T) {
 		t.Error("got status:", resp.Status)
 	}
 
-	recv, _ := ioutil.ReadAll(resp.Body)
+	recv, _ := io.ReadAll(resp.Body)
 	if !bytes.Equal(sendData, recv) {
 		t.Error("data not equal")
 	}
@@ -332,7 +332,7 @@ func TestHTTPProxyWithFileProbeResist(t *testing.T) {
 		t.Error("got status:", resp.Status)
 	}
 
-	recv, _ := ioutil.ReadAll(resp.Body)
+	recv, _ := io.ReadAll(resp.Body)
 	if !bytes.Equal(recv, []byte("Hello World!")) {
 		t.Error("data not equal, got:", string(recv))
 	}
