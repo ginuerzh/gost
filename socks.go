@@ -1102,6 +1102,7 @@ func (h *socks5Handler) bindOn(conn net.Conn, addr string) {
 				log.Logf("[socks5-bind] %s - %s : %v", conn.RemoteAddr(), pconn.RemoteAddr(), err)
 			}
 			log.Logf("[socks5-bind] %s >-< %s", conn.RemoteAddr(), pconn.RemoteAddr())
+			pc2.Close()
 			return
 		case err := <-pipe():
 			if err != nil {
