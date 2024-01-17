@@ -379,7 +379,7 @@ func (h *httpHandler) authenticate(conn net.Conn, req *http.Request, resp *http.
 	} else {
 		resp.Header = http.Header{}
 		resp.Header.Set("Server", "nginx/1.14.1")
-		resp.Header.Set("Date", time.Now().Format(http.TimeFormat))
+		resp.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 		if resp.StatusCode == http.StatusOK {
 			resp.Header.Set("Connection", "keep-alive")
 		}
