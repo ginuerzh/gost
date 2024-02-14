@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.20-alpine as builder
+FROM --platform=$BUILDPLATFORM golang:1.21-alpine as builder
 
 # Convert TARGETPLATFORM to GOARCH format
 # https://github.com/tonistiigi/xx
@@ -13,6 +13,7 @@ ADD . /src
 WORKDIR /src
 
 ENV GO111MODULE=on
+ENV CGO_ENABLED=0
 
 RUN cd cmd/gost && go env && go build -v
 
