@@ -115,10 +115,9 @@ func (tr *quicTransporter) initSession(addr net.Addr, conn net.PacketConn) (*qui
 		KeepAlivePeriod:      config.KeepAlivePeriod,
 		Versions: []quic.VersionNumber{
 			quic.Version1,
-			quic.VersionDraft29,
 		},
 	}
-	session, err := quic.DialEarly(conn, addr, addr.String(), tlsConfigQUICALPN(config.TLSConfig), quicConfig)
+	session, err := quic.DialEarly(context.Background(), conn, addr, tlsConfigQUICALPN(config.TLSConfig), quicConfig)
 	if err != nil {
 		log.Logf("quic dial %s: %v", addr, err)
 		return nil, err
@@ -141,7 +140,7 @@ type QUICConfig struct {
 }
 
 type quicListener struct {
-	ln       quic.EarlyListener
+	ln       *quic.EarlyListener
 	connChan chan net.Conn
 	errChan  chan error
 }
@@ -157,7 +156,6 @@ func QUICListener(addr string, config *QUICConfig) (Listener, error) {
 		MaxIdleTimeout:       config.IdleTimeout,
 		Versions: []quic.VersionNumber{
 			quic.Version1,
-			quic.VersionDraft29,
 		},
 	}
 
