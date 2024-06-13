@@ -1125,7 +1125,7 @@ func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
 		return
 	}
 
-	relay, err := net.ListenUDP("udp", nil)
+	relay, err := net.ListenUDP("udp", &net.UDPAddr{IP: conn.LocalAddr().(*net.TCPAddr).IP, Port: 0}) // use out-going interface's IP
 	if err != nil {
 		log.Logf("[socks5-udp] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
 		reply := gosocks5.NewReply(gosocks5.Failure, nil)
@@ -1138,7 +1138,6 @@ func (h *socks5Handler) handleUDPRelay(conn net.Conn, req *gosocks5.Request) {
 	defer relay.Close()
 
 	socksAddr := toSocksAddr(relay.LocalAddr())
-	socksAddr.Host, _, _ = net.SplitHostPort(conn.LocalAddr().String()) // replace the IP to the out-going interface's
 	reply := gosocks5.NewReply(gosocks5.Succeeded, socksAddr)
 	if err := reply.Write(conn); err != nil {
 		log.Logf("[socks5-udp] %s <- %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
