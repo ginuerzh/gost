@@ -66,6 +66,7 @@ func (r *route) parseChain() (*gost.Chain, error) {
 					FailTimeout: nodes[0].GetDuration("fail_timeout"),
 				},
 				&gost.InvalidFilter{},
+				gost.NewFastestFilter(0, nodes[0].GetInt("fastest_count")),
 			),
 			gost.WithStrategy(gost.NewStrategy(nodes[0].Get("strategy"))),
 		)
@@ -241,6 +242,8 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 		tr = gost.FakeTCPTransporter()
 	case "udp":
 		tr = gost.UDPTransporter()
+	case "vsock":
+		tr = gost.VSOCKTransporter()
 	default:
 		tr = gost.TCPTransporter()
 	}
@@ -489,6 +492,8 @@ func (r *route) GenRouters() ([]router, error) {
 				chain.Nodes()[len(chain.Nodes())-1].Client.Transporter = gost.SSHForwardTransporter()
 			}
 			ln, err = gost.TCPListener(node.Addr)
+		case "vsock":
+			ln, err = gost.VSOCKListener(node.Addr)
 		case "udp":
 			ln, err = gost.UDPListener(node.Addr, &gost.UDPListenConfig{
 				TTL:       ttl,

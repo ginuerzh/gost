@@ -18,6 +18,7 @@ require (
 	github.com/klauspost/compress v1.17.6
 	github.com/miekg/dns v1.1.58
 	github.com/quic-go/quic-go v0.41.0
+	github.com/mdlayher/vsock v1.2.1
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5
 	github.com/shadowsocks/shadowsocks-go v0.0.0-20200409064450-3e585ff90601
@@ -41,6 +42,8 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
 	github.com/klauspost/reedsolomon v1.12.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
+	github.com/mdlayher/socket v0.4.1 // indirect
+	github.com/onsi/ginkgo/v2 v2.8.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/templexxx/cpu v0.1.0 // indirect
@@ -54,4 +57,5 @@ require (
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 )

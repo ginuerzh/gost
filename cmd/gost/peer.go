@@ -13,14 +13,16 @@ import (
 )
 
 type peerConfig struct {
-	Strategy    string `json:"strategy"`
-	MaxFails    int    `json:"max_fails"`
-	FailTimeout time.Duration
-	period      time.Duration // the period for live reloading
-	Nodes       []string      `json:"nodes"`
-	group       *gost.NodeGroup
-	baseNodes   []gost.Node
-	stopped     chan struct{}
+	Strategy     string `json:"strategy"`
+	MaxFails     int    `json:"max_fails"`
+	FastestCount int    `json:"fastest_count"` // topN fastest node count
+	FailTimeout  time.Duration
+	period       time.Duration // the period for live reloading
+
+	Nodes     []string `json:"nodes"`
+	group     *gost.NodeGroup
+	baseNodes []gost.Node
+	stopped   chan struct{}
 }
 
 func newPeerConfig() *peerConfig {
@@ -51,6 +53,7 @@ func (cfg *peerConfig) Reload(r io.Reader) error {
 				FailTimeout: cfg.FailTimeout,
 			},
 			&gost.InvalidFilter{},
+			gost.NewFastestFilter(0, cfg.FastestCount),
 		),
 		gost.WithStrategy(gost.NewStrategy(cfg.Strategy)),
 	)
@@ -125,6 +128,8 @@ func (cfg *peerConfig) parse(r io.Reader) error {
 			cfg.Strategy = ss[1]
 		case "max_fails":
 			cfg.MaxFails, _ = strconv.Atoi(ss[1])
+		case "fastest_count":
+			cfg.FastestCount, _ = strconv.Atoi(ss[1])
 		case "fail_timeout":
 			cfg.FailTimeout, _ = time.ParseDuration(ss[1])
 		case "reload":
