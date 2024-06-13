@@ -20,7 +20,7 @@ import (
 )
 
 // Version is the gost version.
-const Version = "2.11.5"
+const Version = "2.12.0"
 
 // Debug is a flag that enables the debug log.
 var Debug bool
@@ -149,9 +149,7 @@ func (rw *readWriter) Write(p []byte) (n int, err error) {
 	return rw.w.Write(p)
 }
 
-var (
-	nopClientConn = &nopConn{}
-)
+var nopClientConn = &nopConn{}
 
 // a nop connection implements net.Conn,
 // it does nothing.

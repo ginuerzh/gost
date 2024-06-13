@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,9 +27,7 @@ const (
 	GostSSHTunnelRequest = "gost-tunnel" // extended request type for ssh tunnel
 )
 
-var (
-	errSessionDead = errors.New("session is dead")
-)
+var errSessionDead = errors.New("session is dead")
 
 // ParseSSHKeyFile parses ssh key file.
 func ParseSSHKeyFile(fp string) (ssh.Signer, error) {
@@ -59,8 +57,7 @@ func ParseSSHAuthorizedKeysFile(fp string) (map[string]bool, error) {
 	return authorizedKeysMap, nil
 }
 
-type sshDirectForwardConnector struct {
-}
+type sshDirectForwardConnector struct{}
 
 // SSHDirectForwardConnector creates a Connector for SSH TCP direct port forwarding.
 func SSHDirectForwardConnector() Connector {
@@ -103,8 +100,7 @@ func (c *sshDirectForwardConnector) ConnectContext(ctx context.Context, conn net
 	return conn, nil
 }
 
-type sshRemoteForwardConnector struct {
-}
+type sshRemoteForwardConnector struct{}
 
 // SSHRemoteForwardConnector creates a Connector for SSH TCP remote port forwarding.
 func SSHRemoteForwardConnector() Connector {
@@ -650,7 +646,7 @@ func (h *sshForwardHandler) tcpipForwardRequest(sshConn ssh.Conn, req *ssh.Reque
 		return
 	}
 
-	ln, err := net.Listen("tcp", addr) //tie to the client connection
+	ln, err := net.Listen("tcp", addr) // tie to the client connection
 	if err != nil {
 		log.Log("[ssh-rtcp]", err)
 		req.Reply(false, nil)
