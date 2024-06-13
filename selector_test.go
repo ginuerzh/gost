@@ -127,6 +127,30 @@ func TestFailFilter(t *testing.T) {
 	}
 }
 
+func TestFastestFilter(t *testing.T) {
+	nodes := []Node{
+		Node{ID: 1, marker: &failMarker{}, Addr: "1.0.0.1:80"},
+		Node{ID: 2, marker: &failMarker{}, Addr: "1.0.0.2:80"},
+		Node{ID: 3, marker: &failMarker{}, Addr: "1.0.0.3:80"},
+	}
+	filter := NewFastestFilter(0, 2)
+
+	var print = func(nodes []Node) []string {
+		var rows []string
+		for _, node := range nodes {
+			rows = append(rows, node.Addr)
+		}
+		return rows
+	}
+
+	result1 := filter.Filter(nodes)
+	t.Logf("result 1: %+v", print(result1))
+
+	time.Sleep(time.Second)
+	result2 := filter.Filter(nodes)
+	t.Logf("result 2: %+v", print(result2))
+}
+
 func TestSelector(t *testing.T) {
 	nodes := []Node{
 		Node{ID: 1, marker: &failMarker{}},

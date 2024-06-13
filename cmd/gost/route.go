@@ -66,6 +66,7 @@ func (r *route) parseChain() (*gost.Chain, error) {
 					FailTimeout: nodes[0].GetDuration("fail_timeout"),
 				},
 				&gost.InvalidFilter{},
+				gost.NewFastestFilter(0, nodes[0].GetInt("fastest_count")),
 			),
 			gost.WithStrategy(gost.NewStrategy(nodes[0].Get("strategy"))),
 		)

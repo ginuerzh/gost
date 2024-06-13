@@ -1,3 +1,4 @@
+//go:build !linux
 // +build !linux
 
 package gost
@@ -35,8 +36,7 @@ func (h *tcpRedirectHandler) Handle(c net.Conn) {
 	c.Close()
 }
 
-type udpRedirectHandler struct {
-}
+type udpRedirectHandler struct{}
 
 // UDPRedirectHandler creates a server Handler for UDP transparent server.
 func UDPRedirectHandler(opts ...HandlerOption) Handler {
