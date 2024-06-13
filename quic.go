@@ -341,8 +341,7 @@ func tlsConfigQUICALPN(tlsConfig *tls.Config) *tls.Config {
 	if tlsConfig == nil {
 		panic("quic: tlsconfig is nil")
 	}
-	tlsConfigQUIC := &tls.Config{}
-	*tlsConfigQUIC = *tlsConfig
+	tlsConfigQUIC := tlsConfig.Clone()
 	tlsConfigQUIC.NextProtos = []string{"http/3", "quic/v1"}
 	return tlsConfigQUIC
 }
