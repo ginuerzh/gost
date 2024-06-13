@@ -4,10 +4,13 @@ import (
 	"errors"
 	"math/rand"
 	"net"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/go-log/log"
 )
 
 var (
@@ -203,6 +206,94 @@ func (f *FailFilter) Filter(nodes []Node) []Node {
 
 func (f *FailFilter) String() string {
 	return "fail"
+}
+
+// FastestFilter filter the fastest node
+type FastestFilter struct {
+	mu sync.Mutex
+
+	pinger        *net.Dialer
+	pingResult    map[int]int
+	pingResultTTL map[int]int64
+
+	topCount int
+}
+
+func NewFastestFilter(pingTimeOut int, topCount int) *FastestFilter {
+	if pingTimeOut == 0 {
+		pingTimeOut = 3000 // 3s
+	}
+	return &FastestFilter{
+		mu:            sync.Mutex{},
+		pinger:        &net.Dialer{Timeout: time.Millisecond * time.Duration(pingTimeOut)},
+		pingResult:    make(map[int]int, 0),
+		pingResultTTL: make(map[int]int64, 0),
+		topCount:      topCount,
+	}
+}
+
+func (f *FastestFilter) Filter(nodes []Node) []Node {
+	// disabled
+	if f.topCount == 0 {
+		return nodes
+	}
+
+	// get latency with ttl cache
+	now := time.Now().Unix()
+
+	var getNodeLatency = func(node Node) int {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		if f.pingResultTTL[node.ID] < now {
+			f.pingResultTTL[node.ID] = now + 5 // tmp
+
+			// get latency
+			go func(node Node) {
+				latency := f.doTcpPing(node.Addr)
+				r := rand.New(rand.NewSource(time.Now().UnixNano()))
+				ttl := 300 - int64(120*r.Float64())
+
+				f.mu.Lock()
+				defer f.mu.Unlock()
+
+				f.pingResult[node.ID] = latency
+				f.pingResultTTL[node.ID] = now + ttl
+			}(node)
+		}
+		return f.pingResult[node.ID]
+	}
+
+	// sort
+	sort.Slice(nodes, func(i, j int) bool {
+		return getNodeLatency(nodes[i]) < getNodeLatency(nodes[j])
+	})
+
+	// split
+	if len(nodes) <= f.topCount {
+		return nodes
+	}
+
+	return nodes[0:f.topCount]
+}
+
+func (f *FastestFilter) String() string {
+	return "fastest"
+}
+
+// doTcpPing
+func (f *FastestFilter) doTcpPing(address string) int {
+	start := time.Now()
+	conn, err := f.pinger.Dial("tcp", address)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		_ = conn.Close()
+	}
+
+	latency := int(elapsed.Milliseconds())
+	log.Logf("pingDoTCP: %s, latency: %d", address, latency)
+	return latency
 }
 
 // InvalidFilter filters the invalid node.
