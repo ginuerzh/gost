@@ -1,0 +1,80 @@
+== v1.3.0
+
+Added a DialOrWithDialer function that allows you to, for example, use a
+specific source address when dialing the ORPort.
+
+== v1.2.0
+
+The default and development branch is now "main" rather than "master".
+The master branch will no longer be updated.
+https://lists.torproject.org/pipermail/anti-censorship-team/2021-May/000168.html
+If you have an existing clone of the master branch, run these commands
+to update it:
+	git fetch origin
+	git remote set-head origin -a
+	git branch --move master main
+	git branch --set-upstream-to=origin/main main
+
+Added a go.mod file.
+https://bugs.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/40065
+
+== v1.1.0
+
+Added the Log function.
+https://bugs.torproject.org/28940
+
+== v1.0.0
+
+Changed the tag naming scheme to work better with Go modules.
+https://github.com/golang/go/wiki/Modules#semantic-import-versioning
+
+== 0.7
+
+Fixed the ProxyError function; previously it would always panic.
+
+Repeated transport names in TOR_PT_SERVER_BINDADDR now result in an
+ENV-ERROR.
+https://bugs.torproject.org/21261
+
+== 0.6
+
+Remove all support for the "*" transport specification. The argument to
+the ClientSetup and ServerSetup functions is now unused.
+https://bugs.torproject.org/15612
+
+Replaced SOCKS4a with SOCKS5.
+https://bugs.torproject.org/12535
+
+== 0.5
+
+The AcceptSocks function no longer reports non-permanent errors, such as
+those caused by a faulty SOCKS handshake.
+
+Added support for an upstream proxy (TOR_PT_PROXY). The two new
+functions are ProxyError and ProxyDone. The ClientInfo struct has a new
+ProxyURL member.
+https://bugs.torproject.org/12125
+
+== 0.4
+
+Read the ExtORPort cookie file on every call to DialOr, instead of
+reading it once and caching the result. This is to work around a tor bug
+where tor doesn't ensure a new cookie file is written before starting
+pluggable transports.
+https://bugs.torproject.org/15240
+
+== 0.3
+
+Made output functions panic intead of backslash-escaping. Escaping of
+invalid bytes is not specified by pt-spec, and backslashes conflicted
+with the specified escaping of SMETHOD ARGS.
+https://bugs.torproject.org/13370
+
+== 0.2
+
+Added the MakeStateDir function.
+
+== 0.1
+== 0.0
+
+Initial release.
