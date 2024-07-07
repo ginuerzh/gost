@@ -106,6 +106,7 @@ func parseUsers(authFile string) (users []*url.Userinfo, err error) {
 	if err != nil {
 		return
 	}
+	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -175,7 +176,7 @@ func parseIP(s string, port string) (ips []string) {
 		}
 		return
 	}
-
+	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
