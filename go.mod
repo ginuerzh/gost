@@ -1,6 +1,6 @@
 module github.com/ginuerzh/gost
 
-go 1.22
+go 1.21
 
 replace github.com/templexxx/cpu v0.0.7 => github.com/templexxx/cpu v0.0.10-0.20211111114238-98168dcec14a
 
@@ -14,6 +14,7 @@ require (
 	github.com/go-gost/tls-dissector v0.0.2-0.20220408131628-aac992c27451
 	github.com/go-log/log v0.2.0
 	github.com/gobwas/glob v0.2.3
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/klauspost/compress v1.17.6
 	github.com/mdlayher/vsock v1.2.1
@@ -29,6 +30,7 @@ require (
 	gitlab.com/yawning/obfs4.git v0.0.0-20220204003609-77af0cba934d
 	golang.org/x/crypto v0.24.0
 	golang.org/x/net v0.26.0
+	golang.org/x/text v0.16.0
 )
 
 require (
@@ -55,6 +57,5 @@ require (
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 )

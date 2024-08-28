@@ -27,9 +27,10 @@ var Debug bool
 
 var (
 	tinyBufferSize   = 512
-	smallBufferSize  = 2 * 1024  // 2KB small buffer
-	mediumBufferSize = 8 * 1024  // 8KB medium buffer
-	largeBufferSize  = 32 * 1024 // 32KB large buffer
+	smallBufferSize  = 2 * 1024         // 2KB small buffer
+	mediumBufferSize = 8 * 1024         // 8KB medium buffer
+	largeBufferSize  = 32 * 1024        // 32KB large buffer
+	bigBufferSize    = 10 * 1024 * 1024 // 32KB large buffer
 )
 
 var (
@@ -46,6 +47,12 @@ var (
 	lPool = sync.Pool{
 		New: func() interface{} {
 			return make([]byte, largeBufferSize)
+		},
+	}
+
+	bigRespPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, bigBufferSize)
 		},
 	}
 )
