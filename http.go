@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -292,25 +293,63 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	}
 	defer cc.Close()
 
-	if req.Method == http.MethodConnect {
-		b := []byte("HTTP/1.1 200 Connection established\r\n" +
-			"Proxy-Agent: " + proxyAgent + "\r\n\r\n")
-		if Debug {
-			log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), conn.LocalAddr(), string(b))
-		}
-		conn.Write(b)
-	} else {
-		req.Header.Del("Proxy-Connection")
-
-		if err = req.Write(cc); err != nil {
-			log.Logf("[http] %s -> %s : %s", conn.RemoteAddr(), conn.LocalAddr(), err)
-			return
-		}
+	if req.Method != http.MethodConnect {
+		h.handleProxy(conn, cc, req)
+		return
 	}
+
+	b := []byte("HTTP/1.1 200 Connection established\r\n" +
+		"Proxy-Agent: " + proxyAgent + "\r\n\r\n")
+	if Debug {
+		log.Logf("[http] %s <- %s\n%s", conn.RemoteAddr(), conn.LocalAddr(), string(b))
+	}
+	conn.Write(b)
 
 	log.Logf("[http] %s <-> %s", conn.RemoteAddr(), host)
 	transport(conn, cc)
 	log.Logf("[http] %s >-< %s", conn.RemoteAddr(), host)
+}
+
+func (h *httpHandler) handleProxy(rw, cc io.ReadWriter, req *http.Request) (err error) {
+	req.Header.Del("Proxy-Connection")
+
+	if err = req.Write(cc); err != nil {
+		return err
+	}
+
+	ch := make(chan error, 1)
+
+	go func() {
+		ch <- copyBuffer(rw, cc)
+	}()
+
+	for {
+		err := func() error {
+			req, err := http.ReadRequest(bufio.NewReader(rw))
+			if err != nil {
+				return err
+			}
+
+			if Debug {
+				dump, _ := httputil.DumpRequest(req, false)
+				log.Log(string(dump))
+			}
+
+			req.Header.Del("Proxy-Connection")
+
+			if err = req.Write(cc); err != nil {
+				return err
+			}
+			return nil
+		}()
+		ch <- err
+
+		if err != nil {
+			break
+		}
+	}
+
+	return <-ch
 }
 
 func (h *httpHandler) authenticate(conn net.Conn, req *http.Request, resp *http.Response) (ok bool) {

@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -57,7 +57,11 @@ func tlsConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 
 	cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
 
-	if pool, _ := loadCA(caFile); pool != nil {
+	pool, err := loadCA(caFile)
+	if err != nil {
+		return nil, err
+	}
+	if pool != nil {
 		cfg.ClientCAs = pool
 		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
@@ -75,7 +79,7 @@ func loadCA(caFile string) (cp *x509.CertPool, err error) {
 		return nil, err
 	}
 	if !cp.AppendCertsFromPEM(data) {
-		return nil, errors.New("AppendCertsFromPEM failed")
+		return nil, fmt.Errorf("loadCA %s: AppendCertsFromPEM failed", caFile)
 	}
 	return
 }
