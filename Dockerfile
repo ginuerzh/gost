@@ -1,14 +1,24 @@
-FROM golang:1.22-alpine AS builder
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.5.0 AS xx
 
-RUN apk add --no-cache musl-dev git gcc
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine3.20 AS builder
 
-ADD . /src
+COPY --from=xx / /
 
-WORKDIR /src
+ARG TARGETPLATFORM
+
+RUN xx-info env
 
 ENV CGO_ENABLED=0
 
-RUN cd cmd/gost && go env && go build
+ENV XX_VERIFY_STATIC=1
+
+WORKDIR /app
+
+COPY . .
+
+RUN cd cmd/gost && \
+    xx-go build && \
+    xx-verify gost
 
 FROM alpine:3.20
 
@@ -17,6 +27,6 @@ RUN apk add --no-cache iptables
 
 WORKDIR /bin/
 
-COPY --from=builder /src/cmd/gost/gost .
+COPY --from=builder /app/cmd/gost/gost .
 
 ENTRYPOINT ["/bin/gost"]
