@@ -112,6 +112,7 @@ type serverSelector struct {
 	// Users     []*url.Userinfo
 	Authenticator Authenticator
 	TLSConfig     *tls.Config
+	Limiter       Limiter
 }
 
 func (selector *serverSelector) Methods() []uint8 {
@@ -181,7 +182,14 @@ func (selector *serverSelector) OnSelected(method uint8, conn net.Conn) (net.Con
 			log.Logf("[socks5] %s - %s: proxy authentication required", conn.RemoteAddr(), conn.LocalAddr())
 			return nil, gosocks5.ErrAuthFailure
 		}
-
+		if req.Username != "" && selector.Limiter != nil {
+			if _, ok := selector.Limiter.CheckRate(req.Username, false); !ok {
+				if Debug {
+					log.Logf("[http] %s <- %s rate limiter \n%s", conn.RemoteAddr(), conn.LocalAddr(), req.Username)
+				}
+				return nil, errors.New("rate limiter check fail")
+			}
+		}
 		resp := gosocks5.NewUserPassResponse(gosocks5.UserPassVer, gosocks5.Succeeded)
 		if err := resp.Write(conn); err != nil {
 			log.Logf("[socks5] %s - %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
@@ -836,6 +844,7 @@ func (h *socks5Handler) Init(options ...HandlerOption) {
 		// Users:     h.options.Users,
 		Authenticator: h.options.Authenticator,
 		TLSConfig:     tlsConfig,
+		Limiter:       h.options.Limiter,
 	}
 	// methods that socks5 server supported
 	h.selector.AddMethod(

@@ -212,7 +212,23 @@ func (h *httpHandler) handleRequest(conn net.Conn, req *http.Request) {
 	if !h.authenticate(conn, req, resp) {
 		return
 	}
+	user, _, _ := basicProxyAuth(req.Header.Get("Proxy-Authorization"))
+	if h.options.Limiter != nil {
+		done, ok := h.options.Limiter.CheckRate(user, true)
+		if !ok {
+			resp.StatusCode = http.StatusTooManyRequests
 
+			if Debug {
+				dump, _ := httputil.DumpResponse(resp, false)
+				log.Logf("[http] %s <- %s rate limiter \n%s", conn.RemoteAddr(), conn.LocalAddr(), string(dump))
+			}
+
+			resp.Write(conn)
+			return
+		} else {
+			defer done()
+		}
+	}
 	if req.Method == "PRI" || (req.Method != http.MethodConnect && req.URL.Scheme != "http") {
 		resp.StatusCode = http.StatusBadRequest
 

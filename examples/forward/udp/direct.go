@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/ginuerzh/gost"
+	"github.com/tongsq/gost"
 )
 
 var (
@@ -37,20 +37,20 @@ func udpDirectForwardServer() {
 	}
 	h := gost.UDPDirectForwardHandler(
 		faddr,
-	/*
-		gost.ChainHandlerOption(gost.NewChain(gost.Node{
-			Protocol:  "socks5",
-			Transport: "tcp",
-			Addr:      ":11080",
-			User:      url.UserPassword("admin", "123456"),
-			Client: &gost.Client{
-				Connector: gost.SOCKS5Connector(
-					url.UserPassword("admin", "123456"),
-				),
-				Transporter: gost.TCPTransporter(),
-			},
-		})),
-	*/
+		/*
+			gost.ChainHandlerOption(gost.NewChain(gost.Node{
+				Protocol:  "socks5",
+				Transport: "tcp",
+				Addr:      ":11080",
+				User:      url.UserPassword("admin", "123456"),
+				Client: &gost.Client{
+					Connector: gost.SOCKS5Connector(
+						url.UserPassword("admin", "123456"),
+					),
+					Transporter: gost.TCPTransporter(),
+				},
+			})),
+		*/
 	)
 	s := &gost.Server{ln}
 	log.Fatal(s.Serve(h))
