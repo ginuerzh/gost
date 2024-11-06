@@ -2,7 +2,10 @@ module github.com/ginuerzh/gost
 
 go 1.22
 
-replace github.com/templexxx/cpu v0.0.7 => github.com/templexxx/cpu v0.0.10-0.20211111114238-98168dcec14a
+replace (
+	git.torproject.org/pluggable-transports/goptlib.git v1.3.0 => ./pkg/goptlib-v1.3.0
+	github.com/templexxx/cpu v0.0.7 => github.com/templexxx/cpu v0.0.10-0.20211111114238-98168dcec14a
+)
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.3.0

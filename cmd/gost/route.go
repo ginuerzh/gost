@@ -170,6 +170,7 @@ func parseChainNode(ns string) (nodes []gost.Node, err error) {
 	wsOpts.WriteBufferSize = node.GetInt("wbuf")
 	wsOpts.UserAgent = node.Get("agent")
 	wsOpts.Path = node.Get("path")
+	wsOpts.Host = node.Get("host")
 
 	timeout := node.GetDuration("timeout")
 
