@@ -35,6 +35,8 @@ Telegram group: <https://t.me/gogost>
 
 Google group: <https://groups.google.com/d/forum/go-gost>
 
+GOST v3: <https://gost.run>
+
 Installation
 ------
 
