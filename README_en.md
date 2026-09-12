@@ -73,6 +73,25 @@ brew install gost
 ```bash
 sudo snap install core
 sudo snap install gost
+
+####
+## Configure snap service daemon
+
+# Enable and start gost.gost-daemon snap service
+sudo snap start --enable gost.gost-daemon
+
+# Override generated systemd service (configure startup options)
+sudo systemctl edit snap.gost.gost-daemon.service
+## NOTE: you can pass args to gost:
+## [Service]
+## ExecStart=
+## ExecStart=/usr/bin/snap run gost.gost-daemon <you-configuration-flags-here>
+
+# Restart generated systemd service to apply changes
+sudo systemctl restart snap.gost.gost-daemon.service
+
+# ... and show service status
+sudo systemctl status snap.gost.gost-daemon.service
 ```
 
 Getting started

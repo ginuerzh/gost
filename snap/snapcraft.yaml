@@ -32,3 +32,12 @@ apps:
     - network
     - network-bind
 
+  gost-daemon:
+    command: bin/gost
+    daemon: simple
+    install-mode: disable
+    plugs: 
+    - home
+    - network
+    - network-bind
+
