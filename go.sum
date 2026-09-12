@@ -2,8 +2,6 @@ cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMT
 filippo.io/edwards25519 v1.0.0-rc.1.0.20210721174708-390f27c3be20 h1:iJoUgXvhagsNMrJrvavw7vu1eG8+hm6jLOxlLFcoODw=
 filippo.io/edwards25519 v1.0.0-rc.1.0.20210721174708-390f27c3be20/go.mod h1:N1IkdkCkiLB6tki+MYJoSx2JTY9NUlxZE7eHn5EwJns=
 git.torproject.org/pluggable-transports/goptlib.git v1.0.0/go.mod h1:YT4XMSkuEXbtqlydr9+OxqFAyspUv0Gr9qhM3B++o/Q=
-git.torproject.org/pluggable-transports/goptlib.git v1.3.0 h1:G+iuRUblCCC2xnO+0ag1/4+aaM98D5mjWP1M0v9s8a0=
-git.torproject.org/pluggable-transports/goptlib.git v1.3.0/go.mod h1:4PBMl1dg7/3vMWSoWb46eGWlrxkUyn/CAJmxhDLAlDs=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed h1:eqa6queieK8SvoszxCu0WwH7lSVeL4/N/f1JwOMw1G4=
 github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed/go.mod h1:rA52xkgZwql9LRZXWb2arHEFP6qSR48KY2xOfWzEciQ=

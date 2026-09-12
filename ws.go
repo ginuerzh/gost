@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -31,6 +32,7 @@ type WSOptions struct {
 	EnableCompression bool
 	UserAgent         string
 	Path              string
+	Host              string
 }
 
 type wsTransporter struct {
@@ -749,6 +751,14 @@ func websocketClientConn(url string, conn net.Conn, tlsConfig *tls.Config, optio
 	if options.UserAgent != "" {
 		header.Set("User-Agent", options.UserAgent)
 	}
+	if options.Host != "" {
+		fmt.Println("获取到命令行传参host==>", options.Host)
+		dialer.TLSClientConfig.ServerName = options.Host
+		header.Set("Host", options.Host)
+	}
+
+	fmt.Printf("TLSClientConfig==>%+v\n", dialer.TLSClientConfig)
+
 	c, resp, err := dialer.Dial(url, header)
 	if err != nil {
 		return nil, err
