@@ -171,6 +171,17 @@ func (h *relayHandler) Handle(conn net.Conn) {
 		log.Logf("[relay] %s -> %s : %s unauthorized", conn.RemoteAddr(), conn.LocalAddr(), user)
 		return
 	}
+	if h.options.Limiter != nil {
+		done, ok := h.options.Limiter.CheckRate(user, true)
+		if !ok {
+			resp.Status = relay.StatusForbidden
+			resp.WriteTo(conn)
+			log.Logf("[relay] %s -> %s : %s rate limiter", conn.RemoteAddr(), conn.LocalAddr(), user)
+			return
+		} else {
+			defer done()
+		}
+	}
 
 	if raddr != "" {
 		if len(h.group.Nodes()) > 0 {

@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/ginuerzh/gost"
+	"github.com/tongsq/gost"
 )
 
 func main() {

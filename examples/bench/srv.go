@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ginuerzh/gost"
+	"github.com/tongsq/gost"
 	"golang.org/x/net/http2"
 )
 

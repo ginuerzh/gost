@@ -1,4 +1,4 @@
-module github.com/ginuerzh/gost
+module github.com/tongsq/gost
 
 go 1.22
 

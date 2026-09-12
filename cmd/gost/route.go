@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ginuerzh/gost"
 	"github.com/go-log/log"
+	"github.com/tongsq/gost"
 )
 
 type stringList []string
@@ -386,6 +386,19 @@ func (r *route) GenRouters() ([]router, error) {
 				node.User = users[0]
 			}
 		}
+
+		//init rate limiter
+		limiterHandler, err := parseLimiter(node.Get("secrets"))
+		if err != nil {
+			return nil, err
+		}
+		if limiterHandler == nil && strings.TrimSpace(node.Get("limiter")) != "" && node.User != nil {
+			limiterHandler, err = gost.NewLocalLimiter(node.User.Username(), strings.TrimSpace(node.Get("limiter")))
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		certFile, keyFile := node.Get("cert"), node.Get("key")
 		tlsCfg, err := tlsConfig(certFile, keyFile, node.Get("ca"))
 		if err != nil && certFile != "" && keyFile != "" {
@@ -671,6 +684,7 @@ func (r *route) GenRouters() ([]router, error) {
 			gost.IPRoutesHandlerOption(tunRoutes...),
 			gost.ProxyAgentHandlerOption(node.Get("proxyAgent")),
 			gost.HTTPTunnelHandlerOption(node.GetBool("httpTunnel")),
+			gost.LimiterHandlerOption(limiterHandler),
 		)
 
 		rt := router{

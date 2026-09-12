@@ -394,7 +394,18 @@ func (h *http2Handler) roundTrip(w http.ResponseWriter, r *http.Request) {
 	if !h.authenticate(w, r, resp) {
 		return
 	}
-
+	user, _, _ := basicProxyAuth(r.Header.Get("Proxy-Authorization"))
+	if h.options.Limiter != nil {
+		done, ok := h.options.Limiter.CheckRate(user, true)
+		if !ok {
+			log.Logf("[http2] %s - %s rate limiter %s, user is %s",
+				r.RemoteAddr, laddr, host, user)
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		} else {
+			defer done()
+		}
+	}
 	// delete the proxy related headers.
 	r.Header.Del("Proxy-Authorization")
 	r.Header.Del("Proxy-Connection")
