@@ -18,7 +18,7 @@ require (
 	github.com/klauspost/compress v1.17.6
 	github.com/mdlayher/vsock v1.2.1
 	github.com/miekg/dns v1.1.58
-	github.com/quic-go/quic-go v0.45.0
+	github.com/quic-go/quic-go v0.48.2
 	github.com/ryanuber/go-glob v1.0.0
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5
 	github.com/shadowsocks/shadowsocks-go v0.0.0-20200409064450-3e585ff90601
@@ -27,8 +27,8 @@ require (
 	github.com/xtaci/smux v1.5.24
 	github.com/xtaci/tcpraw v1.2.25
 	gitlab.com/yawning/obfs4.git v0.0.0-20220204003609-77af0cba934d
-	golang.org/x/crypto v0.24.0
-	golang.org/x/net v0.26.0
+	golang.org/x/crypto v0.26.0
+	golang.org/x/net v0.28.0
 )
 
 require (
@@ -53,8 +53,8 @@ require (
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8 // indirect
 	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.21.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 )
